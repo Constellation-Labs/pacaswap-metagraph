@@ -2,7 +2,7 @@ package org.amm_metagraph.shared_data.calculated_state
 
 import cats.effect.Ref
 import cats.effect.kernel.Async
-import cats.syntax.functor._
+import cats.syntax.all._
 import io.circe.syntax.EncoderOps
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.tessellation.schema.SnapshotOrdinal
@@ -35,7 +35,7 @@ object CalculatedStateService {
         ): F[Boolean] =
           stateRef.update { currentState =>
             val currentCalculatedState = currentState.state
-            val updatedDevices = state.addresses.foldLeft(currentCalculatedState.addresses) {
+            val updatedDevices = state.ammState.foldLeft(currentCalculatedState.ammState) {
               case (acc, (address, value)) =>
                 acc.updated(address, value)
             }
