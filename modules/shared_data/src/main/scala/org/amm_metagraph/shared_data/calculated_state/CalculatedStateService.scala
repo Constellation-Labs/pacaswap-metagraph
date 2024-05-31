@@ -35,7 +35,7 @@ object CalculatedStateService {
         ): F[Boolean] =
           stateRef.update { currentState =>
             val currentCalculatedState = currentState.state
-            val updatedDevices = state.addresses.foldLeft(currentCalculatedState.addresses) {
+            val updatedDevices = state.ammState.foldLeft(currentCalculatedState.ammState) {
               case (acc, (address, value)) =>
                 acc.updated(address, value)
             }
