@@ -31,9 +31,7 @@ object JsonBinaryCodec {
 
 
         override def deserialize[A: Decoder](content: Array[Byte]): F[Either[Throwable, A]] =
-          Sync[F]
-            .delay(content)
-            .map(JawnParser(false).decodeByteArray[A](_))
+          Sync[F].delay(JawnParser(false).decodeByteArray[A](content))
       }
     }
 }
