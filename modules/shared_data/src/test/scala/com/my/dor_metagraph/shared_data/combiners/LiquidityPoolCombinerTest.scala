@@ -1,16 +1,14 @@
 package com.my.dor_metagraph.shared_data.combiners
 
 import cats.effect.IO
-import cats.syntax.option._
+import cats.syntax.all._
 import eu.timepit.refined.auto._
-import org.amm_metagraph.shared_data.Utils.{PosLongOps, buildLiquidityPoolUniqueIdentifier}
+import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
-import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
-import org.amm_metagraph.shared_data.types.DataUpdates.{LiquidityPoolUpdate, StakingUpdate}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
+import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.tessellation.currency.dataApplication.DataState
-import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.address.Address
 import weaver.SimpleIOSuite
 

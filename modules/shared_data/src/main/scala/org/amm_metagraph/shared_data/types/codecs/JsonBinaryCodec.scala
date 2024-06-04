@@ -1,7 +1,7 @@
 package org.amm_metagraph.shared_data.types.codecs
 
 import cats.effect.Sync
-import cats.syntax.functor._
+import cats.syntax.all._
 import io.circe.jawn.JawnParser
 import io.circe.syntax.EncoderOps
 import io.circe.{Decoder, Encoder, Printer}

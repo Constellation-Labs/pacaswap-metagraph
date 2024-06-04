@@ -1,7 +1,7 @@
 package org.amm_metagraph.l0.custom_routes
 
 import cats.effect.Async
-import cats.syntax.flatMap._
+import cats.syntax.all._
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._

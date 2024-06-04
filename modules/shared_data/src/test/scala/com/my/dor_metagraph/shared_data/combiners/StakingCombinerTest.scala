@@ -1,7 +1,7 @@
 package com.my.dor_metagraph.shared_data.combiners
 
 import cats.effect.IO
-import cats.syntax.option._
+import cats.syntax.all._
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.Utils.{PosLongOps, toTokenAmountFormat}
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking

@@ -17,9 +17,8 @@ import org.tessellation.security.signature.signature.SignatureProof
 object StakingValidations {
   def stakingValidationsL1[F[_] : Async](
     stakingUpdate: StakingUpdate,
-  ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    valid
-  }
+  ): F[DataApplicationValidationErrorOr[Unit]] =
+    valid.pure
 
   def stakingValidationsL0[F[_] : Async](
     stakingUpdate: StakingUpdate,

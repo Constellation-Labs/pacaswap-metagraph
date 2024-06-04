@@ -1,7 +1,8 @@
 package org.amm_metagraph.shared_data
 
+import cats.MonadThrow
 import cats.effect.Async
-import cats.syntax.applicativeError.catsSyntaxApplicativeErrorId
+import cats.syntax.all._
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
@@ -22,18 +23,12 @@ object Utils {
     (balance * 10e7).toLong
   }
 
-  def buildLiquidityPoolUniqueIdentifier[F[_] : Async](maybeTokenAId: Option[Address], maybeTokenBId: Option[Address]): F[String] =
-    (maybeTokenAId, maybeTokenBId) match {
-      case (None, None) =>
-        new IllegalArgumentException("You should provide at least one currency token identifier").raiseError[F, String]
-      case _ =>
-        Async[F].delay {
-          val tokenAId = maybeTokenAId.fold("")(address => address.value.value)
-          val tokenBId = maybeTokenBId.fold("")(address => address.value.value)
-          val sortedSet = SortedSet(tokenAId, tokenBId)
-          sortedSet.mkString("-")
-        }
-    }
+  def buildLiquidityPoolUniqueIdentifier[F[_] : MonadThrow](maybeTokenAId: Option[Address], maybeTokenBId: Option[Address]): F[String] =
+    SortedSet(maybeTokenAId, maybeTokenBId)
+      .flatten
+      .mkString("-")
+      .pure[F]
+      .ensure(new IllegalArgumentException("You should provide at least one currency token identifier"))(_.nonEmpty)
 
   def getUpdatedTokenInformation(
     stakingUpdate: StakingUpdate,

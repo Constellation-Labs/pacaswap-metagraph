@@ -1,7 +1,7 @@
 package org.amm_metagraph.l0
 
 import cats.effect.{IO, Resource}
-import cats.syntax.option._
+import cats.syntax.all._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
 import org.amm_metagraph.shared_data.types.codecs.JsonBinaryCodec

@@ -1,6 +1,6 @@
 package org.amm_metagraph.shared_data.validations
 
-import cats.syntax.validated.catsSyntaxValidatedIdBinCompat0
+import cats.syntax.all._
 import org.tessellation.currency.dataApplication.DataApplicationValidationError
 import org.tessellation.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 
