@@ -3,7 +3,7 @@ package com.my.dor_metagraph.shared_data.combiners
 import cats.effect.IO
 import cats.syntax.all._
 import eu.timepit.refined.auto._
-import org.amm_metagraph.shared_data.Utils.{PosLongOps, toTokenAmountFormat}
+import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
@@ -25,13 +25,13 @@ object StakingCombinerTest extends SimpleIOSuite {
     val poolId = s"$primaryAddressAsString-$pairAddressAsString"
     val liquidityPool = LiquidityPool(
       poolId,
-      tokenA,
-      tokenB,
+      tokenA.copy(amount = tokenA.amount.value.toTokenAmountFormat.toPosLongUnsafe),
+      tokenB.copy(amount = tokenB.amount.value.toTokenAmountFormat.toPosLongUnsafe),
       owner,
-      (tokenA.amount.value * tokenB.amount.value).toPosLongUnsafe,
+      (tokenA.amount.value * tokenB.amount.value).toDouble,
       0.3,
-      toTokenAmountFormat(math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble)),
-      LiquidityProviders(Map(owner -> toTokenAmountFormat(math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble))))
+      math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
+      LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
     (poolId, LiquidityPoolCalculatedState(Map(poolId -> liquidityPool)))
   }
@@ -71,16 +71,16 @@ object StakingCombinerTest extends SimpleIOSuite {
 
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated.ammState(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
-    } yield expect.eql(100L, addressStakedResponse.primaryToken.amount.value) &&
+    } yield expect.eql(100L.toTokenAmountFormat, addressStakedResponse.primaryToken.amount.value) &&
       expect.eql(primaryToken.identifier.get, addressStakedResponse.primaryToken.identifier.get) &&
-      expect.eql(50L, addressStakedResponse.pairToken.amount.value) &&
+      expect.eql(50L.toTokenAmountFormat, addressStakedResponse.pairToken.amount.value) &&
       expect.eql(pairToken.identifier.get, addressStakedResponse.pairToken.identifier.get) &&
-      expect.eql(100L, oldLiquidityPool.tokenA.amount.value) &&
-      expect.eql(200L, updatedLiquidityPool.tokenA.amount.value) &&
-      expect.eql(50L, oldLiquidityPool.tokenB.amount.value) &&
-      expect.eql(100L, updatedLiquidityPool.tokenB.amount.value) &&
-      expect.eql(5000L, oldLiquidityPool.k.value) &&
-      expect.eql(20000L, updatedLiquidityPool.k.value)
+      expect.eql(100L.toTokenAmountFormat, oldLiquidityPool.tokenA.amount.value) &&
+      expect.eql(200L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
+      expect.eql(50L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
+      expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
+      expect.eql(5000D, oldLiquidityPool.k) &&
+      expect.eql(20000D, updatedLiquidityPool.k)
   }
 
   test("Throws error if liquidity pool does not exists") {

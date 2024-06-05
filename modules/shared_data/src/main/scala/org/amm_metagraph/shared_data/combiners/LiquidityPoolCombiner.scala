@@ -2,7 +2,7 @@ package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.Async
 import cats.syntax.all._
-import org.amm_metagraph.shared_data.Utils.{PosLongOps, buildLiquidityPoolUniqueIdentifier, toTokenAmountFormat}
+import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
 import org.amm_metagraph.shared_data.types.States._
@@ -24,14 +24,14 @@ object LiquidityPoolCombiner {
       poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenB.identifier)
       amountA = liquidityPoolUpdate.tokenA.amount.value
       amountB = liquidityPoolUpdate.tokenB.amount.value
-      poolTotalLiquidity = toTokenAmountFormat(math.sqrt(amountA.toDouble * amountB.toDouble))
+      poolTotalLiquidity = math.sqrt(amountA.toDouble * amountB.toDouble).toTokenAmountFormat
 
       liquidityPool = LiquidityPool(
         poolId,
-        TokenInformation(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenA.amount),
-        TokenInformation(liquidityPoolUpdate.tokenB.identifier, liquidityPoolUpdate.tokenB.amount),
+        TokenInformation(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenA.amount.value.toTokenAmountFormat.toPosLongUnsafe),
+        TokenInformation(liquidityPoolUpdate.tokenB.identifier, liquidityPoolUpdate.tokenB.amount.value.toTokenAmountFormat.toPosLongUnsafe),
         signerAddress,
-        (amountA * amountB).toPosLongUnsafe,
+        (amountA * amountB).toDouble,
         liquidityPoolUpdate.feeRate,
         poolTotalLiquidity,
         LiquidityProviders(Map(signerAddress -> poolTotalLiquidity))

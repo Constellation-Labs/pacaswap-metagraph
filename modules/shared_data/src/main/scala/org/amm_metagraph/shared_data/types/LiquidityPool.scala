@@ -25,7 +25,7 @@ object LiquidityPool {
     tokenA            : TokenInformation,
     tokenB            : TokenInformation,
     owner             : Address,
-    k                 : PosLong,
+    k                 : Double,
     feeRate           : Double,
     totalLiquidity    : Long,
     liquidityProviders: LiquidityProviders

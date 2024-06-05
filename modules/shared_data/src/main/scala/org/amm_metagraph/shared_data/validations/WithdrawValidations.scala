@@ -7,7 +7,6 @@ import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors.valid
 import org.tessellation.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import org.tessellation.security.SecurityProvider
-import org.tessellation.security.signature.Signed
 
 object WithdrawValidations {
   def withdrawValidationsL1[F[_] : Async](

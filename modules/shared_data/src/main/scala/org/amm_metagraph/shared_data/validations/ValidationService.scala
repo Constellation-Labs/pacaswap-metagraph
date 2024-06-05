@@ -7,6 +7,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations.{liquidityPoolValidationsL0, liquidityPoolValidationsL1}
 import org.amm_metagraph.shared_data.validations.StakingValidations.{stakingValidationsL0, stakingValidationsL1}
+import org.amm_metagraph.shared_data.validations.SwapValidations.{swapValidationsL0, swapValidationsL1}
 import org.amm_metagraph.shared_data.validations.WithdrawValidations.{withdrawValidationsL0, withdrawValidationsL1}
 import org.tessellation.currency.dataApplication.DataState
 import org.tessellation.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
@@ -31,12 +32,14 @@ object ValidationService {
         case stakingUpdate: StakingUpdate => stakingValidationsL1(stakingUpdate)
         case withdrawUpdate: WithdrawUpdate => withdrawValidationsL1(withdrawUpdate)
         case liquidityPoolUpdate: LiquidityPoolUpdate => liquidityPoolValidationsL1(liquidityPoolUpdate)
+        case swapUpdate: SwapUpdate => swapValidationsL1(swapUpdate)
       }
 
       private def validateL0(signedUpdate: Signed[AmmUpdate], state: AmmCalculatedState): F[DataApplicationValidationErrorOr[Unit]] = signedUpdate.value match {
         case stakingUpdate: StakingUpdate => stakingValidationsL0(stakingUpdate, state, signedUpdate.proofs)
         case withdrawUpdate: WithdrawUpdate => withdrawValidationsL0(withdrawUpdate, state)
         case liquidityPoolUpdate: LiquidityPoolUpdate => liquidityPoolValidationsL0(liquidityPoolUpdate, state)
+        case swapUpdate: SwapUpdate => swapValidationsL0(swapUpdate, state)
       }
 
       override def validateUpdate(

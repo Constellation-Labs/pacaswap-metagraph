@@ -52,4 +52,12 @@ object Errors {
   case object LiquidityPoolDoesNotExists extends DataApplicationValidationError {
     val message = "Liquidity pool does not exists"
   }
+
+  case object SwapLiquidityPoolDoesNotExists extends DataApplicationValidationError {
+    val message = "Swap liquidity pool does not exists"
+  }
+
+  case object SwapLiquidityPoolNotEnoughTokens extends DataApplicationValidationError {
+    val message = "Swap liquidity pool not enough tokens"
+  }
 }

@@ -8,7 +8,7 @@ import io.circe.refined._
 
 object Withdraw {
   @derive(encoder, decoder)
-  case class WithdrawCalculatedStateAddresses(
+  case class WithdrawCalculatedStateAddress(
     currentAmount: PosLong,
   )
 
