@@ -6,8 +6,9 @@ import cats.syntax.all._
 import org.amm_metagraph.shared_data.Utils.toAddress
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
+import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
 import org.amm_metagraph.shared_data.combiners.WithdrawCombiner.combineWithdraw
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate, StakingUpdate, WithdrawUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate, StakingUpdate, SwapUpdate, WithdrawUpdate}
 import org.amm_metagraph.shared_data.types.States._
 import org.tessellation.currency.dataApplication.{DataState, L0NodeContext}
 import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
@@ -65,6 +66,10 @@ object CombinerService {
                 case liquidityPoolUpdate: LiquidityPoolUpdate =>
                   logger.info(s"Received a new liquidity pool update: $liquidityPoolUpdate") >>
                     combineLiquidityPool(acc, liquidityPoolUpdate, address)
+
+                case swapUpdate: SwapUpdate =>
+                  logger.info(s"Received a new swap update: $swapUpdate") >>
+                    combineSwap(acc, swapUpdate, address, currentSnapshotOrdinal)
               }
             } yield updatedState
           }

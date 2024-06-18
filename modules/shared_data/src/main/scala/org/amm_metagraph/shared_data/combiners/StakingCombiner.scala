@@ -3,7 +3,7 @@ package org.amm_metagraph.shared_data.combiners
 import cats.syntax.all._
 import cats.effect.Async
 import cats.implicits.catsSyntaxOption
-import org.amm_metagraph.shared_data.Utils.{PosLongOps, buildLiquidityPoolUniqueIdentifier, getUpdatedTokenInformation}
+import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingCalculatedStateLastReference}
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
@@ -13,6 +13,32 @@ import org.tessellation.schema.SnapshotOrdinal
 import org.tessellation.schema.address.Address
 
 object StakingCombiner {
+
+  private def getUpdatedTokenInformation(
+    stakingUpdate: StakingUpdate,
+    liquidityPool: LiquidityPool
+  ): (TokenInformation, TokenInformation, Long) = {
+    val primaryToken = if (stakingUpdate.primaryTokenId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
+    val pairToken = if (stakingUpdate.pairTokenId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
+
+    val currentPrimaryTokenAmount = primaryToken.amount.value.fromTokenAmountFormat
+    val currentPairTokenAmount = pairToken.amount.value.fromTokenAmountFormat
+
+    val incomingPrimaryAmount = stakingUpdate.primaryTokenAmount.value
+    val incomingPairAmount = (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Calculate equivalent pair needed to maintain the invariant
+
+    val liquidityMinted = math.min(
+      incomingPrimaryAmount * liquidityPool.totalLiquidity / primaryToken.amount.value.toDouble,
+      incomingPairAmount * liquidityPool.totalLiquidity / pairToken.amount.value.toDouble
+    )
+
+    (
+      primaryToken.copy(amount = incomingPrimaryAmount.toTokenAmountFormat.toPosLongUnsafe),
+      pairToken.copy(amount = incomingPairAmount.toTokenAmountFormat.toPosLongUnsafe),
+      liquidityMinted.toTokenAmountFormat
+    )
+  }
+
   private def updateLiquidityPool(
     liquidityPool  : LiquidityPool,
     signerAddress  : Address,
@@ -33,7 +59,7 @@ object StakingCombiner {
     liquidityPool.copy(
       tokenA = tokenA.copy(amount = updatedTokenAAmount),
       tokenB = tokenB.copy(amount = updatedTokenBAmount),
-      k = (updatedTokenAAmount.value * updatedTokenBAmount.value).toPosLongUnsafe,
+      k = updatedTokenAAmount.value.fromTokenAmountFormat * updatedTokenBAmount.value.fromTokenAmountFormat,
       totalLiquidity = updatedTotalLiquidity,
       liquidityProviders = LiquidityProviders(updatedLiquidityProviders)
     )

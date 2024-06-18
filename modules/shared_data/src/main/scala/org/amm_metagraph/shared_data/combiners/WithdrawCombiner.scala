@@ -2,7 +2,7 @@ package org.amm_metagraph.shared_data.combiners
 
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawUpdate}
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddresses
+import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddress
 import org.tessellation.currency.dataApplication.DataState
 import org.tessellation.schema.address.Address
 
@@ -12,11 +12,11 @@ object WithdrawCombiner {
     withdrawUpdate: WithdrawUpdate,
     signerAddress : Address
   ): DataState[AmmOnChainState, AmmCalculatedState] = {
-    val withdrawCalculatedStateAddresses = acc.calculated.ammState.get(OperationType.Withdraw).fold(Map.empty[Address, WithdrawCalculatedStateAddresses]) {
+    val withdrawCalculatedStateAddresses = acc.calculated.ammState.get(OperationType.Withdraw).fold(Map.empty[Address, WithdrawCalculatedStateAddress]) {
       case stakingCalculatedState: WithdrawCalculatedState => stakingCalculatedState.addresses
       case _ => Map.empty
     }
-    val withdrawCalculatedStateAddress = WithdrawCalculatedStateAddresses(
+    val withdrawCalculatedStateAddress = WithdrawCalculatedStateAddress(
       withdrawUpdate.amount
     )
 

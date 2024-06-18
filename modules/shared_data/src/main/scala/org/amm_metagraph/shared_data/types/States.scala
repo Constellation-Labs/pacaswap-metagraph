@@ -6,7 +6,8 @@ import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
-import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddresses
+import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddress
 import org.tessellation.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import org.tessellation.schema.address.Address
 
@@ -31,7 +32,12 @@ object States {
 
   @derive(encoder, decoder)
   case class WithdrawCalculatedState(
-    addresses: Map[Address, WithdrawCalculatedStateAddresses]
+    addresses: Map[Address, WithdrawCalculatedStateAddress]
+  ) extends AmmOffChainState
+
+  @derive(encoder, decoder)
+  case class SwapCalculatedState(
+    addresses: Map[Address, SwapCalculatedStateAddress]
   ) extends AmmOffChainState
 
   @derive(encoder, decoder)
@@ -43,6 +49,7 @@ object States {
     case object Staking extends OperationType("Staking")
     case object Withdraw extends OperationType("Withdraw")
     case object LiquidityPool extends OperationType("LiquidityPool")
+    case object Swap extends OperationType("Swap")
   }
 
   @derive(encoder, decoder)
