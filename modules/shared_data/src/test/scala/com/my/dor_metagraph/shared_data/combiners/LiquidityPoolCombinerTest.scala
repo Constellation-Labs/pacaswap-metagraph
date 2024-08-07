@@ -14,7 +14,7 @@ import weaver.SimpleIOSuite
 
 object LiquidityPoolCombinerTest extends SimpleIOSuite {
 
-  test("Successfully create a liquidity pool") {
+  test("Successfully create a liquidity pool - L0Token - L0Token") {
     val primaryToken = TokenInformation(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb").some, 100L)
     val pairToken = TokenInformation(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5").some, 50L)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
@@ -40,6 +40,35 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
       expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&
       expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
       expect.eql(pairToken.identifier.get, updatedLiquidityPool.tokenB.identifier.get) &&
+      expect.eql(5000D, updatedLiquidityPool.k)
+  }
+
+  test("Successfully create a liquidity pool - L0Token - DAG") {
+    val primaryToken = TokenInformation(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb").some, 100L)
+    val pairToken = TokenInformation(none, 50L)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val stakingUpdate = LiquidityPoolUpdate(
+      primaryToken,
+      pairToken,
+      0.3
+    )
+
+    for {
+      stakeResponse <- combineLiquidityPool[IO](
+        state,
+        stakingUpdate,
+        ownerAddress
+      )
+      poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
+      updatedLiquidityPoolCalculatedState = stakeResponse.calculated.ammState(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
+    } yield expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
+      expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&
+      expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
+      expect.eql(pairToken.identifier.isEmpty, updatedLiquidityPool.tokenB.identifier.isEmpty) &&
       expect.eql(5000D, updatedLiquidityPool.k)
   }
 }

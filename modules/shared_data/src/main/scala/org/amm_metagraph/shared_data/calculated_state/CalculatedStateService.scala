@@ -33,15 +33,15 @@ object CalculatedStateService {
           snapshotOrdinal: SnapshotOrdinal,
           state          : AmmCalculatedState
         ): F[Boolean] =
-          stateRef.update { currentState =>
+          stateRef.modify { currentState =>
             val currentCalculatedState = currentState.state
             val updatedDevices = state.ammState.foldLeft(currentCalculatedState.ammState) {
               case (acc, (address, value)) =>
                 acc.updated(address, value)
             }
 
-            CalculatedState(snapshotOrdinal, AmmCalculatedState(updatedDevices))
-          }.as(true)
+            (CalculatedState(snapshotOrdinal, AmmCalculatedState(updatedDevices)), true)
+          }
 
         override def hash(
           state: AmmCalculatedState
