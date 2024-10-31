@@ -5,11 +5,10 @@ import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 
-
 object Withdraw {
   @derive(encoder, decoder)
   case class WithdrawCalculatedStateAddress(
-    currentAmount: PosLong,
+    currentAmount: PosLong
   )
 
 }

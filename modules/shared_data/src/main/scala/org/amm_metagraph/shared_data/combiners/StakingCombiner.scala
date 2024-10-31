@@ -1,16 +1,23 @@
 package org.amm_metagraph.shared_data.combiners
 
-import cats.syntax.all._
 import cats.effect.Async
-import cats.implicits.catsSyntaxOption
+import cats.syntax.all._
+
+import scala.collection.immutable.SortedSet
+
+import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact._
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.security.{Hashed, Hasher}
+
 import org.amm_metagraph.shared_data.Utils._
-import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingCalculatedStateLastReference}
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingCalculatedStateLastReference}
 import org.amm_metagraph.shared_data.types.States._
-import org.tessellation.currency.dataApplication.DataState
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.schema.address.Address
 
 object StakingCombiner {
 
@@ -18,14 +25,15 @@ object StakingCombiner {
     stakingUpdate: StakingUpdate,
     liquidityPool: LiquidityPool
   ): (TokenInformation, TokenInformation, Long) = {
-    val primaryToken = if (stakingUpdate.primaryTokenId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
-    val pairToken = if (stakingUpdate.pairTokenId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
+    val primaryToken = if (stakingUpdate.tokenAId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
+    val pairToken = if (stakingUpdate.tokenBId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
 
     val currentPrimaryTokenAmount = primaryToken.amount.value.fromTokenAmountFormat
     val currentPairTokenAmount = pairToken.amount.value.fromTokenAmountFormat
 
-    val incomingPrimaryAmount = stakingUpdate.primaryTokenAmount.value
-    val incomingPairAmount = (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Calculate equivalent pair needed to maintain the invariant
+    val incomingPrimaryAmount = stakingUpdate.tokenAAmount.value
+    val incomingPairAmount =
+      (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Calculate equivalent pair needed to maintain the invariant
 
     val liquidityMinted = math.min(
       incomingPrimaryAmount * liquidityPool.totalLiquidity / primaryToken.amount.value.toDouble,
@@ -40,10 +48,10 @@ object StakingCombiner {
   }
 
   private def updateLiquidityPool(
-    liquidityPool  : LiquidityPool,
-    signerAddress  : Address,
-    primaryToken   : TokenInformation,
-    pairToken      : TokenInformation,
+    liquidityPool: LiquidityPool,
+    signerAddress: Address,
+    primaryToken: TokenInformation,
+    pairToken: TokenInformation,
     liquidityMinted: Long
   ): LiquidityPool = {
     val tokenA = if (liquidityPool.tokenA.identifier == primaryToken.identifier) primaryToken else pairToken
@@ -65,29 +73,48 @@ object StakingCombiner {
     )
   }
 
-  def combineStaking[F[_] : Async](
-    acc                   : DataState[AmmOnChainState, AmmCalculatedState],
-    stakingUpdate         : StakingUpdate,
-    signerAddress         : Address,
-    currentSnapshotOrdinal: SnapshotOrdinal
-  ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-    val stakingCalculatedStateAddresses = acc.calculated.ammState.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
-      case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.addresses
-      case _ => Map.empty
-    }
+  private def generateSpendTransactions(
+    allowSpendTokenA: Hashed[AllowSpend],
+    allowSpendTokenB: Hashed[AllowSpend]
+  ): SortedSet[SharedArtifact] =
+    SortedSet[SharedArtifact](
+      PendingSpendTransaction(
+        SpendTransactionFee(allowSpendTokenA.fee.value),
+        EpochProgress.MaxValue,
+        allowSpendTokenA.hash,
+        allowSpendTokenA.currency,
+        allowSpendTokenA.amount
+      ),
+      PendingSpendTransaction(
+        SpendTransactionFee(allowSpendTokenB.fee.value),
+        EpochProgress.MaxValue,
+        allowSpendTokenB.hash,
+        allowSpendTokenB.currency,
+        allowSpendTokenB.amount
+      )
+    )
 
-    val liquidityPoolsCalculatedState = acc.calculated.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-      case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.liquidityPools
-      case _ => Map.empty
-    }
+  def combineStaking[F[_]: Async: Hasher](
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    stakingUpdate: StakingUpdate,
+    signerAddress: Address,
+    currentSnapshotOrdinal: SnapshotOrdinal
+  )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+    val stakingCalculatedStateAddresses =
+      acc.calculated.ammState.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
+        case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.addresses
+        case _                                              => Map.empty
+      }
+
+    val liquidityPoolsCalculatedState = getLiquidityPools(acc)
 
     val maybeLastStakingInfo = stakingCalculatedStateAddresses.get(signerAddress) match {
       case Some(stakingState: StakingCalculatedStateAddress) =>
         StakingCalculatedStateLastReference(
-          stakingState.primaryAllowSpendReferenceTxnId,
-          stakingState.pairAllowSpendReferenceTxnId,
-          stakingState.primaryToken,
-          stakingState.pairToken,
+          stakingState.tokenAAllowSpend,
+          stakingState.tokenBAllowSpend,
+          stakingState.tokenA,
+          stakingState.tokenB,
           stakingState.ordinal
         ).some
 
@@ -95,20 +122,25 @@ object StakingCombiner {
     }
 
     for {
-      poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.primaryTokenId, stakingUpdate.pairTokenId)
-      liquidityPool <- liquidityPoolsCalculatedState.get(poolId).toOptionT.getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
+      poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+      liquidityPool <- liquidityPoolsCalculatedState
+        .get(poolId)
+        .toOptionT
+        .getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
       (primaryToken, pairToken, liquidityMinted) = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
       liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, primaryToken, pairToken, liquidityMinted)
 
       stakingCalculatedStateAddress = StakingCalculatedStateAddress(
-        stakingUpdate.primaryAllowSpendReferenceTxnId,
-        stakingUpdate.pairAllowSpendReferenceTxnId,
+        stakingUpdate.tokenAAllowSpend,
+        stakingUpdate.tokenBAllowSpend,
         primaryToken,
         pairToken,
         currentSnapshotOrdinal,
         maybeLastStakingInfo
       )
-      updatedStakingCalculatedState = StakingCalculatedState(stakingCalculatedStateAddresses.updated(signerAddress, stakingCalculatedStateAddress))
+      updatedStakingCalculatedState = StakingCalculatedState(
+        stakingCalculatedStateAddresses.updated(signerAddress, stakingCalculatedStateAddress)
+      )
       updatedLiquidityPool = LiquidityPoolCalculatedState(liquidityPoolsCalculatedState.updated(poolId, liquidityPoolUpdated))
 
       updates: List[AmmUpdate] = stakingUpdate :: acc.onChain.updates
@@ -116,9 +148,17 @@ object StakingCombiner {
         .updated(OperationType.Staking, updatedStakingCalculatedState)
         .updated(OperationType.LiquidityPool, updatedLiquidityPool)
 
-    } yield DataState(
-      AmmOnChainState(updates),
-      AmmCalculatedState(updatedCalculatedState)
-    )
+      (allowSpendTokenA, allowSpendTokenB) <- getAllowSpendsLastSyncGlobalSnapshotState(
+        stakingUpdate.tokenAAllowSpend,
+        stakingUpdate.tokenBAllowSpend
+      )
+      spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
+
+    } yield
+      DataState(
+        AmmOnChainState(updates),
+        AmmCalculatedState(updatedCalculatedState),
+        spendTransactions
+      )
   }
 }

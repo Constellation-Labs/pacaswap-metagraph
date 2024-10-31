@@ -1,10 +1,13 @@
 import Dependencies.*
 import sbt.*
 
-ThisBuild / organization := "org.constellation"
+ThisBuild / organization := "io.constellationnetwork"
 ThisBuild / organizationName := "amm_metagraph"
 ThisBuild / scalaVersion := "2.13.14"
+
 ThisBuild / evictionErrorLevel := Level.Warn
+ThisBuild / scalafixDependencies += Libraries.organizeImports
+
 
 ThisBuild / assemblyMergeStrategy := {
   case "logback.xml" => MergeStrategy.first
@@ -17,6 +20,8 @@ ThisBuild / assemblyMergeStrategy := {
 
 lazy val commonTestSettings = Seq(
   testFrameworks += new TestFramework("weaver.framework.CatsEffect"),
+  scalafmtOnCompile := true,
+  scalafixOnCompile := true,
   libraryDependencies ++= Seq(
     Libraries.weaverCats,
     Libraries.weaverDiscipline,

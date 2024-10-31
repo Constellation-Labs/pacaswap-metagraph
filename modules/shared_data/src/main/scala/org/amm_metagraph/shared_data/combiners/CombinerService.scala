@@ -3,40 +3,39 @@ package org.amm_metagraph.shared_data.combiners
 import cats.data.OptionT
 import cats.effect.Async
 import cats.syntax.all._
+
+import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hasher, SecurityProvider}
+
 import org.amm_metagraph.shared_data.Utils.toAddress
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
 import org.amm_metagraph.shared_data.combiners.WithdrawCombiner.combineWithdraw
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate, StakingUpdate, SwapUpdate, WithdrawUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
-import org.tessellation.currency.dataApplication.{DataState, L0NodeContext}
-import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.security.SecurityProvider
-import org.tessellation.security.signature.Signed
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-
 trait CombinerService[F[_]] {
   def combine(
-    oldState      : DataState[AmmOnChainState, AmmCalculatedState],
-    updates       : List[Signed[AmmUpdate]],
-    maybeL0Context: Option[L0NodeContext[F]]
-  ): F[DataState[AmmOnChainState, AmmCalculatedState]]
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    updates: List[Signed[AmmUpdate]]
+  )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
 object CombinerService {
-  def make[F[_] : Async : SecurityProvider]: F[CombinerService[F]] = Async[F].delay {
+  def make[F[_]: Async: Hasher: SecurityProvider]: F[CombinerService[F]] = Async[F].delay {
     new CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
 
       override def combine(
-        oldState      : DataState[AmmOnChainState, AmmCalculatedState],
-        updates       : List[Signed[AmmUpdate]],
-        maybeL0Context: Option[L0NodeContext[F]]
-      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        updates: List[Signed[AmmUpdate]]
+      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val newState = DataState(AmmOnChainState(List.empty), AmmCalculatedState(oldState.calculated.ammState))
         if (updates.isEmpty) {
           logger.info("Snapshot without any updates, updating the state to empty updates").as(newState)
@@ -44,9 +43,6 @@ object CombinerService {
           updates.foldLeftM(newState) { (acc, signedUpdate) =>
             for {
               address <- toAddress(signedUpdate.proofs.head)
-              context <- maybeL0Context.toOptionT.getOrRaise(
-                new IllegalStateException("Could not get l0 context")
-              )
               currentSnapshotOrdinal <- OptionT(context.getLastCurrencySnapshot)
                 .map(_.ordinal.next)
                 .getOrElseF {
@@ -59,9 +55,11 @@ object CombinerService {
                     combineStaking(acc, stakingUpdate, address, currentSnapshotOrdinal)
 
                 case withdrawUpdate: WithdrawUpdate =>
-                  logger.info(s"Received a new withdraw update: $withdrawUpdate").as(
-                    combineWithdraw(acc, withdrawUpdate, address)
-                  )
+                  logger
+                    .info(s"Received a new withdraw update: $withdrawUpdate")
+                    .as(
+                      combineWithdraw(acc, withdrawUpdate, address)
+                    )
 
                 case liquidityPoolUpdate: LiquidityPoolUpdate =>
                   logger.info(s"Received a new liquidity pool update: $liquidityPoolUpdate") >>

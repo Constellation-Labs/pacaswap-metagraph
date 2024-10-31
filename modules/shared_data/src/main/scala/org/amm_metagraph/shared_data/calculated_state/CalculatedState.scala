@@ -1,7 +1,8 @@
 package org.amm_metagraph.shared_data.calculated_state
 
+import io.constellationnetwork.schema.SnapshotOrdinal
+
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
-import org.tessellation.schema.SnapshotOrdinal
 
 case class CalculatedState(ordinal: SnapshotOrdinal, state: AmmCalculatedState)
 

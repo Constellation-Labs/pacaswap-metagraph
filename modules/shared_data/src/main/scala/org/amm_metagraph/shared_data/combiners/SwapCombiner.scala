@@ -2,18 +2,20 @@ package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.Async
 import cats.syntax.all._
+
+import io.constellationnetwork.currency.dataApplication.DataState
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.address.Address
+
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, SwapCalculatedStateLastReference}
-import org.tessellation.currency.dataApplication.DataState
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.schema.address.Address
 
 object SwapCombiner {
   private def getUpdatedTokenInformation(
-    swapUpdate   : SwapUpdate,
+    swapUpdate: SwapUpdate,
     liquidityPool: LiquidityPool
   ): (TokenInformation, TokenInformation) = {
     val fromTokenInfo = if (swapUpdate.swapFromToken == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
@@ -36,32 +38,30 @@ object SwapCombiner {
   private def updateLiquidityPool(
     liquidityPool: LiquidityPool,
     fromTokenInfo: TokenInformation,
-    toTokenInfo  : TokenInformation
+    toTokenInfo: TokenInformation
   ): LiquidityPool = {
     val tokenA = if (liquidityPool.tokenA.identifier == fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
     val tokenB = if (liquidityPool.tokenB.identifier == toTokenInfo.identifier) toTokenInfo else fromTokenInfo
 
     liquidityPool.copy(
       tokenA = tokenA,
-      tokenB = tokenB,
+      tokenB = tokenB
     )
   }
 
-  def combineSwap[F[_] : Async](
-    acc                   : DataState[AmmOnChainState, AmmCalculatedState],
-    swapUpdate            : SwapUpdate,
-    signerAddress         : Address,
+  def combineSwap[F[_]: Async](
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    swapUpdate: SwapUpdate,
+    signerAddress: Address,
     currentSnapshotOrdinal: SnapshotOrdinal
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-    val swapCalculatedStateAddresses = acc.calculated.ammState.get(OperationType.Swap).fold(Map.empty[Address, SwapCalculatedStateAddress]) {
-      case swapCalculatedState: SwapCalculatedState => swapCalculatedState.addresses
-      case _ => Map.empty
-    }
+    val swapCalculatedStateAddresses =
+      acc.calculated.ammState.get(OperationType.Swap).fold(Map.empty[Address, SwapCalculatedStateAddress]) {
+        case swapCalculatedState: SwapCalculatedState => swapCalculatedState.addresses
+        case _                                        => Map.empty
+      }
 
-    val liquidityPoolsCalculatedState = acc.calculated.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-      case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.liquidityPools
-      case _ => Map.empty
-    }
+    val liquidityPoolsCalculatedState = getLiquidityPools(acc)
 
     val maybeLastSwapInfo = swapCalculatedStateAddresses.get(signerAddress) match {
       case Some(swapCalculatedState: SwapCalculatedStateAddress) =>
@@ -85,7 +85,10 @@ object SwapCombiner {
 
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromToken, swapUpdate.swapToToken)
-      liquidityPool <- liquidityPoolsCalculatedState.get(poolId).toOptionT.getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
+      liquidityPool <- liquidityPoolsCalculatedState
+        .get(poolId)
+        .toOptionT
+        .getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
       (fromTokenInfo, toTokenInfo) = getUpdatedTokenInformation(swapUpdate, liquidityPool)
       liquidityPoolUpdated = updateLiquidityPool(liquidityPool, fromTokenInfo, toTokenInfo)
 
@@ -112,9 +115,10 @@ object SwapCombiner {
         .updated(OperationType.Swap, updatedSwapCalculatedState)
         .updated(OperationType.LiquidityPool, updatedLiquidityPool)
 
-    } yield DataState(
-      AmmOnChainState(updates),
-      AmmCalculatedState(updatedCalculatedState)
-    )
+    } yield
+      DataState(
+        AmmOnChainState(updates),
+        AmmCalculatedState(updatedCalculatedState)
+      )
   }
 }

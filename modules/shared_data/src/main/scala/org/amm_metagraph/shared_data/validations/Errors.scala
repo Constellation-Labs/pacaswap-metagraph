@@ -1,8 +1,9 @@
 package org.amm_metagraph.shared_data.validations
 
 import cats.syntax.all._
-import org.tessellation.currency.dataApplication.DataApplicationValidationError
-import org.tessellation.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+
+import io.constellationnetwork.currency.dataApplication.DataApplicationValidationError
+import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 
 object Errors {
   private type DataApplicationValidationType = DataApplicationValidationErrorOr[Unit]
@@ -31,6 +32,18 @@ object Errors {
 
   case object StakingLiquidityPoolDoesNotExists extends DataApplicationValidationError {
     val message = "Staking liquidity pool does not exists"
+  }
+
+  case object StakingMissingAllowSpend extends DataApplicationValidationError {
+    val message = "Missing one or both allow spends to stake"
+  }
+
+  case object StakingDifferentAllowSpendSource extends DataApplicationValidationError {
+    val message = "Different allow spend sources"
+  }
+
+  case object StakingDifferentAllowSpendDestination extends DataApplicationValidationError {
+    val message = "Different allow spend destination"
   }
 
   case object StakingInvalidTokenPair extends DataApplicationValidationError {

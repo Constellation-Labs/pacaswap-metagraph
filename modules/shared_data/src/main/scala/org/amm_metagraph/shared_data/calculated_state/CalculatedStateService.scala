@@ -1,21 +1,23 @@
 package org.amm_metagraph.shared_data.calculated_state
 
+import java.nio.charset.StandardCharsets
+
 import cats.effect.Ref
 import cats.effect.kernel.Async
 import cats.syntax.all._
+
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.security.hash.Hash
+
 import io.circe.syntax.EncoderOps
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.security.hash.Hash
-
-import java.nio.charset.StandardCharsets
 
 trait CalculatedStateService[F[_]] {
   def get: F[CalculatedState]
 
   def update(
     snapshotOrdinal: SnapshotOrdinal,
-    state          : AmmCalculatedState
+    state: AmmCalculatedState
   ): F[Boolean]
 
   def hash(
@@ -24,14 +26,14 @@ trait CalculatedStateService[F[_]] {
 }
 
 object CalculatedStateService {
-  def make[F[_] : Async]: F[CalculatedStateService[F]] = {
+  def make[F[_]: Async]: F[CalculatedStateService[F]] =
     Ref.of[F, CalculatedState](CalculatedState.empty).map { stateRef =>
       new CalculatedStateService[F] {
         override def get: F[CalculatedState] = stateRef.get
 
         override def update(
           snapshotOrdinal: SnapshotOrdinal,
-          state          : AmmCalculatedState
+          state: AmmCalculatedState
         ): F[Boolean] =
           stateRef.modify { currentState =>
             val currentCalculatedState = currentState.state
@@ -51,5 +53,4 @@ object CalculatedStateService {
         }
       }
     }
-  }
 }
