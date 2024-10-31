@@ -29,7 +29,7 @@ object LiquidityPoolValidations {
       poolAlreadyExists <- validateIfPoolAlreadyExists(
         liquidityPoolUpdate,
         calculatedState
-      )
+      ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
     } yield liquidityPoolValidationsL1.productR(poolAlreadyExists)
   }
 
