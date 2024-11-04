@@ -15,6 +15,7 @@ import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.numeric.PosLong
+import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -59,6 +60,16 @@ object Utils {
         (hashedAllowSpends.find(_.hash === tokenAAllowSpend), hashedAllowSpends.find(_.hash === tokenBAllowSpend))
       }
   } yield response
+
+  def getLiquidityPoolByPoolId[F[_]: Async](
+    liquidityPoolsCalculatedState: Map[String, LiquidityPool],
+    poolId: String
+  ): F[LiquidityPool] =
+    liquidityPoolsCalculatedState
+      .get(poolId)
+      .fold(
+        Async[F].raiseError[LiquidityPool](new IllegalStateException("Liquidity Pool does not exist"))
+      )(Async[F].pure)
 
   implicit class PosLongOps(value: Long) {
     def toPosLongUnsafe: PosLong =

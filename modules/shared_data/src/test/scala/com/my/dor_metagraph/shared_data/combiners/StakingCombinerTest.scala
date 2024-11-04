@@ -182,7 +182,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       ).attempt.map {
         case Left(e: IllegalStateException) =>
-          expect(e.getMessage == "Liquidity Pool does not exists")
+          expect(e.getMessage == "Liquidity Pool does not exist")
         case Left(e) =>
           failure(s"Unexpected exception: $e")
         case Right(_) =>

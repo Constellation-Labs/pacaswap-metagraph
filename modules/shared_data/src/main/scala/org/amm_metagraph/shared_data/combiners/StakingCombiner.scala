@@ -123,10 +123,7 @@ object StakingCombiner {
 
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
-      liquidityPool <- liquidityPoolsCalculatedState
-        .get(poolId)
-        .toOptionT
-        .getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
+      liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
       (primaryToken, pairToken, liquidityMinted) = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
       liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, primaryToken, pairToken, liquidityMinted)
 
