@@ -3,11 +3,12 @@ import sbt.*
 object Dependencies {
 
   object V {
-    val tessellation = "2.8.1"
+    val tessellation = "99.99.99"
     val decline = "2.4.1"
+    val organizeImports = "0.5.0"
   }
 
-  def tessellation(artifact: String): ModuleID = "org.constellation" %% s"tessellation-$artifact" % V.tessellation
+  def tessellation(artifact: String): ModuleID = "io.constellationnetwork" %% s"tessellation-$artifact" % V.tessellation
 
   def decline(artifact: String = ""): ModuleID =
     "com.monovore" %% {
@@ -27,11 +28,8 @@ object Dependencies {
     val weaverCats = "com.disneystreaming" %% "weaver-cats" % "0.8.1"
     val weaverDiscipline = "com.disneystreaming" %% "weaver-discipline" % "0.8.1"
     val weaverScalaCheck = "com.disneystreaming" %% "weaver-scalacheck" % "0.8.1"
+    val organizeImports = "com.github.liancheng" %% "organize-imports" % V.organizeImports
   }
-
-
-  // Scalafix rules
-  val organizeImports = "com.github.liancheng" %% "organize-imports" % "0.5.0"
 
   object CompilerPlugin {
 

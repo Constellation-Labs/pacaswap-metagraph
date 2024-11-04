@@ -1,14 +1,15 @@
 package org.amm_metagraph.shared_data.types
 
+import io.constellationnetwork.currency.dataApplication.DataUpdate
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.swap._
+import io.constellationnetwork.security.hash.Hash
+
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
-import org.tessellation.currency.dataApplication.DataUpdate
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.schema.address.Address
-
 
 object DataUpdates {
   @derive(encoder, decoder)
@@ -16,36 +17,35 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class LiquidityPoolUpdate(
-    tokenA : TokenInformation,
-    tokenB : TokenInformation,
-    feeRate: Double,
+    tokenA: TokenInformation,
+    tokenB: TokenInformation,
+    feeRate: Double
   ) extends AmmUpdate
 
   @derive(decoder, encoder)
   case class StakingUpdate(
-    primaryAllowSpendReferenceTxnId: String,
-    pairAllowSpendReferenceTxnId   : String,
-    primaryTokenId                 : Option[Address],
-    primaryTokenAmount             : PosLong,
-    pairTokenId                    : Option[Address],
+    tokenAAllowSpend: Hash,
+    tokenBAllowSpend: Hash,
+    tokenAId: Option[CurrencyId],
+    tokenAAmount: PosLong,
+    tokenBId: Option[CurrencyId]
   ) extends AmmUpdate
 
   @derive(decoder, encoder)
   case class SwapUpdate(
-    swapFromToken      : Option[Address],
-    swapToToken        : Option[Address],
-    metagraphAddress   : Address,
-    fee                : Long,
-    reference          : String,
+    swapFromToken: Option[CurrencyId],
+    swapToToken: Option[CurrencyId],
+    metagraphAddress: CurrencyId,
+    fee: Long,
+    reference: String,
     allowSpendReference: String,
-    minAmount          : PosLong,
-    maxAmount          : PosLong,
-    maxValidGsOrdinal  : SnapshotOrdinal,
-    poolId             : Option[String],
-    minPrice           : PosLong,
-    maxPrice           : PosLong
+    minAmount: PosLong,
+    maxAmount: PosLong,
+    maxValidGsOrdinal: SnapshotOrdinal,
+    poolId: Option[String],
+    minPrice: PosLong,
+    maxPrice: PosLong
   ) extends AmmUpdate
-
 
   @derive(decoder, encoder)
   case class WithdrawUpdate(

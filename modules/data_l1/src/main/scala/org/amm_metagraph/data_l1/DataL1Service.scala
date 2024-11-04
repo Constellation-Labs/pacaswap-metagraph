@@ -3,26 +3,30 @@ package org.amm_metagraph.data_l1
 import cats.data.NonEmptyList
 import cats.effect.Async
 import cats.syntax.all._
+
+import io.constellationnetwork.currency.dataApplication._
+import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
+import io.constellationnetwork.json.JsonSerializer
+import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.security.Hasher
+import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.signature.Signed
+
 import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.DataUpdateCodec._
+import org.amm_metagraph.shared_data.validations.Errors.valid
 import org.amm_metagraph.shared_data.validations.ValidationService
 import org.http4s.circe.CirceEntityCodec.circeEntityDecoder
 import org.http4s.{EntityDecoder, HttpRoutes}
-import org.tessellation.currency.dataApplication._
-import org.tessellation.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
-import org.tessellation.json.JsonSerializer
-import org.tessellation.schema.SnapshotOrdinal
-import org.tessellation.security.hash.Hash
-import org.tessellation.security.signature.Signed
 
 object DataL1Service {
 
-  def make[F[+_] : Async : JsonSerializer](
+  def make[F[+_]: Async: JsonSerializer: Hasher](
     calculatedStateService: CalculatedStateService[F],
-    validationService     : ValidationService[F]
+    validationService: ValidationService[F]
   ): F[BaseDataApplicationL1Service[F]] = Async[F].delay {
     makeBaseDataApplicationL1Service(
       calculatedStateService,
@@ -30,16 +34,16 @@ object DataL1Service {
     )
   }
 
-  private def makeBaseDataApplicationL1Service[F[+_] : Async : JsonSerializer](
+  private def makeBaseDataApplicationL1Service[F[+_]: Async: JsonSerializer: Hasher](
     calculatedStateService: CalculatedStateService[F],
-    validationService     : ValidationService[F]
+    validationService: ValidationService[F]
   ): BaseDataApplicationL1Service[F] = BaseDataApplicationL1Service(
     new DataApplicationL1Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def validateData(
-        state  : DataState[AmmOnChainState, AmmCalculatedState],
+        state: DataState[AmmOnChainState, AmmCalculatedState],
         updates: NonEmptyList[Signed[AmmUpdate]]
       )(implicit context: L1NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] =
-        validationService.validateData(updates, state)
+        valid.pure
 
       override def validateUpdate(
         update: AmmUpdate
@@ -47,7 +51,7 @@ object DataL1Service {
         validationService.validateUpdate(update)
 
       override def combine(
-        state  : DataState[AmmOnChainState, AmmCalculatedState],
+        state: DataState[AmmOnChainState, AmmCalculatedState],
         updates: List[Signed[AmmUpdate]]
       )(implicit context: L1NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         state.pure[F]
@@ -105,7 +109,7 @@ object DataL1Service {
 
       override def setCalculatedState(
         ordinal: SnapshotOrdinal,
-        state  : AmmCalculatedState
+        state: AmmCalculatedState
       )(implicit context: L1NodeContext[F]): F[Boolean] =
         calculatedStateService.update(ordinal, state)
 
