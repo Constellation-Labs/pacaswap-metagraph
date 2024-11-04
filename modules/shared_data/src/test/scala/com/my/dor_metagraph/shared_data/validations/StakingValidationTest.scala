@@ -5,9 +5,9 @@ import cats.data.Validated.{Invalid, Valid}
 import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+
+import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -22,6 +22,10 @@ import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
+
+import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.Utils.{DoubleOps, LongOps, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
@@ -29,8 +33,6 @@ import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
-
-import scala.collection.immutable.{SortedMap, SortedSet}
 
 object StakingValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
@@ -42,9 +44,9 @@ object StakingValidationTest extends MutableIOSuite {
   } yield (h, sp)
 
   def buildLiquidityPoolCalculatedState(
-    tokenA : TokenInformation,
-    tokenB : TokenInformation,
-    owner  : Address,
+    tokenA: TokenInformation,
+    tokenB: TokenInformation,
+    owner: Address,
     feeRate: Long
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)

@@ -85,10 +85,7 @@ object SwapCombiner {
 
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromToken, swapUpdate.swapToToken)
-      liquidityPool <- liquidityPoolsCalculatedState
-        .get(poolId)
-        .toOptionT
-        .getOrRaise(new IllegalStateException("Liquidity Pool does not exists"))
+      liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
       (fromTokenInfo, toTokenInfo) = getUpdatedTokenInformation(swapUpdate, liquidityPool)
       liquidityPoolUpdated = updateLiquidityPool(liquidityPool, fromTokenInfo, toTokenInfo)
 
