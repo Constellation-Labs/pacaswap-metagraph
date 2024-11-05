@@ -3,12 +3,14 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.security.Hasher
 
-import org.amm_metagraph.shared_data.Utils.buildLiquidityPoolUniqueIdentifier
+import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState}
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, LiquidityPoolCalculatedState, OperationType}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors._
 
 object SwapValidations {
@@ -18,28 +20,26 @@ object SwapValidations {
     valid
   }
 
-  def swapValidationsL0[F[_]: Async](
+  def swapValidationsL0[F[_]: Async: Hasher](
     swapUpdate: SwapUpdate,
     state: AmmCalculatedState
-  ): F[DataApplicationValidationErrorOr[Unit]] = {
-    val liquidityPoolsCalculatedState = state.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-      case liquidityPoolCalculatedState: LiquidityPoolCalculatedState => liquidityPoolCalculatedState.liquidityPools
-      case _                                                          => Map.empty[String, LiquidityPool]
-    }
+  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = {
+    val liquidityPoolsCalculatedState = getLiquidityPools(state)
 
     for {
       liquidityPoolExists <- validateIfLiquidityPoolExists(
         swapUpdate,
         liquidityPoolsCalculatedState
       )
-
       poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
         swapUpdate,
         liquidityPoolsCalculatedState
       )
-
+      validAllowSpend <- validateSwapAllowSpend(
+        swapUpdate
+      )
       swapValidationsL1 <- swapValidationsL1(swapUpdate)
-      result = swapValidationsL1.productR(liquidityPoolExists).productR(poolHaveEnoughTokens)
+      result = swapValidationsL1.productR(liquidityPoolExists).productR(poolHaveEnoughTokens).productR(validAllowSpend)
     } yield result
   }
 
@@ -47,8 +47,8 @@ object SwapValidations {
     swapUpdate: SwapUpdate,
     currentLiquidityPools: Map[String, LiquidityPool]
   ): F[DataApplicationValidationErrorOr[Unit]] = for {
-    poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromToken, swapUpdate.swapToToken)
-    result = SwapLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId))
+    poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+    result = SwapLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId.value))
   } yield result
 
   private def validateIfPoolHaveEnoughTokens[F[_]: Async](
@@ -56,16 +56,33 @@ object SwapValidations {
     currentLiquidityPools: Map[String, LiquidityPool]
   ): F[DataApplicationValidationErrorOr[Unit]] = {
     val hasEnoughTokens: LiquidityPool => Boolean = lp => {
-      val maybeToken = swapUpdate.swapToToken match {
+      val maybeToken = swapUpdate.swapToPair match {
         case None => Option.when(lp.tokenA.identifier.isEmpty)(lp.tokenA).orElse(lp.tokenB.some)
         case Some(value) if lp.tokenA.identifier.contains(value) => lp.tokenA.some
         case Some(value)                                         => Option.when(lp.tokenB.identifier.contains(value))(lp.tokenB)
       }
-      maybeToken.exists(_.amount.value > swapUpdate.maxAmount.value)
+      maybeToken.exists(_.amount.value > swapUpdate.maxAmount.value.value)
     }
 
-    buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromToken, swapUpdate.swapToToken)
-      .map(currentLiquidityPools.get)
+    buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+      .map(poolId => currentLiquidityPools.get(poolId.value))
       .map(maybePool => SwapLiquidityPoolNotEnoughTokens.unlessA(maybePool.exists(hasEnoughTokens)))
   }
+
+  private def validateSwapAllowSpend[F[_]: Async: Hasher](
+    swapUpdate: SwapUpdate
+  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
+    swapAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
+      swapUpdate.allowSpendReference
+    )
+  } yield
+    if (swapAllowSpend.isEmpty) {
+      SwapMissingAllowSpend.invalid
+    } else if (swapAllowSpend.get.currency != swapUpdate.swapFromPair) {
+      SwapAllowSpendDifferentCurrency.invalid
+    } else if (swapAllowSpend.get.source != swapUpdate.sourceAddress) {
+      SwapAllowSpendDifferentSourceAddress.invalid
+    } else {
+      valid
+    }
 }

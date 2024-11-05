@@ -22,7 +22,7 @@ import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
 
@@ -43,7 +43,7 @@ object StakingCombinerTest extends MutableIOSuite {
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = s"$primaryAddressAsString-$pairAddressAsString"
+    val poolId = org.amm_metagraph.shared_data.types.LiquidityPool.PoolId(s"$primaryAddressAsString-$pairAddressAsString")
     val liquidityPool = LiquidityPool(
       poolId,
       tokenA.copy(amount = tokenA.amount.value.toTokenAmountFormat.toPosLongUnsafe),
@@ -54,7 +54,7 @@ object StakingCombinerTest extends MutableIOSuite {
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
-    (poolId, LiquidityPoolCalculatedState(Map(poolId -> liquidityPool)))
+    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
 
   test("Test combining successfully when liquidity pool exists") { implicit res =>
@@ -121,14 +121,14 @@ object StakingCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      stakingCalculatedState = stakeResponse.calculated.ammState(OperationType.Staking).asInstanceOf[StakingCalculatedState]
+      stakingCalculatedState = stakeResponse.calculated.operations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
       addressStakedResponse = stakingCalculatedState.addresses(ownerAddress)
 
-      oldLiquidityPoolCalculatedState = state.calculated.ammState(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPoolCalculatedState = state.calculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
       oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
 
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .ammState(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
 

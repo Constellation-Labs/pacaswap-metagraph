@@ -10,9 +10,9 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
-import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendsLastSyncGlobalSnapshotState, toAddress}
+import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState, toAddress}
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
@@ -30,14 +30,12 @@ object StakingValidations {
   )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
     address <- toAddress(proofs.head)
 
-    stakingCalculatedState = state.ammState.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
+    stakingCalculatedState = state.operations.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
       case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.addresses
       case _                                              => Map.empty[Address, StakingCalculatedStateAddress]
     }
-    liquidityPoolsCalculatedState = state.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-      case liquidityPoolCalculatedState: LiquidityPoolCalculatedState => liquidityPoolCalculatedState.liquidityPools
-      case _                                                          => Map.empty[String, LiquidityPool]
-    }
+
+    liquidityPoolsCalculatedState = getLiquidityPools(state)
 
     validAllowSpends <- validateStakingAllowSpends(
       stakingUpdate
@@ -65,25 +63,26 @@ object StakingValidations {
     currentLiquidityPools: Map[String, LiquidityPool]
   ): F[DataApplicationValidationErrorOr[Unit]] = for {
     poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
-    result = StakingLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId))
+    result = StakingLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId.value))
   } yield result
 
   private def validateStakingAllowSpends[F[_]: Async: Hasher](
     stakingUpdate: StakingUpdate
-  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] =
-    getAllowSpendsLastSyncGlobalSnapshotState(
-      stakingUpdate.tokenAAllowSpend,
+  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
+    tokenAAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
+      stakingUpdate.tokenAAllowSpend
+    )
+    tokenBAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
       stakingUpdate.tokenBAllowSpend
-    ).map { allowSpends =>
-      val (tokenAAllowSpend, tokenBAllowSpend) = allowSpends
-      if (tokenAAllowSpend.isEmpty || tokenBAllowSpend.isEmpty) {
-        StakingMissingAllowSpend.invalid
-      } else if (tokenAAllowSpend.get.source != tokenBAllowSpend.get.source) {
-        StakingDifferentAllowSpendSource.invalid
-      } else if (tokenAAllowSpend.get.destination != tokenBAllowSpend.get.destination) {
-        StakingDifferentAllowSpendDestination.invalid
-      } else {
-        valid
-      }
+    )
+  } yield
+    if (tokenAAllowSpend.isEmpty || tokenBAllowSpend.isEmpty) {
+      StakingMissingAllowSpend.invalid
+    } else if (tokenAAllowSpend.get.source != tokenBAllowSpend.get.source) {
+      StakingDifferentAllowSpendSource.invalid
+    } else if (tokenAAllowSpend.get.destination != tokenBAllowSpend.get.destination) {
+      StakingDifferentAllowSpendDestination.invalid
+    } else {
+      valid
     }
 }

@@ -1,7 +1,10 @@
 package org.amm_metagraph.shared_data.types
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.SpendTransaction
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
@@ -58,7 +61,8 @@ object States {
 
   @derive(encoder, decoder)
   case class AmmCalculatedState(
-    ammState: Map[OperationType, AmmOffChainState]
+    operations: Map[OperationType, AmmOffChainState],
+    spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction]
   ) extends DataCalculatedState
 
 }

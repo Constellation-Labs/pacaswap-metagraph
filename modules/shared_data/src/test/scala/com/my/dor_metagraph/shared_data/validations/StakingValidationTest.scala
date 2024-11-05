@@ -28,7 +28,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.Utils.{DoubleOps, LongOps, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
@@ -51,7 +51,7 @@ object StakingValidationTest extends MutableIOSuite {
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = s"$primaryAddressAsString-$pairAddressAsString"
+    val poolId = org.amm_metagraph.shared_data.types.LiquidityPool.PoolId(s"$primaryAddressAsString-$pairAddressAsString")
     val liquidityPool = LiquidityPool(
       poolId,
       tokenA,
@@ -62,7 +62,7 @@ object StakingValidationTest extends MutableIOSuite {
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
-    (poolId, LiquidityPoolCalculatedState(Map(poolId -> liquidityPool)))
+    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
 
   def getFakeSignedUpdate(

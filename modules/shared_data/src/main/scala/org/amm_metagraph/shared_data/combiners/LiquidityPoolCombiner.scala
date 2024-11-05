@@ -17,7 +17,7 @@ object LiquidityPoolCombiner {
     liquidityPoolUpdate: LiquidityPoolUpdate,
     signerAddress: Address
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-    val liquidityPools = getLiquidityPools(acc)
+    val liquidityPools = getLiquidityPools(acc.calculated)
 
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenB.identifier)
@@ -41,8 +41,8 @@ object LiquidityPoolCombiner {
         poolTotalLiquidity,
         LiquidityProviders(Map(signerAddress -> poolTotalLiquidity))
       )
-      updatedLiquidityPoolCalculatedState = LiquidityPoolCalculatedState(liquidityPools.updated(poolId, liquidityPool))
-      updatedState = acc.calculated.ammState.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState)
+      updatedLiquidityPoolCalculatedState = LiquidityPoolCalculatedState(liquidityPools.updated(poolId.value, liquidityPool))
+      updatedState = acc.calculated.operations.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState)
       updates: List[AmmUpdate] = liquidityPoolUpdate :: acc.onChain.updates
     } yield
       DataState(

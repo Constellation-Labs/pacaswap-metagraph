@@ -38,9 +38,9 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
       )
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .ammState(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&
@@ -70,9 +70,9 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
       )
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .ammState(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&

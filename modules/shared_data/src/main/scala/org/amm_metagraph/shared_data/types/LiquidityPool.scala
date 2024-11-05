@@ -1,8 +1,5 @@
 package org.amm_metagraph.shared_data.types
 
-import cats.effect.Async
-
-import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.CurrencyId
 
@@ -10,9 +7,14 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
+import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
+  @derive(encoder, decoder)
+  @newtype
+  case class PoolId(value: String)
+
   @derive(encoder, decoder)
   case class TokenInformation(
     identifier: Option[CurrencyId],
@@ -26,7 +28,7 @@ object LiquidityPool {
 
   @derive(encoder, decoder)
   case class LiquidityPool(
-    poolId: String,
+    poolId: PoolId,
     tokenA: TokenInformation,
     tokenB: TokenInformation,
     owner: Address,
@@ -36,8 +38,8 @@ object LiquidityPool {
     liquidityProviders: LiquidityProviders
   )
 
-  def getLiquidityPools[F[_]: Async](state: DataState[AmmOnChainState, AmmCalculatedState]): Map[String, LiquidityPool] =
-    state.calculated.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
+  def getLiquidityPools(state: AmmCalculatedState): Map[String, LiquidityPool] =
+    state.operations.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
       case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.liquidityPools
       case _                                                           => Map.empty
     }
