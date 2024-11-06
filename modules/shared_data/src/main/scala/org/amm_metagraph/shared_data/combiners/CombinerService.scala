@@ -10,6 +10,8 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import monocle.syntax.all._
+import org.amm_metagraph.shared_data.SpendTransactions.getCombinedSpendTransactions
 import org.amm_metagraph.shared_data.Utils.toAddress
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
@@ -36,7 +38,8 @@ object CombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         updates: List[Signed[AmmUpdate]]
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-        val newState = DataState(AmmOnChainState(List.empty), AmmCalculatedState(oldState.calculated.ammState))
+        val newState =
+          DataState(AmmOnChainState(List.empty), AmmCalculatedState(oldState.calculated.operations, oldState.calculated.spendTransactions))
         if (updates.isEmpty) {
           logger.info("Snapshot without any updates, updating the state to empty updates").as(newState)
         } else {
@@ -49,7 +52,7 @@ object CombinerService {
                   val message = "Could not get the ordinal from currency snapshot. lastCurrencySnapshot not found"
                   logger.error(message) >> new Exception(message).raiseError[F, SnapshotOrdinal]
                 }
-              updatedState <- signedUpdate.value match {
+              combinedState <- signedUpdate.value match {
                 case stakingUpdate: StakingUpdate =>
                   logger.info(s"Received a new staking update: $stakingUpdate") >>
                     combineStaking(acc, stakingUpdate, address, currentSnapshotOrdinal)
@@ -69,6 +72,20 @@ object CombinerService {
                   logger.info(s"Received a new swap update: $swapUpdate") >>
                     combineSwap(acc, swapUpdate, address, currentSnapshotOrdinal)
               }
+
+              (createdPendingSpendTransactions, createdConcludedSpendTransactions) = getCombinedSpendTransactions(
+                combinedState.sharedArtifacts
+              )
+
+              updatedState <-
+                combinedState
+                  .focus(_.calculated)
+                  .modify(_ =>
+                    combinedState.calculated
+                      .focus(_.spendTransactions)
+                      .modify(current => current ++ createdPendingSpendTransactions ++ createdConcludedSpendTransactions)
+                  )
+                  .pure
             } yield updatedState
           }
         }

@@ -9,7 +9,6 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
-import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.{Hashed, Hasher}
 
@@ -76,23 +75,14 @@ object StakingCombiner {
   private def generateSpendTransactions(
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
-  ): SortedSet[SharedArtifact] =
+  ): SortedSet[SharedArtifact] = {
+    val spendTransactionTokenA = generatePendingSpendTransaction(allowSpendTokenA)
+    val spendTransactionTokenB = generatePendingSpendTransaction(allowSpendTokenB)
     SortedSet[SharedArtifact](
-      PendingSpendTransaction(
-        SpendTransactionFee(allowSpendTokenA.fee.value),
-        EpochProgress.MaxValue,
-        allowSpendTokenA.hash,
-        allowSpendTokenA.currency,
-        allowSpendTokenA.amount
-      ),
-      PendingSpendTransaction(
-        SpendTransactionFee(allowSpendTokenB.fee.value),
-        EpochProgress.MaxValue,
-        allowSpendTokenB.hash,
-        allowSpendTokenB.currency,
-        allowSpendTokenB.amount
-      )
+      spendTransactionTokenA,
+      spendTransactionTokenB
     )
+  }
 
   def combineStaking[F[_]: Async: Hasher](
     acc: DataState[AmmOnChainState, AmmCalculatedState],
@@ -101,12 +91,12 @@ object StakingCombiner {
     currentSnapshotOrdinal: SnapshotOrdinal
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val stakingCalculatedStateAddresses =
-      acc.calculated.ammState.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
+      acc.calculated.operations.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
         case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.addresses
         case _                                              => Map.empty
       }
 
-    val liquidityPoolsCalculatedState = getLiquidityPools(acc)
+    val liquidityPoolsCalculatedState = getLiquidityPools(acc.calculated)
 
     val maybeLastStakingInfo = stakingCalculatedStateAddresses.get(signerAddress) match {
       case Some(stakingState: StakingCalculatedStateAddress) =>
@@ -138,17 +128,21 @@ object StakingCombiner {
       updatedStakingCalculatedState = StakingCalculatedState(
         stakingCalculatedStateAddresses.updated(signerAddress, stakingCalculatedStateAddress)
       )
-      updatedLiquidityPool = LiquidityPoolCalculatedState(liquidityPoolsCalculatedState.updated(poolId, liquidityPoolUpdated))
+      updatedLiquidityPool = LiquidityPoolCalculatedState(liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated))
 
       updates: List[AmmUpdate] = stakingUpdate :: acc.onChain.updates
-      updatedCalculatedState = acc.calculated.ammState
+      updatedCalculatedState = acc.calculated.operations
         .updated(OperationType.Staking, updatedStakingCalculatedState)
         .updated(OperationType.LiquidityPool, updatedLiquidityPool)
 
-      (allowSpendTokenA, allowSpendTokenB) <- getAllowSpendsLastSyncGlobalSnapshotState(
-        stakingUpdate.tokenAAllowSpend,
+      allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
+        stakingUpdate.tokenAAllowSpend
+      )
+
+      allowSpendTokenB <- getAllowSpendLastSyncGlobalSnapshotState(
         stakingUpdate.tokenBAllowSpend
       )
+
       spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
 
     } yield

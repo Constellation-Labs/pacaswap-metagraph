@@ -1,12 +1,15 @@
 package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.SwapAmount
+import io.constellationnetwork.security.hash.Hash
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.types.numeric.PosLong
+import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
 import io.circe.refined._
-import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 
 object Swap {
 
@@ -14,15 +17,15 @@ object Swap {
   case class SwapCalculatedStateLastReference(
     fromToken: TokenInformation,
     toToken: TokenInformation,
-    fee: Long,
+    fee: NonNegLong,
     reference: String,
-    allowSpendReference: String,
-    minAmount: PosLong,
-    maxAmount: PosLong,
-    maxValidGsOrdinal: SnapshotOrdinal,
-    poolId: Option[String],
-    minPrice: PosLong,
-    maxPrice: PosLong,
+    allowSpendReference: Hash,
+    minAmount: SwapAmount,
+    maxAmount: SwapAmount,
+    maxValidGsEpochProgress: EpochProgress,
+    poolId: Option[PoolId],
+    minPrice: Option[PosLong],
+    maxPrice: Option[PosLong],
     ordinal: SnapshotOrdinal
   )
 
@@ -30,15 +33,15 @@ object Swap {
   case class SwapCalculatedStateAddress(
     fromToken: TokenInformation,
     toToken: TokenInformation,
-    fee: Long,
+    fee: NonNegLong,
     reference: String,
-    allowSpendReference: String,
-    minAmount: PosLong,
-    maxAmount: PosLong,
-    maxValidGsOrdinal: SnapshotOrdinal,
-    poolId: Option[String],
-    minPrice: PosLong,
-    maxPrice: PosLong,
+    allowSpendReference: Hash,
+    minAmount: SwapAmount,
+    maxAmount: SwapAmount,
+    maxValidGsEpochProgress: EpochProgress,
+    poolId: Option[PoolId],
+    minPrice: Option[PosLong],
+    maxPrice: Option[PosLong],
     ordinal: SnapshotOrdinal,
     lastSwapUpdate: Option[SwapCalculatedStateLastReference]
   )

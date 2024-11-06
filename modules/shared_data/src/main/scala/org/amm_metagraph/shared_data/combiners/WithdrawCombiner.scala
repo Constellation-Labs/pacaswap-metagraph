@@ -14,7 +14,7 @@ object WithdrawCombiner {
     signerAddress: Address
   ): DataState[AmmOnChainState, AmmCalculatedState] = {
     val withdrawCalculatedStateAddresses =
-      acc.calculated.ammState.get(OperationType.Withdraw).fold(Map.empty[Address, WithdrawCalculatedStateAddress]) {
+      acc.calculated.operations.get(OperationType.Withdraw).fold(Map.empty[Address, WithdrawCalculatedStateAddress]) {
         case stakingCalculatedState: WithdrawCalculatedState => stakingCalculatedState.addresses
         case _                                               => Map.empty
       }
@@ -25,7 +25,7 @@ object WithdrawCombiner {
     val updatedWithdrawCalculatedState = WithdrawCalculatedState(
       withdrawCalculatedStateAddresses.updated(signerAddress, withdrawCalculatedStateAddress)
     )
-    val updatedState = acc.calculated.ammState.updated(OperationType.Withdraw, updatedWithdrawCalculatedState)
+    val updatedState = acc.calculated.operations.updated(OperationType.Withdraw, updatedWithdrawCalculatedState)
     val updates: List[AmmUpdate] = withdrawUpdate :: acc.onChain.updates
 
     DataState(

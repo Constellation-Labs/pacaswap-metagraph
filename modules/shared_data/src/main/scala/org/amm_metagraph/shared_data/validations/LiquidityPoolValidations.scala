@@ -7,8 +7,8 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.DataAppl
 
 import org.amm_metagraph.shared_data.Utils.buildLiquidityPoolUniqueIdentifier
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, LiquidityPoolCalculatedState, OperationType}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolAlreadyExists, LiquidityPoolNotEnoughInformation}
 
 object LiquidityPoolValidations {
@@ -24,10 +24,7 @@ object LiquidityPoolValidations {
   ): F[DataApplicationValidationErrorOr[Unit]] =
     for {
       liquidityPoolValidationsL1 <- liquidityPoolValidationsL1(liquidityPoolUpdate)
-      calculatedState = state.ammState.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-        case liquidityPoolCalculatedState: LiquidityPoolCalculatedState => liquidityPoolCalculatedState.liquidityPools
-        case _                                                          => Map.empty[String, LiquidityPool]
-      }
+      calculatedState = getLiquidityPools(state)
       poolAlreadyExists <- validateIfPoolAlreadyExists(
         liquidityPoolUpdate,
         calculatedState
@@ -45,5 +42,5 @@ object LiquidityPoolValidations {
   ): F[DataApplicationValidationErrorOr[Unit]] =
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenB.identifier)
-    } yield LiquidityPoolAlreadyExists.whenA(currentLiquidityPools.contains(poolId))
+    } yield LiquidityPoolAlreadyExists.whenA(currentLiquidityPools.contains(poolId.value))
 }

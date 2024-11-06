@@ -46,7 +46,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = s"$primaryAddressAsString-$pairAddressAsString"
+    val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
     val liquidityPool = LiquidityPool(
       poolId,
       tokenA,
@@ -57,7 +57,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
-    (poolId, LiquidityPoolCalculatedState(Map(poolId -> liquidityPool)))
+    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
 
   def getFakeSignedUpdate(

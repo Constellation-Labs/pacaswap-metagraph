@@ -46,14 +46,6 @@ object Errors {
     val message = "Different allow spend destination"
   }
 
-  case object StakingInvalidTokenPair extends DataApplicationValidationError {
-    val message = "Staking invalid token"
-  }
-
-  case object StakingProductVariant extends DataApplicationValidationError {
-    val message = "Staking product should be invariant"
-  }
-
   case object LiquidityPoolNotEnoughInformation extends DataApplicationValidationError {
     val message = "You should provide at 2 tokens, or at least 1 token to use DAG as the second one"
   }
@@ -72,5 +64,17 @@ object Errors {
 
   case object SwapLiquidityPoolNotEnoughTokens extends DataApplicationValidationError {
     val message = "Swap liquidity pool not enough tokens"
+  }
+
+  case object SwapMissingAllowSpend extends DataApplicationValidationError {
+    val message = "Missing swap allow spend"
+  }
+
+  case object SwapAllowSpendDifferentCurrency extends DataApplicationValidationError {
+    val message = "Different currency between swap update and allow spend"
+  }
+
+  case object SwapAllowSpendDifferentSourceAddress extends DataApplicationValidationError {
+    val message = "Different source address between swap update and allow spend"
   }
 }

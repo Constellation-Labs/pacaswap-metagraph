@@ -34,7 +34,7 @@ object DataL1Service {
     )
   }
 
-  private def makeBaseDataApplicationL1Service[F[+_]: Async: JsonSerializer: Hasher](
+  private def makeBaseDataApplicationL1Service[F[+_]: Async: JsonSerializer](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F]
   ): BaseDataApplicationL1Service[F] = BaseDataApplicationL1Service(

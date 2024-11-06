@@ -6,16 +6,17 @@ import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
-import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap._
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
@@ -23,9 +24,10 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.Utils.{DoubleOps, LongOps, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, LiquidityProviders, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
@@ -47,7 +49,7 @@ object SwapValidationTest extends MutableIOSuite {
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = s"$primaryAddressAsString-$pairAddressAsString"
+    val poolId = org.amm_metagraph.shared_data.types.LiquidityPool.PoolId(s"$primaryAddressAsString-$pairAddressAsString")
     val liquidityPool = LiquidityPool(
       poolId,
       tokenA,
@@ -58,7 +60,7 @@ object SwapValidationTest extends MutableIOSuite {
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
-    (poolId, LiquidityPoolCalculatedState(Map(poolId -> liquidityPool)))
+    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
 
   def getFakeSignedUpdate(
@@ -89,21 +91,21 @@ object SwapValidationTest extends MutableIOSuite {
     implicit val (h, sp) = res
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val stakingUpdate = SwapUpdate(
+      ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      CurrencyId(metagraphAddress),
       0L,
       "",
-      "",
-      100000L.toPosLongUnsafe,
-      100000L.toPosLongUnsafe,
-      SnapshotOrdinal.unsafeApply(20),
+      Hash.empty,
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
       none,
-      1L.toPosLongUnsafe,
-      20000.toPosLongUnsafe
+      none,
+      none
     )
 
     for {
@@ -119,33 +121,54 @@ object SwapValidationTest extends MutableIOSuite {
     val pairToken =
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
-    val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val stakingUpdate = SwapUpdate(
-      primaryToken.identifier,
-      pairToken.identifier,
-      CurrencyId(metagraphAddress),
-      0L,
-      "",
-      "",
-      100000L.toPosLongUnsafe,
-      100000L.toPosLongUnsafe,
-      SnapshotOrdinal.unsafeApply(20),
-      none,
-      1L.toPosLongUnsafe,
-      20000.toPosLongUnsafe
-    )
-    val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
+
     for {
-      validationService <- ValidationService.make[IO]
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      allowSpend = AllowSpend(
+        ownerAddress,
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        primaryToken.identifier,
+        SwapAmount(PosLong.MinValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = SwapUpdate(
+        ownerAddress,
+        primaryToken.identifier,
+        pairToken.identifier,
+        0L,
+        "",
+        signedAllowSpend.hash,
+        SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+        SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+        EpochProgress.MinValue,
+        none,
+        Some(1000L),
+        Some(20000L)
+      )
+      fakeSignedUpdate = getFakeSignedUpdate(swapUpdate)
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          ownerAddress -> SortedSet(signedAllowSpend.signed)
+        )
+      )
+
+      validationService <- ValidationService.make[IO]
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -156,24 +179,24 @@ object SwapValidationTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
     val pairToken =
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      CurrencyId(metagraphAddress),
       0L,
       "",
-      "",
-      100000L.toPosLongUnsafe,
-      100000L.toPosLongUnsafe,
-      SnapshotOrdinal.unsafeApply(20),
+      Hash.empty,
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
       none,
-      1L.toPosLongUnsafe,
-      20000.toPosLongUnsafe
+      none,
+      none
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
     for {
@@ -201,7 +224,6 @@ object SwapValidationTest extends MutableIOSuite {
     val pairToken =
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
-    val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -210,18 +232,18 @@ object SwapValidationTest extends MutableIOSuite {
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      CurrencyId(metagraphAddress),
       0L,
       "",
-      "",
-      100000L.toTokenAmountFormat.toPosLongUnsafe,
-      100000L.toTokenAmountFormat.toPosLongUnsafe,
-      SnapshotOrdinal.unsafeApply(20),
+      Hash.empty,
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
       none,
-      1000L.toPosLongUnsafe,
-      20000.toPosLongUnsafe
+      Some(1000L),
+      Some(20000L)
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
     for {

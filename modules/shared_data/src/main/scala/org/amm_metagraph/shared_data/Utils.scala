@@ -4,18 +4,20 @@ import cats.MonadThrow
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.SortedSet
+import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.schema.GlobalSnapshotInfo
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.{PendingSpendTransaction, SpendTransactionFee}
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.numeric.PosLong
-import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, PoolId}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -28,11 +30,12 @@ object Utils {
   def buildLiquidityPoolUniqueIdentifier[F[_]: MonadThrow](
     maybeTokenAId: Option[CurrencyId],
     maybeTokenBId: Option[CurrencyId]
-  ): F[String] =
+  ): F[PoolId] =
     SortedSet(maybeTokenAId, maybeTokenBId).flatten
       .mkString("-")
       .pure[F]
       .ensure(new IllegalArgumentException("You should provide at least one currency token identifier"))(_.nonEmpty)
+      .map(PoolId(_))
 
   def getLastSyncGlobalSnapshotState[F[_]: Async](implicit context: L0NodeContext[F]): F[GlobalSnapshotInfo] =
     context.getLastSynchronizedGlobalSnapshotCombined.flatMap {
@@ -44,10 +47,9 @@ object Utils {
         logger.error(message) >> new Exception(message).raiseError[F, GlobalSnapshotInfo]
     }
 
-  def getAllowSpendsLastSyncGlobalSnapshotState[F[_]: Async: Hasher](
-    tokenAAllowSpend: Hash,
-    tokenBAllowSpend: Hash
-  )(implicit context: L0NodeContext[F]): F[(Option[Hashed[AllowSpend]], Option[Hashed[AllowSpend]])] = for {
+  def getAllowSpendLastSyncGlobalSnapshotState[F[_]: Async: Hasher](
+    allowSpendHash: Hash
+  )(implicit context: L0NodeContext[F]): F[Option[Hashed[AllowSpend]]] = for {
     globalSnapshotInfo <- getLastSyncGlobalSnapshotState
     currencyId <- context.getMetagraphId
     response <- globalSnapshotInfo
@@ -57,16 +59,27 @@ object Utils {
       .toList
       .traverse(_.toHashed)
       .map { hashedAllowSpends =>
-        (hashedAllowSpends.find(_.hash === tokenAAllowSpend), hashedAllowSpends.find(_.hash === tokenBAllowSpend))
+        hashedAllowSpends.find(_.hash === allowSpendHash)
       }
   } yield response
 
+  def generatePendingSpendTransaction(
+    hashedAllowSpend: Hashed[AllowSpend]
+  ): PendingSpendTransaction =
+    PendingSpendTransaction(
+      SpendTransactionFee(hashedAllowSpend.fee.value),
+      EpochProgress.MaxValue,
+      hashedAllowSpend.hash,
+      hashedAllowSpend.currency,
+      hashedAllowSpend.amount
+    )
+
   def getLiquidityPoolByPoolId[F[_]: Async](
     liquidityPoolsCalculatedState: Map[String, LiquidityPool],
-    poolId: String
+    poolId: PoolId
   ): F[LiquidityPool] =
     liquidityPoolsCalculatedState
-      .get(poolId)
+      .get(poolId.value)
       .fold(
         Async[F].raiseError[LiquidityPool](new IllegalStateException("Liquidity Pool does not exist"))
       )(Async[F].pure)
