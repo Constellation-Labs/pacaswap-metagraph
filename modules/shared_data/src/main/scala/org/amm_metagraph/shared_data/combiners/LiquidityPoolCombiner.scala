@@ -5,6 +5,7 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
@@ -14,9 +15,10 @@ import org.amm_metagraph.shared_data.types.States._
 object LiquidityPoolCombiner {
   def combineLiquidityPool[F[_]: Async](
     acc: DataState[AmmOnChainState, AmmCalculatedState],
-    liquidityPoolUpdate: LiquidityPoolUpdate,
+    signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate],
     signerAddress: Address
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+    val liquidityPoolUpdate = signedLiquidityPoolUpdate.value
     val liquidityPools = getLiquidityPools(acc.calculated)
 
     for {

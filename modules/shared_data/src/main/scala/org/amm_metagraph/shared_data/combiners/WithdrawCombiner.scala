@@ -2,6 +2,7 @@ package org.amm_metagraph.shared_data.combiners
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawUpdate}
 import org.amm_metagraph.shared_data.types.States._
@@ -10,9 +11,11 @@ import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddre
 object WithdrawCombiner {
   def combineWithdraw(
     acc: DataState[AmmOnChainState, AmmCalculatedState],
-    withdrawUpdate: WithdrawUpdate,
+    signedWithdrawUpdate: Signed[WithdrawUpdate],
     signerAddress: Address
   ): DataState[AmmOnChainState, AmmCalculatedState] = {
+    val withdrawUpdate = signedWithdrawUpdate.value
+
     val withdrawCalculatedStateAddresses =
       acc.calculated.operations.get(OperationType.Withdraw).fold(Map.empty[Address, WithdrawCalculatedStateAddress]) {
         case stakingCalculatedState: WithdrawCalculatedState => stakingCalculatedState.addresses

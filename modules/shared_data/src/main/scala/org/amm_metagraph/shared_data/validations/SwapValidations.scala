@@ -3,11 +3,9 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
-import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
-import io.constellationnetwork.security.Hasher
 
-import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState}
+import org.amm_metagraph.shared_data.Utils.buildLiquidityPoolUniqueIdentifier
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
@@ -20,10 +18,10 @@ object SwapValidations {
     valid
   }
 
-  def swapValidationsL0[F[_]: Async: Hasher](
+  def swapValidationsL0[F[_]: Async](
     swapUpdate: SwapUpdate,
     state: AmmCalculatedState
-  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = {
+  ): F[DataApplicationValidationErrorOr[Unit]] = {
     val liquidityPoolsCalculatedState = getLiquidityPools(state)
 
     for {
@@ -35,11 +33,8 @@ object SwapValidations {
         swapUpdate,
         liquidityPoolsCalculatedState
       )
-      validAllowSpend <- validateSwapAllowSpend(
-        swapUpdate
-      )
       swapValidationsL1 <- swapValidationsL1(swapUpdate)
-      result = swapValidationsL1.productR(liquidityPoolExists).productR(poolHaveEnoughTokens).productR(validAllowSpend)
+      result = swapValidationsL1.productR(liquidityPoolExists).productR(poolHaveEnoughTokens)
     } yield result
   }
 
@@ -68,21 +63,4 @@ object SwapValidations {
       .map(poolId => currentLiquidityPools.get(poolId.value))
       .map(maybePool => SwapLiquidityPoolNotEnoughTokens.unlessA(maybePool.exists(hasEnoughTokens)))
   }
-
-  private def validateSwapAllowSpend[F[_]: Async: Hasher](
-    swapUpdate: SwapUpdate
-  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    swapAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
-      swapUpdate.allowSpendReference
-    )
-  } yield
-    if (swapAllowSpend.isEmpty) {
-      SwapMissingAllowSpend.invalid
-    } else if (swapAllowSpend.get.currency != swapUpdate.swapFromPair) {
-      SwapAllowSpendDifferentCurrency.invalid
-    } else if (swapAllowSpend.get.source != swapUpdate.sourceAddress) {
-      SwapAllowSpendDifferentSourceAddress.invalid
-    } else {
-      valid
-    }
 }

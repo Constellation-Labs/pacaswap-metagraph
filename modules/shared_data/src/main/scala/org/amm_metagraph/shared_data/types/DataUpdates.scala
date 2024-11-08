@@ -29,7 +29,8 @@ object DataUpdates {
     tokenBAllowSpend: Hash,
     tokenAId: Option[CurrencyId],
     tokenAAmount: PosLong,
-    tokenBId: Option[CurrencyId]
+    tokenBId: Option[CurrencyId],
+    maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate
 
   @derive(decoder, encoder)
@@ -38,7 +39,6 @@ object DataUpdates {
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
     fee: NonNegLong,
-    reference: String,
     allowSpendReference: Hash,
     minAmount: SwapAmount,
     maxAmount: SwapAmount,

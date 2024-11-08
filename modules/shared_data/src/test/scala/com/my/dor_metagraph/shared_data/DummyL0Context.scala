@@ -22,13 +22,14 @@ object DummyL0Context {
   val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
   def buildGlobalIncrementalSnapshot[F[_]: Async: SecurityProvider](
-    keyPair: KeyPair
+    keyPair: KeyPair,
+    gsEpochProgress: EpochProgress
   )(
     implicit hs: Hasher[F]
   ): F[Hashed[GlobalIncrementalSnapshot]] =
     GlobalIncrementalSnapshot
       .fromGlobalSnapshot[F](
-        GlobalSnapshot.mkGenesis(Map.empty, EpochProgress.MinValue)
+        GlobalSnapshot.mkGenesis(Map.empty, gsEpochProgress)
       )
       .flatMap { globalIncrementalSnapshot =>
         Signed
@@ -48,13 +49,14 @@ object DummyL0Context {
 
   def buildL0NodeContext[F[_]: Async: Hasher: SecurityProvider](
     keyPair: KeyPair,
-    allowSpends: SortedMap[Address, SortedSet[Signed[AllowSpend]]]
+    allowSpends: SortedMap[Address, SortedSet[Signed[AllowSpend]]],
+    gsEpochProgress: EpochProgress = EpochProgress.MinValue
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
       override def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
 
       override def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
-        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair)
+        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
         globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)
       } yield Some((globalIncrementalSnapshot, globalSnapshotInfo))
 

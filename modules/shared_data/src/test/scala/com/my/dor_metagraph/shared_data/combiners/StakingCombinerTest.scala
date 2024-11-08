@@ -1,5 +1,6 @@
 package com.my.dor_metagraph.shared_data.combiners
 
+import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -8,13 +9,16 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
+import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
@@ -56,6 +60,27 @@ object StakingCombinerTest extends MutableIOSuite {
     )
     (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
+
+  def getFakeSignedUpdate(
+    update: StakingUpdate
+  ): Signed[StakingUpdate] =
+    Signed(
+      update,
+      NonEmptySet.one(
+        SignatureProof(
+          Id(
+            Hex(
+              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
+            )
+          ),
+          Signature(
+            Hex(
+              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
+            )
+          )
+        )
+      )
+    )
 
   test("Test combining successfully when liquidity pool exists") { implicit res =>
     implicit val (h, sp) = res
@@ -99,12 +124,15 @@ object StakingCombinerTest extends MutableIOSuite {
         .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
         .flatMap(_.toHashed[IO])
 
-      stakingUpdate = StakingUpdate(
-        signedAllowSpendA.hash,
-        signedAllowSpendB.hash,
-        primaryToken.identifier,
-        100L.toPosLongUnsafe,
-        pairToken.identifier
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          100L.toPosLongUnsafe,
+          pairToken.identifier,
+          EpochProgress.MaxValue
+        )
       )
 
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -122,7 +150,7 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       stakingCalculatedState = stakeResponse.calculated.operations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
-      addressStakedResponse = stakingCalculatedState.addresses(ownerAddress)
+      addressStakedResponse = stakingCalculatedState.confirmed(ownerAddress).head
 
       oldLiquidityPoolCalculatedState = state.calculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
       oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
@@ -165,16 +193,53 @@ object StakingCombinerTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val stakingUpdate = StakingUpdate(
-      Hash.empty,
-      Hash.empty,
-      primaryToken.identifier,
-      100L.toPosLongUnsafe,
-      pairToken.identifier
-    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MinValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          100L.toPosLongUnsafe,
+          pairToken.identifier,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+
       result <- combineStaking[IO](
         state,
         stakingUpdate,
