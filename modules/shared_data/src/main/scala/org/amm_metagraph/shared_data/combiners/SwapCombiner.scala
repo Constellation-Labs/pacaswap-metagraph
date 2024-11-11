@@ -97,6 +97,7 @@ object SwapCombiner {
           liquidityPoolUpdated = updateLiquidityPool(liquidityPool, fromTokenInfo, toTokenInfo)
 
           swapCalculatedStateAddress = SwapCalculatedStateAddress(
+            swapUpdate.sourceAddress,
             fromTokenInfo,
             toTokenInfo,
             swapUpdate.fee,
