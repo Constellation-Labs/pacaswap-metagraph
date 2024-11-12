@@ -2,21 +2,20 @@ package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.Async
 import cats.syntax.all._
-
-import scala.collection.immutable.SortedSet
-
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
-
+import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
+
+import scala.collection.immutable.SortedSet
 
 object SwapCombiner {
   private def getUpdatedTokenInformation(
@@ -127,7 +126,7 @@ object SwapCombiner {
             .updated(OperationType.Swap, newSwapState)
             .updated(OperationType.LiquidityPool, newLiquidityPoolState)
 
-          spendTransaction: SharedArtifact = generatePendingSpendTransaction(hashedAllowSpend)
+          spendTransaction: SharedArtifact = generateSpendAction(hashedAllowSpend)
 
         } yield
           DataState(
