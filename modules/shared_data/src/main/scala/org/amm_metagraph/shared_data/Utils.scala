@@ -7,11 +7,11 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
-import io.constellationnetwork.schema.GlobalSnapshotInfo
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{PendingSpendTransaction, SpendTransactionFee}
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
@@ -36,6 +36,16 @@ object Utils {
       .pure[F]
       .ensure(new IllegalArgumentException("You should provide at least one currency token identifier"))(_.nonEmpty)
       .map(PoolId(_))
+
+  def getLastSyncGlobalIncrementalSnapshot[F[_]: Async](implicit context: L0NodeContext[F]): F[Hashed[GlobalIncrementalSnapshot]] =
+    context.getLastSynchronizedGlobalSnapshotCombined.flatMap {
+      case Some(value) =>
+        val (globalIncrementalSnapshot, _) = value
+        globalIncrementalSnapshot.pure
+      case None =>
+        val message = "Could not get last sync global incremental snapshot"
+        logger.error(message) >> new Exception(message).raiseError[F, Hashed[GlobalIncrementalSnapshot]]
+    }
 
   def getLastSyncGlobalSnapshotState[F[_]: Async](implicit context: L0NodeContext[F]): F[GlobalSnapshotInfo] =
     context.getLastSynchronizedGlobalSnapshotCombined.flatMap {

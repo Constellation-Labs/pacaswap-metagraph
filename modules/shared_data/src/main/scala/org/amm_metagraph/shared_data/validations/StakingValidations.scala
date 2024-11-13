@@ -6,14 +6,14 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
-import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState, toAddress}
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
-import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getStakingCalculatedState}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
 
@@ -30,33 +30,43 @@ object StakingValidations {
   )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
     address <- toAddress(proofs.head)
 
-    stakingCalculatedState = state.operations.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateAddress]) {
-      case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.addresses
-      case _                                              => Map.empty[Address, StakingCalculatedStateAddress]
-    }
+    stakingCalculatedState = getStakingCalculatedState(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
 
     validAllowSpends <- validateStakingAllowSpends(
       stakingUpdate
     )
-    transactionAlreadyExists = validateIfTransactionAlreadyExists(
+    confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
       stakingUpdate,
-      stakingCalculatedState.get(address)
+      stakingCalculatedState.confirmed.get(address)
+    )
+    pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
+      stakingUpdate,
+      stakingCalculatedState.pending.get(address)
     )
     liquidityPoolExists <- validateIfLiquidityPoolExists(
       stakingUpdate,
       liquidityPoolsCalculatedState
     )
 
-    result = validAllowSpends.productR(transactionAlreadyExists).productR(liquidityPoolExists)
+    result = validAllowSpends
+      .productR(confirmedTransactionAlreadyExists)
+      .productR(pendingTransactionAlreadyExists)
+      .productR(liquidityPoolExists)
   } yield result
 
-  private def validateIfTransactionAlreadyExists(
+  private def validateIfConfirmedTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,
-    maybeStakingCalculatedStateAddress: Option[StakingCalculatedStateAddress]
+    maybeConfirmedStaking: Option[Set[StakingCalculatedStateAddress]]
   ): DataApplicationValidationErrorOr[Unit] =
-    StakingTransactionAlreadyExists.whenA(maybeStakingCalculatedStateAddress.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend))
+    StakingTransactionAlreadyExists.whenA(maybeConfirmedStaking.exists(_.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend)))
+
+  private def validateIfPendingTransactionAlreadyExists(
+    stakingUpdate: StakingUpdate,
+    maybePendingStaking: Option[Set[Signed[StakingUpdate]]]
+  ): DataApplicationValidationErrorOr[Unit] =
+    StakingTransactionAlreadyExists.whenA(maybePendingStaking.exists(_.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend)))
 
   private def validateIfLiquidityPoolExists[F[_]: Async](
     stakingUpdate: StakingUpdate,

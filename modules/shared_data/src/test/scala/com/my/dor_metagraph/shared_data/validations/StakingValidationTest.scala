@@ -100,7 +100,8 @@ object StakingValidationTest extends MutableIOSuite {
       Hash.empty,
       primaryToken.identifier,
       100L.toPosLongUnsafe,
-      pairToken.identifier
+      pairToken.identifier,
+      EpochProgress.MaxValue
     )
     for {
       validationService <- ValidationService.make[IO]
@@ -157,7 +158,8 @@ object StakingValidationTest extends MutableIOSuite {
         signedAllowSpendB.hash,
         primaryToken.identifier,
         100L.toPosLongUnsafe,
-        pairToken.identifier
+        pairToken.identifier,
+        EpochProgress.MaxValue
       )
 
       fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
@@ -187,7 +189,8 @@ object StakingValidationTest extends MutableIOSuite {
       Hash.empty,
       primaryToken.identifier,
       100L.toPosLongUnsafe,
-      pairToken.identifier
+      pairToken.identifier,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
@@ -222,15 +225,18 @@ object StakingValidationTest extends MutableIOSuite {
         OperationType.LiquidityPool -> liquidityPoolCalculatedState,
         OperationType.Staking -> StakingCalculatedState(
           Map(
-            signerAddress -> StakingCalculatedStateAddress(
-              Hash.empty,
-              Hash.empty,
-              primaryToken,
-              pairToken,
-              SnapshotOrdinal.MinValue,
-              none
+            signerAddress -> Set(
+              StakingCalculatedStateAddress(
+                Hash.empty,
+                Hash.empty,
+                primaryToken,
+                pairToken,
+                SnapshotOrdinal.MinValue,
+                none
+              )
             )
-          )
+          ),
+          Map.empty
         )
       )
     )
@@ -240,7 +246,8 @@ object StakingValidationTest extends MutableIOSuite {
       Hash.empty,
       primaryToken.identifier,
       100L.toPosLongUnsafe,
-      pairToken.identifier
+      pairToken.identifier,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)

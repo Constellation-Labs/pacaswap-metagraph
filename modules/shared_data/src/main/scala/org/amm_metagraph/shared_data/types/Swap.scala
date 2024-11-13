@@ -10,15 +10,14 @@ import derevo.derive
 import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, SwapCalculatedState}
 
 object Swap {
-
   @derive(encoder, decoder)
-  case class SwapCalculatedStateLastReference(
+  case class SwapCalculatedStateAddress(
     fromToken: TokenInformation,
     toToken: TokenInformation,
     fee: NonNegLong,
-    reference: String,
     allowSpendReference: Hash,
     minAmount: SwapAmount,
     maxAmount: SwapAmount,
@@ -29,21 +28,11 @@ object Swap {
     ordinal: SnapshotOrdinal
   )
 
-  @derive(encoder, decoder)
-  case class SwapCalculatedStateAddress(
-    fromToken: TokenInformation,
-    toToken: TokenInformation,
-    fee: NonNegLong,
-    reference: String,
-    allowSpendReference: Hash,
-    minAmount: SwapAmount,
-    maxAmount: SwapAmount,
-    maxValidGsEpochProgress: EpochProgress,
-    poolId: Option[PoolId],
-    minPrice: Option[PosLong],
-    maxPrice: Option[PosLong],
-    ordinal: SnapshotOrdinal,
-    lastSwapUpdate: Option[SwapCalculatedStateLastReference]
-  )
-
+  def getSwapCalculatedState(
+    calculatedState: AmmCalculatedState
+  ): SwapCalculatedState =
+    calculatedState.operations
+      .get(OperationType.Swap)
+      .collect { case t: SwapCalculatedState => t }
+      .getOrElse(SwapCalculatedState.empty)
 }

@@ -5,11 +5,12 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendTransaction
+import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
-import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
@@ -31,8 +32,13 @@ object States {
 
   @derive(encoder, decoder)
   case class StakingCalculatedState(
-    addresses: Map[Address, StakingCalculatedStateAddress]
+    confirmed: Map[Address, Set[StakingCalculatedStateAddress]],
+    pending: Map[Address, Set[Signed[StakingUpdate]]]
   ) extends AmmOffChainState
+
+  object StakingCalculatedState {
+    def empty: StakingCalculatedState = StakingCalculatedState(Map.empty, Map.empty)
+  }
 
   @derive(encoder, decoder)
   case class WithdrawCalculatedState(
@@ -41,8 +47,13 @@ object States {
 
   @derive(encoder, decoder)
   case class SwapCalculatedState(
-    addresses: Map[Address, SwapCalculatedStateAddress]
+    confirmed: Map[Address, Set[SwapCalculatedStateAddress]],
+    pending: Map[Address, Set[Signed[SwapUpdate]]]
   ) extends AmmOffChainState
+
+  object SwapCalculatedState {
+    def empty: SwapCalculatedState = SwapCalculatedState(Map.empty, Map.empty)
+  }
 
   @derive(encoder, decoder)
   sealed abstract class OperationType(val value: String) extends StringEnumEntry
