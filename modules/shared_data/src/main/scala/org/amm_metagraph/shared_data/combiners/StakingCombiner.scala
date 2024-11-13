@@ -13,6 +13,7 @@ import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
+import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -81,8 +82,8 @@ object StakingCombiner {
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
   ): SortedSet[SharedArtifact] = {
-    val spendTransactionTokenA = generatePendingSpendTransaction(allowSpendTokenA)
-    val spendTransactionTokenB = generatePendingSpendTransaction(allowSpendTokenB)
+    val spendTransactionTokenA = generateSpendAction(allowSpendTokenA)
+    val spendTransactionTokenB = generateSpendAction(allowSpendTokenB)
     SortedSet[SharedArtifact](
       spendTransactionTokenA,
       spendTransactionTokenB

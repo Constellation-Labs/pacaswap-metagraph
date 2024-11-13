@@ -3,23 +3,19 @@ package org.amm_metagraph.shared_data
 import cats.MonadThrow
 import cats.effect.Async
 import cats.syntax.all._
-
-import scala.collection.immutable.SortedSet
-
+import eu.timepit.refined.types.numeric.PosLong
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.{PendingSpendTransaction, SpendTransactionFee}
-import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
-
-import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, PoolId}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+import scala.collection.immutable.SortedSet
 
 object Utils {
   def logger[F[_]: Async]: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("Utils")
@@ -61,9 +57,9 @@ object Utils {
     allowSpendHash: Hash
   )(implicit context: L0NodeContext[F]): F[Option[Hashed[AllowSpend]]] = for {
     globalSnapshotInfo <- getLastSyncGlobalSnapshotState
-    currencyId <- context.getMetagraphId
+    currencyId <- context.getCurrencyId
     response <- globalSnapshotInfo
-      .activeAllowSpends(currencyId)
+      .activeAllowSpends(currencyId.value)
       .values
       .flatten
       .toList
@@ -72,17 +68,6 @@ object Utils {
         hashedAllowSpends.find(_.hash === allowSpendHash)
       }
   } yield response
-
-  def generatePendingSpendTransaction(
-    hashedAllowSpend: Hashed[AllowSpend]
-  ): PendingSpendTransaction =
-    PendingSpendTransaction(
-      SpendTransactionFee(hashedAllowSpend.fee.value),
-      EpochProgress.MaxValue,
-      hashedAllowSpend.hash,
-      hashedAllowSpend.currency,
-      hashedAllowSpend.amount
-    )
 
   def getLiquidityPoolByPoolId[F[_]: Async](
     liquidityPoolsCalculatedState: Map[String, LiquidityPool],
