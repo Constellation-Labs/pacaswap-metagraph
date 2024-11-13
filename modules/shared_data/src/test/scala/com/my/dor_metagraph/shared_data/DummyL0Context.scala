@@ -12,7 +12,7 @@ import io.constellationnetwork.currency.schema.currency
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
@@ -53,12 +53,12 @@ object DummyL0Context {
     gsEpochProgress: EpochProgress = EpochProgress.MinValue
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
-      override def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
-
-      override def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
-        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
-        globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)
-      } yield Some((globalIncrementalSnapshot, globalSnapshotInfo))
+//      override def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
+//
+//      override def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
+//        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
+//        globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)
+//      } yield Some((globalIncrementalSnapshot, globalSnapshotInfo))
 
       override def getLastCurrencySnapshot: F[Option[Hashed[currency.CurrencyIncrementalSnapshot]]] = ???
 
@@ -69,7 +69,7 @@ object DummyL0Context {
 
       override def securityProvider: SecurityProvider[F] = ???
 
-      override def getMetagraphId: F[Address] = metagraphAddress.pure[F]
+      override def getCurrencyId: F[CurrencyId] = CurrencyId(metagraphAddress).pure[F]
     }
 
 }

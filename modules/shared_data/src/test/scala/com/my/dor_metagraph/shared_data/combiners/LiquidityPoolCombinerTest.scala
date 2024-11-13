@@ -64,7 +64,7 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
       )
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .operations(OperationType.LiquidityPool)
+        .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield
@@ -98,7 +98,7 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
       )
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .operations(OperationType.LiquidityPool)
+        .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield

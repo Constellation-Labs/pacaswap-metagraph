@@ -13,9 +13,10 @@ import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
+import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.Utils._
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.{
   StakingCalculatedStateAddress,
@@ -90,13 +91,6 @@ object StakingCombiner {
     )
   }
 
-  private def getConfirmedAndPendingStaking(
-    acc: DataState[AmmOnChainState, AmmCalculatedState]
-  ): (Map[Address, Set[StakingCalculatedStateAddress]], Map[Address, Set[Signed[StakingUpdate]]]) = {
-    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
-    (stakingCalculatedState.confirmed, stakingCalculatedState.pending)
-  }
-
   def combineStaking[F[_]: Async: Hasher](
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedStakingUpdate: Signed[StakingUpdate],
@@ -105,8 +99,10 @@ object StakingCombiner {
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val stakingUpdate = signedStakingUpdate.value
 
-    val (confirmedStaking, pendingStaking) = getConfirmedAndPendingStaking(acc)
+    val confirmedStaking = getStakingCalculatedState(acc.calculated).confirmed
+
     val updates = stakingUpdate :: acc.onChain.updates
+
     (
       getAllowSpendLastSyncGlobalSnapshotState(stakingUpdate.tokenAAllowSpend),
       getAllowSpendLastSyncGlobalSnapshotState(stakingUpdate.tokenBAllowSpend)
@@ -115,21 +111,26 @@ object StakingCombiner {
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
           gsEpochProgress = lastSyncHashedGIS.epochProgress
-          updatedPendingStakings =
-            if (signedStakingUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              pendingStaking.removed(signerAddress)
+          updatedPendingCalculatedState =
+            if (stakingUpdate.maxValidGsEpochProgress < gsEpochProgress) {
+              acc.calculated.pendingUpdates - signedStakingUpdate
+            } else if (!acc.calculated.pendingUpdates.contains(signedStakingUpdate)) {
+              acc.calculated.pendingUpdates + signedStakingUpdate
             } else {
-              pendingStaking.updatedWith(signerAddress) {
-                case Some(existingUpdates) => Some(existingUpdates + signedStakingUpdate)
-                case None                  => Some(Set(signedStakingUpdate))
-              }
+              acc.calculated.pendingUpdates
             }
-          newStakingState = StakingCalculatedState(confirmedStaking, updatedPendingStakings)
-          updatedCalculatedState = acc.calculated.operations.updated(OperationType.Staking, newStakingState)
+
+          newStakingState = StakingCalculatedState(confirmedStaking)
+          updatedCalculatedState = acc.calculated
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.Staking, newStakingState))
+            .focus(_.pendingUpdates)
+            .replace(updatedPendingCalculatedState)
+
         } yield
           DataState(
             AmmOnChainState(updates),
-            AmmCalculatedState(updatedCalculatedState)
+            updatedCalculatedState
           )
 
       case (Some(_), Some(_)) =>
@@ -162,20 +163,24 @@ object StakingCombiner {
             currentSnapshotOrdinal,
             maybeLastStakingInfo
           )
+
+          updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedStakingUpdate
           updatedStakingCalculatedState = StakingCalculatedState(
             confirmedStaking.updatedWith(signerAddress) {
               case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
               case None                 => Some(Set(stakingCalculatedStateAddress))
-            },
-            pendingStaking - signerAddress
+            }
           )
 
           updatedLiquidityPool = LiquidityPoolCalculatedState(liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated))
 
-          updates: List[AmmUpdate] = stakingUpdate :: acc.onChain.updates
-          updatedCalculatedState = acc.calculated.operations
-            .updated(OperationType.Staking, updatedStakingCalculatedState)
-            .updated(OperationType.LiquidityPool, updatedLiquidityPool)
+          updatedCalculatedState = acc.calculated
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
+            .focus(_.pendingUpdates)
+            .replace(updatedPendingCalculatedState)
 
           allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
             stakingUpdate.tokenAAllowSpend
@@ -190,7 +195,7 @@ object StakingCombiner {
         } yield
           DataState(
             AmmOnChainState(updates),
-            AmmCalculatedState(updatedCalculatedState),
+            updatedCalculatedState,
             spendTransactions
           )
     }

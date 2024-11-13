@@ -3,11 +3,13 @@ package org.amm_metagraph.shared_data.combiners
 import cats.data.OptionT
 import cats.effect.Async
 import cats.syntax.all._
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
+
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.getCombinedSpendTransactions
 import org.amm_metagraph.shared_data.Utils.toAddress
@@ -16,9 +18,7 @@ import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
 import org.amm_metagraph.shared_data.combiners.WithdrawCombiner.combineWithdraw
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.Staking.getStakingCalculatedState
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.getSwapCalculatedState
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -34,31 +34,21 @@ object CombinerService {
     new CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
 
-      def getPendingUpdates(
-        state: DataState[AmmOnChainState, AmmCalculatedState]
-      ): List[Signed[AmmUpdate]] = {
-        val pendingSwaps = getSwapCalculatedState(state.calculated)
-          .pending
-          .values
-          .toList
-          .flatten
-
-        val pendingStaking = getStakingCalculatedState(state.calculated)
-          .pending
-          .values
-          .toList
-          .flatten
-
-        pendingSwaps ++ pendingStaking
-      }
-
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val newState =
-          DataState(AmmOnChainState(List.empty), AmmCalculatedState(oldState.calculated.operations, oldState.calculated.spendTransactions))
-        val pendingUpdates = getPendingUpdates(oldState)
+          DataState(
+            AmmOnChainState(List.empty),
+            AmmCalculatedState(
+              oldState.calculated.confirmedOperations,
+              oldState.calculated.pendingUpdates,
+              oldState.calculated.spendTransactions
+            )
+          )
+
+        val pendingUpdates = oldState.calculated.pendingUpdates
         val updates = incomingUpdates ++ pendingUpdates
 
         if (updates.isEmpty) {
@@ -77,22 +67,22 @@ object CombinerService {
                   }
                 combinedState <- signedUpdate.value match {
                   case stakingUpdate: StakingUpdate =>
-                    logger.info(s"Received a new staking update: $stakingUpdate") >>
+                    logger.info(s"Received staking update: $stakingUpdate") >>
                       combineStaking(acc, Signed(stakingUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
 
                   case withdrawUpdate: WithdrawUpdate =>
                     logger
-                      .info(s"Received a new withdraw update: $withdrawUpdate")
+                      .info(s"Received withdraw update: $withdrawUpdate")
                       .as(
                         combineWithdraw(acc, Signed(withdrawUpdate, signedUpdate.proofs), address)
                       )
 
                   case liquidityPoolUpdate: LiquidityPoolUpdate =>
-                    logger.info(s"Received a new liquidity pool update: $liquidityPoolUpdate") >>
+                    logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>
                       combineLiquidityPool(acc, Signed(liquidityPoolUpdate, signedUpdate.proofs), address)
 
                   case swapUpdate: SwapUpdate =>
-                    logger.info(s"Received a new swap update: $swapUpdate") >>
+                    logger.info(s"Received swap update: $swapUpdate") >>
                       combineSwap(acc, Signed(swapUpdate, signedUpdate.proofs), currentSnapshotOrdinal)
                 }
 

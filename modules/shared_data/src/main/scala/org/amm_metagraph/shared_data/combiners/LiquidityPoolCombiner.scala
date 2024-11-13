@@ -44,7 +44,7 @@ object LiquidityPoolCombiner {
         LiquidityProviders(Map(signerAddress -> poolTotalLiquidity))
       )
       updatedLiquidityPoolCalculatedState = LiquidityPoolCalculatedState(liquidityPools.updated(poolId.value, liquidityPool))
-      updatedState = acc.calculated.operations.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState)
+      updatedState = acc.calculated.confirmedOperations.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState)
       updates: List[AmmUpdate] = liquidityPoolUpdate :: acc.onChain.updates
     } yield
       DataState(

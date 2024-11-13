@@ -149,22 +149,26 @@ object StakingCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      stakingCalculatedState = stakeResponse.calculated.operations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
+      stakingCalculatedState = stakeResponse.calculated.confirmedOperations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
       addressStakedResponse = stakingCalculatedState.confirmed(ownerAddress).head
 
-      oldLiquidityPoolCalculatedState = state.calculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPoolCalculatedState = state.calculated
+        .confirmedOperations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
       oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
 
       updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .operations(OperationType.LiquidityPool)
+        .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
 
       stakingSpendTransactions = stakeResponse.sharedArtifacts.collect {
-        case transaction: artifact.SpendTransaction => transaction
-      }.collect {
-        case transaction: artifact.PendingSpendTransaction => transaction
+        case action: artifact.SpendAction => action
       }
+        .flatMap(action => List(action.input, action.output))
+        .collect {
+          case transaction: artifact.PendingSpendTransaction => transaction
+        }
       tokenASpendTransaction = stakingSpendTransactions.find(_.allowSpendRef === signedAllowSpendA.hash)
       tokenBSpendTransaction = stakingSpendTransactions.find(_.allowSpendRef === signedAllowSpendB.hash)
 

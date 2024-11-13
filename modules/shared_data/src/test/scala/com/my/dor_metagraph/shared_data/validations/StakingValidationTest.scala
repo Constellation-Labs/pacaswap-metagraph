@@ -235,8 +235,7 @@ object StakingValidationTest extends MutableIOSuite {
                 none
               )
             )
-          ),
-          Map.empty
+          )
         )
       )
     )

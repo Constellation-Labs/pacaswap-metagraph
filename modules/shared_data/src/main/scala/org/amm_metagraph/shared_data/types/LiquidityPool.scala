@@ -39,7 +39,7 @@ object LiquidityPool {
   )
 
   def getLiquidityPools(state: AmmCalculatedState): Map[String, LiquidityPool] =
-    state.operations.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
+    state.confirmedOperations.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
       case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.liquidityPools
       case _                                                           => Map.empty
     }

@@ -2,9 +2,11 @@ package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, StakingCalculatedState}
 
@@ -31,8 +33,16 @@ object Staking {
   def getStakingCalculatedState(
     calculatedState: AmmCalculatedState
   ): StakingCalculatedState =
-    calculatedState.operations
+    calculatedState.confirmedOperations
       .get(OperationType.Staking)
       .collect { case t: StakingCalculatedState => t }
       .getOrElse(StakingCalculatedState.empty)
+
+  def getPendingStakeUpdates(
+    state: AmmCalculatedState
+  ): Set[Signed[StakingUpdate]] =
+    state.pendingUpdates.collect {
+      case pendingUpdate @ Signed(stakingUpdate: StakingUpdate, _) =>
+        Signed(stakingUpdate, pendingUpdate.proofs)
+    }
 }

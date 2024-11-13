@@ -1,18 +1,19 @@
 package org.amm_metagraph.shared_data
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.Hashed
-import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 
-import scala.collection.immutable.SortedSet
+import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 
 object SpendTransactions {
 
   def generateSpendAction(
     hashedAllowSpend: Hashed[AllowSpend]
-  ): SpendAction = {
+  ): SpendAction =
     SpendAction(
       PendingSpendTransaction(
         SpendTransactionFee(hashedAllowSpend.fee.value),
@@ -29,8 +30,7 @@ object SpendTransactions {
         hashedAllowSpend.amount
       )
     )
-  }
-  
+
   def getCalculatedStateSpendTransactions(
     calculatedState: AmmCalculatedState
   ): (SortedSet[PendingSpendTransaction], SortedSet[ConcludedSpendTransaction]) =

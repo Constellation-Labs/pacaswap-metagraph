@@ -137,28 +137,32 @@ object SwapCombinerTest extends MutableIOSuite {
         )
       )
 
-      stakeResponse <- combineSwap[IO](
+      swapResponse <- combineSwap[IO](
         state,
         swapUpdate,
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = stakeResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
       addressSwapResponse = swapCalculatedState.confirmed(ownerAddress).head
 
-      oldLiquidityPoolCalculatedState = state.calculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPoolCalculatedState = state.calculated
+        .confirmedOperations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
       oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
 
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .operations(OperationType.LiquidityPool)
+      updatedLiquidityPoolCalculatedState = swapResponse.calculated
+        .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
 
-      swapSpendTransactions = stakeResponse.sharedArtifacts.collect {
-        case transaction: artifact.SpendTransaction => transaction
-      }.collect {
-        case transaction: artifact.PendingSpendTransaction => transaction
+      swapSpendTransactions = swapResponse.sharedArtifacts.collect {
+        case action: artifact.SpendAction => action
       }
+        .flatMap(action => List(action.input, action.output))
+        .collect {
+          case transaction: artifact.PendingSpendTransaction => transaction
+        }
 
       spendTransaction = swapSpendTransactions.find(_.allowSpendRef === signedAllowSpend.hash)
     } yield
@@ -226,29 +230,32 @@ object SwapCombinerTest extends MutableIOSuite {
           ownerAddress -> SortedSet(signedAllowSpend.signed)
         )
       )
-      stakeResponse <- combineSwap[IO](
+      swapResponse <- combineSwap[IO](
         state,
         swapUpdate,
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = stakeResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
       addressSwapResponse = swapCalculatedState.confirmed(ownerAddress).head
 
-      oldLiquidityPoolCalculatedState = state.calculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPoolCalculatedState = state.calculated
+        .confirmedOperations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
       oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
 
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .operations(OperationType.LiquidityPool)
+      updatedLiquidityPoolCalculatedState = swapResponse.calculated
+        .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
 
-      swapSpendTransactions = stakeResponse.sharedArtifacts.collect {
-        case transaction: artifact.SpendTransaction => transaction
-      }.collect {
-        case transaction: artifact.PendingSpendTransaction => transaction
+      swapSpendTransactions = swapResponse.sharedArtifacts.collect {
+        case action: artifact.SpendAction => action
       }
-
+        .flatMap(action => List(action.input, action.output))
+        .collect {
+          case transaction: artifact.PendingSpendTransaction => transaction
+        }
       spendTransaction = swapSpendTransactions.find(_.allowSpendRef === signedAllowSpend.hash)
     } yield
       expect.eql(1100000L, addressSwapResponse.fromToken.amount.value.fromTokenAmountFormat) &&
@@ -314,20 +321,21 @@ object SwapCombinerTest extends MutableIOSuite {
         SortedMap.empty
       )
 
-      stakeResponse <- combineSwap[IO](
+      swapResponse <- combineSwap[IO](
         state,
         swapUpdate,
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = stakeResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
       confirmedSwapResponse = swapCalculatedState.confirmed.get(ownerAddress)
-      pendingSwapResponse = swapCalculatedState.pending.get(ownerAddress)
+      pendingSwapResponse = swapResponse.calculated.pendingUpdates
+      pendingSwapResponseValue = pendingSwapResponse.head.value.asInstanceOf[SwapUpdate]
 
     } yield
       expect.eql(none, confirmedSwapResponse) &&
-        expect.eql(1, pendingSwapResponse.get.size) &&
-        expect.eql(swapUpdate.value.allowSpendReference, pendingSwapResponse.get.head.value.allowSpendReference)
+        expect.eql(1, pendingSwapResponse.size) &&
+        expect.eql(swapUpdate.value.allowSpendReference, pendingSwapResponseValue.allowSpendReference)
   }
 
   test("Test swap - ignore swap that exceed limit epoch progress") { implicit res =>
@@ -390,12 +398,12 @@ object SwapCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = stakeResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      swapCalculatedState = stakeResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
       confirmedSwapResponse = swapCalculatedState.confirmed.get(ownerAddress)
-      pendingSwapResponse = swapCalculatedState.pending.get(ownerAddress)
+      pendingSwapResponse = stakeResponse.calculated.pendingUpdates
 
     } yield
       expect.eql(none, confirmedSwapResponse) &&
-        expect.eql(none, pendingSwapResponse)
+        expect.eql(0, pendingSwapResponse.size)
   }
 }

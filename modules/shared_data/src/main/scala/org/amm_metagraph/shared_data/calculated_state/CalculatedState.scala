@@ -10,5 +10,5 @@ case class CalculatedState(ordinal: SnapshotOrdinal, state: AmmCalculatedState)
 
 object CalculatedState {
   def empty: CalculatedState =
-    CalculatedState(SnapshotOrdinal.MinValue, AmmCalculatedState(Map.empty, SortedSet.empty))
+    CalculatedState(SnapshotOrdinal.MinValue, AmmCalculatedState(Map.empty, Set.empty, SortedSet.empty))
 }
