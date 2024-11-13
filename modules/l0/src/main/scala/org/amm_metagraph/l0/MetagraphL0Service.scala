@@ -7,10 +7,12 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
 import io.constellationnetwork.json.JsonSerializer
+import io.constellationnetwork.routes.internal.ExternalUrlPrefix
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.auto._
 import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.l0.custom_routes.CustomRoutes
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
@@ -133,5 +135,7 @@ object MetagraphL0Service {
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmCalculatedState]] =
         JsonSerializer[F].deserialize[AmmCalculatedState](bytes)
+
+      override def routesPrefix: ExternalUrlPrefix = "v1"
     })
 }

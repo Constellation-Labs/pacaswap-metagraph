@@ -1,6 +1,7 @@
 package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.SwapAmount
 import io.constellationnetwork.security.hash.Hash
@@ -15,6 +16,7 @@ import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, Operation
 object Swap {
   @derive(encoder, decoder)
   case class SwapCalculatedStateAddress(
+    sourceAddress: Address,
     fromToken: TokenInformation,
     toToken: TokenInformation,
     fee: NonNegLong,
