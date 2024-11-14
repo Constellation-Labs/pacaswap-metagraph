@@ -10,7 +10,7 @@ import io.constellationnetwork.security.signature.Signed
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate, SwapUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
@@ -32,12 +32,11 @@ object States {
 
   @derive(encoder, decoder)
   case class StakingCalculatedState(
-    confirmed: Map[Address, Set[StakingCalculatedStateAddress]],
-    pending: Map[Address, Set[Signed[StakingUpdate]]]
+    confirmed: Map[Address, Set[StakingCalculatedStateAddress]]
   ) extends AmmOffChainState
 
   object StakingCalculatedState {
-    def empty: StakingCalculatedState = StakingCalculatedState(Map.empty, Map.empty)
+    def empty: StakingCalculatedState = StakingCalculatedState(Map.empty)
   }
 
   @derive(encoder, decoder)
@@ -47,12 +46,11 @@ object States {
 
   @derive(encoder, decoder)
   case class SwapCalculatedState(
-    confirmed: Map[Address, Set[SwapCalculatedStateAddress]],
-    pending: Map[Address, Set[Signed[SwapUpdate]]]
+    confirmed: Map[Address, Set[SwapCalculatedStateAddress]]
   ) extends AmmOffChainState
 
   object SwapCalculatedState {
-    def empty: SwapCalculatedState = SwapCalculatedState(Map.empty, Map.empty)
+    def empty: SwapCalculatedState = SwapCalculatedState(Map.empty)
   }
 
   @derive(encoder, decoder)
@@ -72,7 +70,8 @@ object States {
 
   @derive(encoder, decoder)
   case class AmmCalculatedState(
-    operations: Map[OperationType, AmmOffChainState],
+    confirmedOperations: Map[OperationType, AmmOffChainState],
+    pendingUpdates: Set[Signed[AmmUpdate]] = Set.empty[Signed[AmmUpdate]],
     spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction]
   ) extends DataCalculatedState
 

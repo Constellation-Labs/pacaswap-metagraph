@@ -13,7 +13,7 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState, toAddress}
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
-import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getStakingCalculatedState}
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getPendingStakeUpdates, getStakingCalculatedState}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
 
@@ -31,6 +31,7 @@ object StakingValidations {
     address <- toAddress(proofs.head)
 
     stakingCalculatedState = getStakingCalculatedState(state)
+    pendingStaking = getPendingStakeUpdates(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
 
@@ -43,7 +44,7 @@ object StakingValidations {
     )
     pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
       stakingUpdate,
-      stakingCalculatedState.pending.get(address)
+      pendingStaking
     )
     liquidityPoolExists <- validateIfLiquidityPoolExists(
       stakingUpdate,
@@ -64,9 +65,9 @@ object StakingValidations {
 
   private def validateIfPendingTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,
-    maybePendingStaking: Option[Set[Signed[StakingUpdate]]]
+    maybePendingStaking: Set[Signed[StakingUpdate]]
   ): DataApplicationValidationErrorOr[Unit] =
-    StakingTransactionAlreadyExists.whenA(maybePendingStaking.exists(_.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend)))
+    StakingTransactionAlreadyExists.whenA(maybePendingStaking.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend))
 
   private def validateIfLiquidityPoolExists[F[_]: Async](
     stakingUpdate: StakingUpdate,

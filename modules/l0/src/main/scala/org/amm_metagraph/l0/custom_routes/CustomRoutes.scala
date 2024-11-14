@@ -16,7 +16,7 @@ import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
-import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, getSwapCalculatedState}
+import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, getPendingSwapUpdates, getSwapCalculatedState}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.middleware.CORS
@@ -82,7 +82,8 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
       calculatedState <- calculatedStateService.get
       allowSpendHash = Hash(allowSpendHashString)
       swapCalculatedState = getSwapCalculatedState(calculatedState.state)
-      result <- swapCalculatedState.pending.values.flatten
+      pendingSwaps = getPendingSwapUpdates(calculatedState.state)
+      result <- pendingSwaps
         .find(_.value.allowSpendReference === allowSpendHash)
         .map(buildPendingSwapResponse)
         .orElse {

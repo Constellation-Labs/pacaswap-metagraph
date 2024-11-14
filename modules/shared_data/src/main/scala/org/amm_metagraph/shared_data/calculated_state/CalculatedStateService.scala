@@ -37,14 +37,15 @@ object CalculatedStateService {
         ): F[Boolean] =
           stateRef.modify { currentState =>
             val currentCalculatedState = currentState.state
-            val updatedOperations = state.operations.foldLeft(currentCalculatedState.operations) {
+            val updatedOperations = state.confirmedOperations.foldLeft(currentCalculatedState.confirmedOperations) {
               case (acc, (address, value)) =>
                 acc.updated(address, value)
             }
 
+            val updatedPendingUpdates = currentCalculatedState.pendingUpdates ++ state.pendingUpdates
             val updatedSpendTransactions = currentCalculatedState.spendTransactions ++ state.spendTransactions
 
-            (CalculatedState(snapshotOrdinal, AmmCalculatedState(updatedOperations, updatedSpendTransactions)), true)
+            (CalculatedState(snapshotOrdinal, AmmCalculatedState(updatedOperations, updatedPendingUpdates, updatedSpendTransactions)), true)
           }
 
         override def hash(

@@ -2,20 +2,22 @@ package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.Async
 import cats.syntax.all._
+
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
-import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
+
+import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
-
-import scala.collection.immutable.SortedSet
 
 object SwapCombiner {
   private def getUpdatedTokenInformation(
@@ -59,7 +61,7 @@ object SwapCombiner {
     currentSnapshotOrdinal: SnapshotOrdinal
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val swapUpdate = signedSwapUpdate.value
-    val (confirmedSwaps, pendingSwaps) = getConfirmedAndPendingSwaps(acc)
+    val confirmedSwaps = getSwapCalculatedState(acc.calculated).confirmed
 
     val updates = swapUpdate :: acc.onChain.updates
 
@@ -68,22 +70,26 @@ object SwapCombiner {
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
           gsEpochProgress = lastSyncHashedGIS.epochProgress
-          updatedPendingSwaps =
-            if (signedSwapUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              pendingSwaps.removed(swapUpdate.sourceAddress)
+          updatedPendingCalculatedState =
+            if (swapUpdate.maxValidGsEpochProgress < gsEpochProgress) {
+              acc.calculated.pendingUpdates - signedSwapUpdate
+            } else if (!acc.calculated.pendingUpdates.contains(signedSwapUpdate)) {
+              acc.calculated.pendingUpdates + signedSwapUpdate
             } else {
-              pendingSwaps.updatedWith(swapUpdate.sourceAddress) {
-                case Some(existingUpdates) => Some(existingUpdates + signedSwapUpdate)
-                case None                  => Some(Set(signedSwapUpdate))
-              }
+              acc.calculated.pendingUpdates
             }
-          newSwapState = SwapCalculatedState(confirmedSwaps, updatedPendingSwaps)
-          updatedCalculatedState = acc.calculated.operations.updated(OperationType.Swap, newSwapState)
+
+          newSwapState = SwapCalculatedState(confirmedSwaps)
+          updatedCalculatedState = acc.calculated
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.Swap, newSwapState))
+            .focus(_.pendingUpdates)
+            .replace(updatedPendingCalculatedState)
 
         } yield
           DataState(
             AmmOnChainState(updates),
-            AmmCalculatedState(updatedCalculatedState)
+            updatedCalculatedState
           )
 
       case Some(hashedAllowSpend) =>
@@ -110,37 +116,34 @@ object SwapCombiner {
             currentSnapshotOrdinal
           )
 
+          updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedSwapUpdate
           newSwapState = SwapCalculatedState(
             confirmedSwaps.updatedWith(swapUpdate.sourceAddress) {
               case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
               case None                 => Some(Set(swapCalculatedStateAddress))
-            },
-            pendingSwaps - swapUpdate.sourceAddress
+            }
           )
 
           newLiquidityPoolState = LiquidityPoolCalculatedState(
             liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated)
           )
 
-          updatedCalculatedState = acc.calculated.operations
-            .updated(OperationType.Swap, newSwapState)
-            .updated(OperationType.LiquidityPool, newLiquidityPoolState)
+          updatedCalculatedState = acc.calculated
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.Swap, newSwapState))
+            .focus(_.confirmedOperations)
+            .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+            .focus(_.pendingUpdates)
+            .replace(updatedPendingCalculatedState)
 
-          spendTransaction: SharedArtifact = generateSpendAction(hashedAllowSpend)
+          spendAction: SharedArtifact = generateSpendAction(hashedAllowSpend)
 
         } yield
           DataState(
             AmmOnChainState(updates),
-            AmmCalculatedState(updatedCalculatedState),
-            SortedSet(spendTransaction)
+            updatedCalculatedState,
+            SortedSet(spendAction)
           )
     }
-  }
-
-  private def getConfirmedAndPendingSwaps(
-    acc: DataState[AmmOnChainState, AmmCalculatedState]
-  ): (Map[Address, Set[SwapCalculatedStateAddress]], Map[Address, Set[Signed[SwapUpdate]]]) = {
-    val swapState = getSwapCalculatedState(acc.calculated)
-    (swapState.confirmed, swapState.pending)
   }
 }

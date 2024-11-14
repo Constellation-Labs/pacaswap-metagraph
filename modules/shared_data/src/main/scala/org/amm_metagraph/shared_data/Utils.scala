@@ -3,7 +3,9 @@ package org.amm_metagraph.shared_data
 import cats.MonadThrow
 import cats.effect.Async
 import cats.syntax.all._
-import eu.timepit.refined.types.numeric.PosLong
+
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
@@ -11,11 +13,11 @@ import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshot
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
+
+import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, PoolId}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-
-import scala.collection.immutable.SortedSet
 
 object Utils {
   def logger[F[_]: Async]: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("Utils")
@@ -33,8 +35,12 @@ object Utils {
       .ensure(new IllegalArgumentException("You should provide at least one currency token identifier"))(_.nonEmpty)
       .map(PoolId(_))
 
+  // TODO: Remove this in the future, it's just used to mock while context.getLastSynchronizedGlobalSnapshotCombined isn't ready
+  private def getLastSynchronizedGlobalSnapshotCombined[F[_]: Async]: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] =
+    none.pure[F]
+
   def getLastSyncGlobalIncrementalSnapshot[F[_]: Async](implicit context: L0NodeContext[F]): F[Hashed[GlobalIncrementalSnapshot]] =
-    context.getLastSynchronizedGlobalSnapshotCombined.flatMap {
+    getLastSynchronizedGlobalSnapshotCombined.flatMap {
       case Some(value) =>
         val (globalIncrementalSnapshot, _) = value
         globalIncrementalSnapshot.pure
@@ -44,7 +50,7 @@ object Utils {
     }
 
   def getLastSyncGlobalSnapshotState[F[_]: Async](implicit context: L0NodeContext[F]): F[GlobalSnapshotInfo] =
-    context.getLastSynchronizedGlobalSnapshotCombined.flatMap {
+    getLastSynchronizedGlobalSnapshotCombined.flatMap {
       case Some(value) =>
         val (_, snapshotInfo) = value
         snapshotInfo.pure
