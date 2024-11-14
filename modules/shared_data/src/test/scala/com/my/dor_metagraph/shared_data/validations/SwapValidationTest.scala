@@ -44,8 +44,7 @@ object SwapValidationTest extends MutableIOSuite {
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
     tokenB: TokenInformation,
-    owner: Address,
-    feeRate: Long
+    owner: Address
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
@@ -56,7 +55,6 @@ object SwapValidationTest extends MutableIOSuite {
       tokenB,
       owner,
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
-      feeRate.toDouble / 100d,
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
@@ -97,7 +95,6 @@ object SwapValidationTest extends MutableIOSuite {
       ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      0L,
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
@@ -121,7 +118,7 @@ object SwapValidationTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -148,7 +145,6 @@ object SwapValidationTest extends MutableIOSuite {
         ownerAddress,
         primaryToken.identifier,
         pairToken.identifier,
-        0L,
         signedAllowSpend.hash,
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
@@ -186,7 +182,6 @@ object SwapValidationTest extends MutableIOSuite {
       ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      0L,
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
@@ -222,7 +217,7 @@ object SwapValidationTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -232,7 +227,6 @@ object SwapValidationTest extends MutableIOSuite {
       ownerAddress,
       primaryToken.identifier,
       pairToken.identifier,
-      0L,
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),

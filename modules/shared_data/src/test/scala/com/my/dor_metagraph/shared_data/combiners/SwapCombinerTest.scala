@@ -42,8 +42,7 @@ object SwapCombinerTest extends MutableIOSuite {
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
     tokenB: TokenInformation,
-    owner: Address,
-    feeRate: Long
+    owner: Address
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
@@ -54,7 +53,6 @@ object SwapCombinerTest extends MutableIOSuite {
       tokenB,
       owner,
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
-      feeRate.toDouble / 100d,
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
@@ -82,7 +80,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
     )
 
-  test("Test swap successfully when liquidity pool exists 3% fee") { implicit res =>
+  test("Test swap successfully when liquidity pool exists") { implicit res =>
     implicit val (h, sp) = res
 
     val primaryToken =
@@ -91,7 +89,7 @@ object SwapCombinerTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 3L)
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -119,7 +117,6 @@ object SwapCombinerTest extends MutableIOSuite {
           ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
-          0L,
           signedAllowSpend.hash,
           SwapAmount(100000L),
           SwapAmount(100000L),
@@ -176,98 +173,6 @@ object SwapCombinerTest extends MutableIOSuite {
         expect.eql(allowSpend.amount.value.value, spendTransaction.get.amount.value.value)
   }
 
-  test("Test swap successfully when liquidity pool exists - 10% fee") { implicit res =>
-    implicit val (h, sp) = res
-
-    val primaryToken =
-      TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val pairToken =
-      TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
-
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 10L)
-    val ammOnChainState = AmmOnChainState(List.empty)
-    val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
-    )
-    val state = DataState(ammOnChainState, ammCalculatedState)
-    for {
-      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        Some(CurrencyId(ownerAddress)),
-        SwapAmount(PosLong.MinValue),
-        AllowSpendFee(PosLong.MinValue),
-        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-        EpochProgress.MaxValue,
-        List.empty
-      )
-
-      signedAllowSpend <- Signed
-        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
-        .flatMap(_.toHashed[IO])
-
-      swapUpdate = getFakeSignedUpdate(
-        SwapUpdate(
-          ownerAddress,
-          primaryToken.identifier,
-          pairToken.identifier,
-          0L,
-          signedAllowSpend.hash,
-          SwapAmount(100000L),
-          SwapAmount(100000L),
-          EpochProgress.MaxValue,
-          none,
-          none,
-          none
-        )
-      )
-
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
-        keyPair,
-        SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
-      )
-      swapResponse <- combineSwap[IO](
-        state,
-        swapUpdate,
-        SnapshotOrdinal.MinValue
-      )
-
-      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed(ownerAddress).head
-
-      oldLiquidityPoolCalculatedState = state.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
-        .asInstanceOf[LiquidityPoolCalculatedState]
-      oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
-
-      updatedLiquidityPoolCalculatedState = swapResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
-        .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
-
-      swapSpendTransactions = swapResponse.sharedArtifacts.collect {
-        case action: artifact.SpendAction => action
-      }
-        .flatMap(action => List(action.input, action.output))
-        .collect {
-          case transaction: artifact.PendingSpendTransaction => transaction
-        }
-      spendTransaction = swapSpendTransactions.find(_.allowSpendRef === signedAllowSpend.hash)
-    } yield
-      expect.eql(1100000L, addressSwapResponse.fromToken.amount.value.fromTokenAmountFormat) &&
-        expect.eql(primaryToken.identifier.get, addressSwapResponse.fromToken.identifier.get) &&
-        expect.eql(1834862.3853211, addressSwapResponse.toToken.amount.value.fromTokenAmountFormat) &&
-        expect.eql(1000000L.toTokenAmountFormat, oldLiquidityPool.tokenA.amount.value) &&
-        expect.eql(2000000L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
-        expect.eql(1100000L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(1834862.3853211.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(allowSpend.amount.value.value, spendTransaction.get.amount.value.value)
-  }
-
   test("Test swap - pending swap without allow spend") { implicit res =>
     implicit val (h, sp) = res
 
@@ -277,7 +182,7 @@ object SwapCombinerTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 10L)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -305,7 +210,6 @@ object SwapCombinerTest extends MutableIOSuite {
           ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
-          0L,
           signedAllowSpend.hash,
           SwapAmount(100000L),
           SwapAmount(100000L),
@@ -347,7 +251,7 @@ object SwapCombinerTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 10L)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -375,7 +279,6 @@ object SwapCombinerTest extends MutableIOSuite {
           ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
-          0L,
           signedAllowSpend.hash,
           SwapAmount(100000L),
           SwapAmount(100000L),

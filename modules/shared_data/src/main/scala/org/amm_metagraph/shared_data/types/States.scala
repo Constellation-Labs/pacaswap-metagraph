@@ -30,6 +30,10 @@ object States {
     liquidityPools: Map[String, LiquidityPool]
   ) extends AmmOffChainState
 
+  object LiquidityPoolCalculatedState {
+    def empty: LiquidityPoolCalculatedState = LiquidityPoolCalculatedState(Map.empty)
+  }
+
   @derive(encoder, decoder)
   case class StakingCalculatedState(
     confirmed: Map[Address, Set[StakingCalculatedStateAddress]]

@@ -34,13 +34,13 @@ object LiquidityPoolValidations {
   private def validateIfTokensArePresent(
     liquidityPoolUpdate: LiquidityPoolUpdate
   ): DataApplicationValidationErrorOr[Unit] =
-    LiquidityPoolNotEnoughInformation.whenA(liquidityPoolUpdate.tokenA.identifier.isEmpty && liquidityPoolUpdate.tokenB.identifier.isEmpty)
+    LiquidityPoolNotEnoughInformation.whenA(liquidityPoolUpdate.tokenAId.isEmpty && liquidityPoolUpdate.tokenBId.isEmpty)
 
   private def validateIfPoolAlreadyExists[F[_]: Async](
     liquidityPoolUpdate: LiquidityPoolUpdate,
     currentLiquidityPools: Map[String, LiquidityPool]
   ): F[DataApplicationValidationErrorOr[Unit]] =
     for {
-      poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenA.identifier, liquidityPoolUpdate.tokenB.identifier)
+      poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
     } yield LiquidityPoolAlreadyExists.whenA(currentLiquidityPools.contains(poolId.value))
 }

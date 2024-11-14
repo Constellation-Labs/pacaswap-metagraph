@@ -54,7 +54,6 @@ object StakingCombinerTest extends MutableIOSuite {
       tokenB.copy(amount = tokenB.amount.value.toTokenAmountFormat.toPosLongUnsafe),
       owner,
       (tokenA.amount.value * tokenB.amount.value).toDouble,
-      0.3,
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )

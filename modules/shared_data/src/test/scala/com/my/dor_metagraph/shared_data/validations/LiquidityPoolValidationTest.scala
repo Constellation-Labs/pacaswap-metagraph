@@ -5,29 +5,29 @@ import cats.data.Validated.{Invalid, Valid}
 import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
-
-import scala.collection.immutable.SortedMap
-
+import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import eu.timepit.refined.auto._
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
-
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.Utils.{DoubleOps, LongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
+
+import scala.collection.immutable.SortedMap
 
 object LiquidityPoolValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
@@ -41,8 +41,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
     tokenB: TokenInformation,
-    owner: Address,
-    feeRate: Long
+    owner: Address
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
@@ -53,7 +52,6 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       tokenB,
       owner,
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
-      feeRate.toDouble / 100d,
       math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
       LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
     )
@@ -90,9 +88,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     for {
@@ -107,9 +109,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val primaryToken = TokenInformation(none, 100L)
     val pairToken = TokenInformation(none, 50L)
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     for {
@@ -135,9 +141,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -158,9 +168,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -181,9 +195,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -209,7 +227,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress, 0)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -217,9 +235,13 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
-      primaryToken,
-      pairToken,
-      0.3
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
