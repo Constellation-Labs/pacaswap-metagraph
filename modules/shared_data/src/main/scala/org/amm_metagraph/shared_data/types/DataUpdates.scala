@@ -8,7 +8,7 @@ import io.constellationnetwork.security.hash.Hash
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 
@@ -18,9 +18,13 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class LiquidityPoolUpdate(
-    tokenA: TokenInformation,
-    tokenB: TokenInformation,
-    feeRate: Double
+    tokenAAllowSpend: Hash,
+    tokenBAllowSpend: Hash,
+    tokenAId: Option[CurrencyId],
+    tokenBId: Option[CurrencyId],
+    tokenAAmount: PosLong,
+    tokenBAmount: PosLong,
+    maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate
 
   @derive(decoder, encoder)
@@ -38,7 +42,6 @@ object DataUpdates {
     sourceAddress: Address,
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
-    fee: NonNegLong,
     allowSpendReference: Hash,
     minAmount: SwapAmount,
     maxAmount: SwapAmount,

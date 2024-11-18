@@ -9,7 +9,7 @@ import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -21,7 +21,6 @@ object Swap {
     sourceAddress: Address,
     fromToken: TokenInformation,
     toToken: TokenInformation,
-    fee: NonNegLong,
     allowSpendReference: Hash,
     minAmount: SwapAmount,
     maxAmount: SwapAmount,

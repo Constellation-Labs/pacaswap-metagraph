@@ -1,26 +1,41 @@
 package com.my.dor_metagraph.shared_data.combiners
 
 import cats.data.NonEmptySet
-import cats.effect.IO
+import cats.effect.{IO, Resource}
 import cats.syntax.all._
-
-import io.constellationnetwork.currency.dataApplication.DataState
+import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
+import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.ext.cats.effect.ResourceIO
+import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap._
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
-
-import eu.timepit.refined.auto._
+import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 import org.amm_metagraph.shared_data.Utils.{LongOps, buildLiquidityPoolUniqueIdentifier}
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import weaver.SimpleIOSuite
+import weaver.MutableIOSuite
 
-object LiquidityPoolCombinerTest extends SimpleIOSuite {
+import scala.collection.immutable.{SortedMap, SortedSet}
+
+object LiquidityPoolCombinerTest extends MutableIOSuite {
+
+  type Res = (Hasher[IO], SecurityProvider[IO])
+
+  override def sharedResource: Resource[IO, Res] = for {
+    sp <- SecurityProvider.forAsync[IO]
+    implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
+    h = Hasher.forJson[IO]
+  } yield (h, sp)
+
   def getFakeSignedUpdate(
     update: LiquidityPoolUpdate
   ): Signed[LiquidityPoolUpdate] =
@@ -41,71 +56,164 @@ object LiquidityPoolCombinerTest extends SimpleIOSuite {
         )
       )
     )
-  test("Successfully create a liquidity pool") {
-    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
-    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+  test("Successfully create a liquidity pool") { implicit res =>
+    implicit val (h, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong(100L)
+    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
+    val tokenBAmount = PosLong(50L)
+
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val liquidityPoolUpdate = getFakeSignedUpdate(
-      LiquidityPoolUpdate(
-        primaryToken,
-        pairToken,
-        0.3
-      )
-    )
 
     for {
-      stakeResponse <- combineLiquidityPool[IO](
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MinValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+
+      liquidityPoolResponse <- combineLiquidityPool[IO](
         state,
         liquidityPoolUpdate,
         ownerAddress
       )
-      poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
+      poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
+      updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
         .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&
+        expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
         expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(pairToken.identifier.get, updatedLiquidityPool.tokenB.identifier.get) &&
+        expect.eql(tokenBId.get, updatedLiquidityPool.tokenB.identifier.get) &&
         expect.eql(5000d, updatedLiquidityPool.k)
   }
 
-  test("Successfully create a liquidity pool - L0Token - DAG") {
-    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
-    val pairToken = TokenInformation(none, 50L)
+  test("Successfully create a liquidity pool - L0Token - DAG") { implicit res =>
+    implicit val (h, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong(100L)
+    val tokenBId = none
+    val tokenBAmount = PosLong(50L)
+
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val liquidityPoolUpdate = getFakeSignedUpdate(
-      LiquidityPoolUpdate(
-        primaryToken,
-        pairToken,
-        0.3
-      )
-    )
 
     for {
-      stakeResponse <- combineLiquidityPool[IO](
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MinValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+
+      liquidityPoolResponse <- combineLiquidityPool[IO](
         state,
         liquidityPoolUpdate,
         ownerAddress
       )
-      poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
+
+      poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
+      updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
         .confirmedOperations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(primaryToken.identifier.get, updatedLiquidityPool.tokenA.identifier.get) &&
+        expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
         expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(pairToken.identifier.isEmpty, updatedLiquidityPool.tokenB.identifier.isEmpty) &&
+        expect.eql(tokenBId.isEmpty, updatedLiquidityPool.tokenB.identifier.isEmpty) &&
         expect.eql(5000d, updatedLiquidityPool.k)
   }
 }

@@ -24,19 +24,16 @@ object SwapCombiner {
     swapUpdate: SwapUpdate,
     liquidityPool: LiquidityPool
   ): (TokenInformation, TokenInformation) = {
+
     val fromTokenInfo = if (swapUpdate.swapFromPair == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
     val toTokenInfo = if (swapUpdate.swapToPair == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
 
     val swapAmount = swapUpdate.maxAmount.value.value
-    val fee = swapAmount * liquidityPool.feeRate
-    val netSwapAmount = swapAmount - fee
-
-    val newFromTokenReserve = fromTokenInfo.amount.value.fromTokenAmountFormat + netSwapAmount
-    val finalFromTokenReserve = newFromTokenReserve + fee
+    val newFromTokenReserve = fromTokenInfo.amount.value.fromTokenAmountFormat + swapAmount
     val newToTokenReserve = liquidityPool.k / newFromTokenReserve
 
     (
-      fromTokenInfo.copy(amount = finalFromTokenReserve.toTokenAmountFormat.toPosLongUnsafe),
+      fromTokenInfo.copy(amount = newFromTokenReserve.toTokenAmountFormat.toPosLongUnsafe),
       toTokenInfo.copy(amount = newToTokenReserve.toTokenAmountFormat.toPosLongUnsafe)
     )
   }
@@ -105,7 +102,6 @@ object SwapCombiner {
             swapUpdate.sourceAddress,
             fromTokenInfo,
             toTokenInfo,
-            swapUpdate.fee,
             swapUpdate.allowSpendReference,
             swapUpdate.minAmount,
             swapUpdate.maxAmount,
