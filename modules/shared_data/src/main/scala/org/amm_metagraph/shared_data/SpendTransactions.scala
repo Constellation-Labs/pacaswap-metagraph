@@ -1,13 +1,12 @@
 package org.amm_metagraph.shared_data
 
+import cats.syntax.all._
+
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.schema.artifact._
-import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.Hashed
-
-import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 
 object SpendTransactions {
 
@@ -15,49 +14,26 @@ object SpendTransactions {
     hashedAllowSpend: Hashed[AllowSpend]
   ): SpendAction =
     SpendAction(
-      PendingSpendTransaction(
-        SpendTransactionFee(hashedAllowSpend.fee.value),
-        EpochProgress.MaxValue,
-        hashedAllowSpend.hash,
+      SpendTransaction(
+        hashedAllowSpend.hash.some,
         hashedAllowSpend.currency,
-        hashedAllowSpend.amount
+        hashedAllowSpend.amount,
+        hashedAllowSpend.destination
       ),
-      PendingSpendTransaction(
-        SpendTransactionFee(hashedAllowSpend.fee.value),
-        EpochProgress.MaxValue,
-        hashedAllowSpend.hash,
+      SpendTransaction(
+        none,
         hashedAllowSpend.currency,
-        hashedAllowSpend.amount
+        hashedAllowSpend.amount,
+        hashedAllowSpend.destination
       )
     )
 
-  def getCalculatedStateSpendTransactions(
-    calculatedState: AmmCalculatedState
-  ): (SortedSet[PendingSpendTransaction], SortedSet[ConcludedSpendTransaction]) =
-    getSpendTransactions(calculatedState.spendTransactions)
-
   def getCombinedSpendTransactions(
     artifacts: SortedSet[SharedArtifact]
-  ): (SortedSet[PendingSpendTransaction], SortedSet[ConcludedSpendTransaction]) = {
+  ): SortedSet[SpendTransaction] = {
     val spendActions = artifacts.collect {
       case transaction: SpendAction => transaction
     }
-    val spendTransactions = spendActions.flatMap(spendAction => SortedSet(spendAction.input, spendAction.output))
-
-    getSpendTransactions(spendTransactions)
-  }
-
-  private def getSpendTransactions(
-    spendTransactions: SortedSet[SpendTransaction]
-  ): (SortedSet[PendingSpendTransaction], SortedSet[ConcludedSpendTransaction]) = {
-    val (pending, concluded) = spendTransactions.partition {
-      case _: PendingSpendTransaction   => true
-      case _: ConcludedSpendTransaction => false
-    }
-
-    (
-      pending.collect { case t: PendingSpendTransaction => t },
-      concluded.collect { case t: ConcludedSpendTransaction => t }
-    )
+    spendActions.flatMap(spendAction => SortedSet(spendAction.input, spendAction.output))
   }
 }

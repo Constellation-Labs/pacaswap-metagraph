@@ -16,6 +16,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiqu
 import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getPendingStakeUpdates, getStakingCalculatedState}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
 
 object StakingValidations {
   def stakingValidationsL1[F[_]: Async](
@@ -50,12 +51,23 @@ object StakingValidations {
       stakingUpdate,
       liquidityPoolsCalculatedState
     )
-
-    result = validAllowSpends
+    tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+      stakingUpdate.tokenAAllowSpend,
+      state.pendingUpdates,
+      state.spendTransactions
+    )
+    tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+      stakingUpdate.tokenBAllowSpend,
+      state.pendingUpdates,
+      state.spendTransactions
+    )
+  } yield
+    validAllowSpends
       .productR(confirmedTransactionAlreadyExists)
       .productR(pendingTransactionAlreadyExists)
       .productR(liquidityPoolExists)
-  } yield result
+      .productR(tokenAAllowSpendIsDuplicated)
+      .productR(tokenBAllowSpendIsDuplicated)
 
   private def validateIfConfirmedTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,

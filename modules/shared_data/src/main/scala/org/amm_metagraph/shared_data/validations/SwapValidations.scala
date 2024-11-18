@@ -10,6 +10,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
 
 object SwapValidations {
   def swapValidationsL1[F[_]: Async](
@@ -34,8 +35,16 @@ object SwapValidations {
         liquidityPoolsCalculatedState
       )
       swapValidationsL1 <- swapValidationsL1(swapUpdate)
-      result = swapValidationsL1.productR(liquidityPoolExists).productR(poolHaveEnoughTokens)
-    } yield result
+      allowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+        swapUpdate.allowSpendReference,
+        state.pendingUpdates,
+        state.spendTransactions
+      )
+    } yield
+      swapValidationsL1
+        .productR(liquidityPoolExists)
+        .productR(poolHaveEnoughTokens)
+        .productR(allowSpendIsDuplicated)
   }
 
   private def validateIfLiquidityPoolExists[F[_]: Async](

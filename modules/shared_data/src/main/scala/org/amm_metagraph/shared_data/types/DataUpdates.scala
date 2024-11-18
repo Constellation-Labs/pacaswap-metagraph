@@ -50,9 +50,4 @@ object DataUpdates {
     minPrice: Option[PosLong],
     maxPrice: Option[PosLong]
   ) extends AmmUpdate
-
-  @derive(decoder, encoder)
-  case class WithdrawUpdate(
-    amount: PosLong
-  ) extends AmmUpdate
 }

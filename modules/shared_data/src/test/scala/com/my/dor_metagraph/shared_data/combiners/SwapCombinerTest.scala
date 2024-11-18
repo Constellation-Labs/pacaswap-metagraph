@@ -11,6 +11,7 @@ import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.SpendTransaction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.schema.{SnapshotOrdinal, artifact}
@@ -158,10 +159,10 @@ object SwapCombinerTest extends MutableIOSuite {
       }
         .flatMap(action => List(action.input, action.output))
         .collect {
-          case transaction: artifact.PendingSpendTransaction => transaction
+          case transaction: SpendTransaction => transaction
         }
 
-      spendTransaction = swapSpendTransactions.find(_.allowSpendRef === signedAllowSpend.hash)
+      spendTransaction = swapSpendTransactions.find(_.allowSpendRef.get === signedAllowSpend.hash)
     } yield
       expect.eql(1100000L, addressSwapResponse.fromToken.amount.value.fromTokenAmountFormat) &&
         expect.eql(primaryToken.identifier.get, addressSwapResponse.fromToken.identifier.get) &&

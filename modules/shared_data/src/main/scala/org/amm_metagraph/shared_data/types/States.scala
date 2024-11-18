@@ -14,7 +14,6 @@ import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
-import org.amm_metagraph.shared_data.types.Withdraw.WithdrawCalculatedStateAddress
 
 object States {
   @derive(encoder, decoder)
@@ -44,11 +43,6 @@ object States {
   }
 
   @derive(encoder, decoder)
-  case class WithdrawCalculatedState(
-    addresses: Map[Address, WithdrawCalculatedStateAddress]
-  ) extends AmmOffChainState
-
-  @derive(encoder, decoder)
   case class SwapCalculatedState(
     confirmed: Map[Address, Set[SwapCalculatedStateAddress]]
   ) extends AmmOffChainState
@@ -64,8 +58,6 @@ object States {
     val values = findValues
 
     case object Staking extends OperationType("Staking")
-
-    case object Withdraw extends OperationType("Withdraw")
 
     case object LiquidityPool extends OperationType("LiquidityPool")
 
