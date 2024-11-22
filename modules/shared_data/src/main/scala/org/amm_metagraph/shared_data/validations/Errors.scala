@@ -22,10 +22,6 @@ object Errors {
     val message = "Staking amount should be greater than zero (0)"
   }
 
-  case object WithdrawAmountShouldBeGreaterThanZero extends DataApplicationValidationError {
-    val message = "Withdraw amount should be greater than zero (0)"
-  }
-
   case object StakingTransactionAlreadyExists extends DataApplicationValidationError {
     val message = "Staking transaction already exists"
   }
@@ -70,11 +66,7 @@ object Errors {
     val message = "Missing swap allow spend"
   }
 
-  case object SwapAllowSpendDifferentCurrency extends DataApplicationValidationError {
-    val message = "Different currency between swap update and allow spend"
-  }
-
-  case object SwapAllowSpendDifferentSourceAddress extends DataApplicationValidationError {
-    val message = "Different source address between swap update and allow spend"
+  case object DuplicatedOperation extends DataApplicationValidationError {
+    val message = "Duplicated operation"
   }
 }

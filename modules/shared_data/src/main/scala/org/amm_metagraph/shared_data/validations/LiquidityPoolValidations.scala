@@ -10,6 +10,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolAlreadyExists, LiquidityPoolNotEnoughInformation}
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
 
 object LiquidityPoolValidations {
   def liquidityPoolValidationsL1[F[_]: Async](
@@ -29,7 +30,21 @@ object LiquidityPoolValidations {
         liquidityPoolUpdate,
         calculatedState
       ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
-    } yield liquidityPoolValidationsL1.productR(poolAlreadyExists)
+      tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+        liquidityPoolUpdate.tokenAAllowSpend,
+        state.pendingUpdates,
+        state.spendTransactions
+      )
+      tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+        liquidityPoolUpdate.tokenBAllowSpend,
+        state.pendingUpdates,
+        state.spendTransactions
+      )
+    } yield
+      liquidityPoolValidationsL1
+        .productR(poolAlreadyExists)
+        .productR(tokenAAllowSpendIsDuplicated)
+        .productR(tokenBAllowSpendIsDuplicated)
 
   private def validateIfTokensArePresent(
     liquidityPoolUpdate: LiquidityPoolUpdate

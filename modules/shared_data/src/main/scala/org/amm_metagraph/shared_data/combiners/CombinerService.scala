@@ -16,7 +16,6 @@ import org.amm_metagraph.shared_data.Utils.toAddress
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
-import org.amm_metagraph.shared_data.combiners.WithdrawCombiner.combineWithdraw
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -70,13 +69,6 @@ object CombinerService {
                     logger.info(s"Received staking update: $stakingUpdate") >>
                       combineStaking(acc, Signed(stakingUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
 
-                  case withdrawUpdate: WithdrawUpdate =>
-                    logger
-                      .info(s"Received withdraw update: $withdrawUpdate")
-                      .as(
-                        combineWithdraw(acc, Signed(withdrawUpdate, signedUpdate.proofs), address)
-                      )
-
                   case liquidityPoolUpdate: LiquidityPoolUpdate =>
                     logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>
                       combineLiquidityPool(acc, Signed(liquidityPoolUpdate, signedUpdate.proofs), address)
@@ -86,7 +78,7 @@ object CombinerService {
                       combineSwap(acc, Signed(swapUpdate, signedUpdate.proofs), currentSnapshotOrdinal)
                 }
 
-                (createdPendingSpendTransactions, createdConcludedSpendTransactions) = getCombinedSpendTransactions(
+                spendTransactions = getCombinedSpendTransactions(
                   combinedState.sharedArtifacts
                 )
 
@@ -96,7 +88,7 @@ object CombinerService {
                     .modify(_ =>
                       combinedState.calculated
                         .focus(_.spendTransactions)
-                        .modify(current => current ++ createdPendingSpendTransactions ++ createdConcludedSpendTransactions)
+                        .modify(current => current ++ spendTransactions)
                     )
                     .pure
               } yield updatedState

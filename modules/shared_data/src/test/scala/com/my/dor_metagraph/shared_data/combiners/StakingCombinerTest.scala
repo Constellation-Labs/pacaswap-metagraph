@@ -12,6 +12,7 @@ import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.SpendTransaction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
@@ -166,10 +167,10 @@ object StakingCombinerTest extends MutableIOSuite {
       }
         .flatMap(action => List(action.input, action.output))
         .collect {
-          case transaction: artifact.PendingSpendTransaction => transaction
+          case transaction: SpendTransaction => transaction
         }
-      tokenASpendTransaction = stakingSpendTransactions.find(_.allowSpendRef === signedAllowSpendA.hash)
-      tokenBSpendTransaction = stakingSpendTransactions.find(_.allowSpendRef === signedAllowSpendB.hash)
+      tokenASpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.get === signedAllowSpendA.hash)
+      tokenBSpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.get === signedAllowSpendB.hash)
 
     } yield
       expect.eql(100L.toTokenAmountFormat, addressStakedResponse.tokenA.amount.value) &&
