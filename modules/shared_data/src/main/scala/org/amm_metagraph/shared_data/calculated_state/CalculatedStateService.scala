@@ -45,7 +45,18 @@ object CalculatedStateService {
             val updatedPendingUpdates = currentCalculatedState.pendingUpdates ++ state.pendingUpdates
             val updatedSpendTransactions = currentCalculatedState.spendTransactions ++ state.spendTransactions
 
-            (CalculatedState(snapshotOrdinal, AmmCalculatedState(updatedOperations, updatedPendingUpdates, updatedSpendTransactions)), true)
+            (
+              CalculatedState(
+                snapshotOrdinal,
+                AmmCalculatedState(
+                  updatedOperations,
+                  updatedPendingUpdates,
+                  updatedSpendTransactions,
+                  state.votingWeights
+                )
+              ),
+              true
+            )
           }
 
         override def hash(

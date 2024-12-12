@@ -4,13 +4,14 @@ import cats.MonadThrow
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo}
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
@@ -64,15 +65,17 @@ object Utils {
   )(implicit context: L0NodeContext[F]): F[Option[Hashed[AllowSpend]]] = for {
     globalSnapshotInfo <- getLastSyncGlobalSnapshotState
     currencyId <- context.getCurrencyId
-    response <- globalSnapshotInfo
-      .activeAllowSpends(currencyId.value)
-      .values
-      .flatten
-      .toList
-      .traverse(_.toHashed)
-      .map { hashedAllowSpends =>
-        hashedAllowSpends.find(_.hash === allowSpendHash)
-      }
+    activeAllowSpends = globalSnapshotInfo.activeAllowSpends
+      .getOrElse(SortedMap.empty[Address, SortedMap[Address, SortedSet[Signed[AllowSpend]]]])
+
+    response <- activeAllowSpends.get(currencyId.value) match {
+      case Some(active) =>
+        active.values.flatten.toList.traverse(_.toHashed).map { hashedAllowSpends =>
+          hashedAllowSpends.find(_.hash === allowSpendHash)
+        }
+      case None =>
+        none.pure
+    }
   } yield response
 
   def getLiquidityPoolByPoolId[F[_]: Async](

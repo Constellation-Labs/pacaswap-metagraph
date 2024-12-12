@@ -5,11 +5,15 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.getCombinedSpendTransactions
 import org.amm_metagraph.shared_data.Utils.toAddress
@@ -33,11 +37,32 @@ object CombinerService {
     new CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
 
+      private def updateVotingWeights(
+        currentCalculatedState: AmmCalculatedState,
+        lastCurrencySnapshotInfo: CurrencySnapshotInfo
+      ): Map[Address, VotingWeight] =
+        lastCurrencySnapshotInfo.activeTokenLocks.map {
+          _.foldLeft(Map.empty[Address, VotingWeight]) { (acc, current) =>
+            val (address, tokenLocks) = current
+            val tokenLocksAmount = NonNegLong
+              .from(
+                tokenLocks.map(_.amount.value.value).sum
+              )
+              .getOrElse(NonNegLong.MinValue)
+            val votingWeight = VotingWeight(Amount(tokenLocksAmount))
+            acc.updated(address, votingWeight)
+          }
+        }.getOrElse(currentCalculatedState.votingWeights)
+
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
-      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-        val newState =
+      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
+        (_, lastCurrencySnapshotInfo) <- OptionT(context.getLastCurrencySnapshotCombined).getOrRaise(
+          new IllegalStateException("lastCurrencySnapshot unavailable")
+        )
+
+        newState =
           DataState(
             AmmOnChainState(List.empty),
             AmmCalculatedState(
@@ -47,54 +72,68 @@ object CombinerService {
             )
           )
 
-        val pendingUpdates = oldState.calculated.pendingUpdates
-        val updates = incomingUpdates ++ pendingUpdates
+        pendingUpdates = oldState.calculated.pendingUpdates
+        updates = incomingUpdates ++ pendingUpdates
 
-        if (updates.isEmpty) {
-          logger.info("Snapshot without any updates, updating the state to empty updates").as(newState)
-        } else {
-          logger.info(s"Incoming updates: ${incomingUpdates.size}") >>
-            logger.info(s"Pending updates: ${pendingUpdates.size}") >>
-            updates.foldLeftM(newState) { (acc, signedUpdate) =>
-              for {
-                address <- toAddress(signedUpdate.proofs.head)
-                currentSnapshotOrdinal <- OptionT(context.getLastCurrencySnapshot)
-                  .map(_.ordinal.next)
-                  .getOrElseF {
-                    val message = "Could not get the ordinal from currency snapshot. lastCurrencySnapshot not found"
-                    logger.error(message) >> new Exception(message).raiseError[F, SnapshotOrdinal]
+        stateCombinedByUpdates <-
+          if (updates.isEmpty) {
+            logger.info("Snapshot without any updates, updating the state to empty updates").as(newState)
+          } else {
+            logger.info(s"Incoming updates: ${incomingUpdates.size}") >>
+              logger.info(s"Pending updates: ${pendingUpdates.size}") >>
+              updates.foldLeftM(newState) { (acc, signedUpdate) =>
+                for {
+                  address <- toAddress(signedUpdate.proofs.head)
+                  currentSnapshotOrdinal <- OptionT(context.getLastCurrencySnapshot)
+                    .map(_.ordinal.next)
+                    .getOrElseF {
+                      val message = "Could not get the ordinal from currency snapshot. lastCurrencySnapshot not found"
+                      logger.error(message) >> new Exception(message).raiseError[F, SnapshotOrdinal]
+                    }
+                  combinedState <- signedUpdate.value match {
+                    case stakingUpdate: StakingUpdate =>
+                      logger.info(s"Received staking update: $stakingUpdate") >>
+                        combineStaking(acc, Signed(stakingUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
+
+                    case liquidityPoolUpdate: LiquidityPoolUpdate =>
+                      logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>
+                        combineLiquidityPool(acc, Signed(liquidityPoolUpdate, signedUpdate.proofs), address)
+
+                    case swapUpdate: SwapUpdate =>
+                      logger.info(s"Received swap update: $swapUpdate") >>
+                        combineSwap(acc, Signed(swapUpdate, signedUpdate.proofs), currentSnapshotOrdinal)
                   }
-                combinedState <- signedUpdate.value match {
-                  case stakingUpdate: StakingUpdate =>
-                    logger.info(s"Received staking update: $stakingUpdate") >>
-                      combineStaking(acc, Signed(stakingUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
 
-                  case liquidityPoolUpdate: LiquidityPoolUpdate =>
-                    logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>
-                      combineLiquidityPool(acc, Signed(liquidityPoolUpdate, signedUpdate.proofs), address)
+                  spendTransactions = getCombinedSpendTransactions(
+                    combinedState.sharedArtifacts
+                  )
 
-                  case swapUpdate: SwapUpdate =>
-                    logger.info(s"Received swap update: $swapUpdate") >>
-                      combineSwap(acc, Signed(swapUpdate, signedUpdate.proofs), currentSnapshotOrdinal)
-                }
+                  updatedState <-
+                    combinedState
+                      .focus(_.calculated)
+                      .modify(_ =>
+                        combinedState.calculated
+                          .focus(_.spendTransactions)
+                          .modify(current => current ++ spendTransactions)
+                      )
+                      .pure
+                } yield updatedState
+              }
+          }
 
-                spendTransactions = getCombinedSpendTransactions(
-                  combinedState.sharedArtifacts
-                )
+        updatedVotingWeights = updateVotingWeights(
+          stateCombinedByUpdates.calculated,
+          lastCurrencySnapshotInfo
+        )
 
-                updatedState <-
-                  combinedState
-                    .focus(_.calculated)
-                    .modify(_ =>
-                      combinedState.calculated
-                        .focus(_.spendTransactions)
-                        .modify(current => current ++ spendTransactions)
-                    )
-                    .pure
-              } yield updatedState
-            }
-        }
-      }
+        updatedVotingWeightState = stateCombinedByUpdates.calculated
+          .focus(_.votingWeights)
+          .replace(updatedVotingWeights)
+
+        stateCombinedByVotingWeight = stateCombinedByUpdates
+          .focus(_.calculated)
+          .replace(updatedVotingWeightState)
+      } yield stateCombinedByVotingWeight
     }
   }
 }

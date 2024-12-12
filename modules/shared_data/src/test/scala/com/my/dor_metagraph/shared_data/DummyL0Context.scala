@@ -8,7 +8,7 @@ import cats.syntax.all._
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
-import io.constellationnetwork.currency.schema.currency
+import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -44,7 +44,8 @@ object DummyL0Context {
       SortedMap.empty,
       SortedMap.empty,
       SortedMap.empty,
-      SortedMap(metagraphAddress -> activeAllowSpends)
+      SortedMap(metagraphAddress -> activeAllowSpends).some,
+      none
     )
 
   def buildL0NodeContext[F[_]: Async: Hasher: SecurityProvider](
@@ -53,23 +54,12 @@ object DummyL0Context {
     gsEpochProgress: EpochProgress = EpochProgress.MinValue
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
-//      override def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
-//
-//      override def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
-//        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
-//        globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)
-//      } yield Some((globalIncrementalSnapshot, globalSnapshotInfo))
-
-      override def getLastCurrencySnapshot: F[Option[Hashed[currency.CurrencyIncrementalSnapshot]]] = ???
-
-      override def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[currency.CurrencyIncrementalSnapshot]]] = ???
-
-      override def getLastCurrencySnapshotCombined
-        : F[Option[(Hashed[currency.CurrencyIncrementalSnapshot], currency.CurrencySnapshotInfo)]] = ???
-
-      override def securityProvider: SecurityProvider[F] = ???
-
-      override def getCurrencyId: F[CurrencyId] = CurrencyId(metagraphAddress).pure[F]
+      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
+      def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = ???
+      def getLastCurrencySnapshot: F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
+      def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
+      def getLastCurrencySnapshotCombined: F[Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]] = ???
+      def securityProvider: SecurityProvider[F] = ???
+      def getCurrencyId: F[CurrencyId] = ???
     }
-
 }
