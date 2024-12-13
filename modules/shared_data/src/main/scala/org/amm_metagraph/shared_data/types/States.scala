@@ -5,11 +5,13 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendTransaction
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
+import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
@@ -65,10 +67,15 @@ object States {
   }
 
   @derive(encoder, decoder)
+  @newtype
+  case class VotingWeight(value: Amount)
+
+  @derive(encoder, decoder)
   case class AmmCalculatedState(
     confirmedOperations: Map[OperationType, AmmOffChainState],
     pendingUpdates: Set[Signed[AmmUpdate]] = Set.empty[Signed[AmmUpdate]],
-    spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction]
+    spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction],
+    votingWeights: Map[Address, VotingWeight] = Map.empty
   ) extends DataCalculatedState
 
 }
