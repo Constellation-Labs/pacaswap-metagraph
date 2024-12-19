@@ -13,9 +13,10 @@ import io.constellationnetwork.security.signature.Signed
 
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
-import org.amm_metagraph.shared_data.Utils._
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 

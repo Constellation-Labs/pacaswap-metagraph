@@ -5,9 +5,8 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 
-import org.amm_metagraph.shared_data.Utils.buildLiquidityPoolUniqueIdentifier
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolAlreadyExists, LiquidityPoolNotEnoughInformation}
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated

@@ -3,6 +3,7 @@ package org.amm_metagraph.l0.custom_routes
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.ext.http4s.AddressVar
 import io.constellationnetwork.routes.internal.{InternalUrlPrefix, PublicRoutes}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -15,6 +16,7 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
+import org.amm_metagraph.shared_data.types.Governance.{Allocation, AllocationEpochProgressInfo, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, getPendingSwapUpdates, getSwapCalculatedState}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
@@ -40,6 +42,14 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
     maxAmount: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
     state: String
+  )
+
+  @derive(encoder, decoder)
+  case class VoteInfoResponse(
+    credits: Double,
+    parent: RewardAllocationVoteReference,
+    allocationEpochProgressInfo: AllocationEpochProgressInfo,
+    allocations: List[Allocation]
   )
 
   private def getLatestCalculatedState: F[Response[F]] =
@@ -92,9 +102,24 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
     } yield result
   }
 
+  private def getAddressVoteInfo(address: Address): F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      calculatedState.state.allocations.get(address).fold(NotFound()) { addressAllocations =>
+        Ok(
+          VoteInfoResponse(
+            addressAllocations.credits,
+            addressAllocations.reference,
+            addressAllocations.allocationEpochProgressInfo,
+            addressAllocations.allocations
+          )
+        )
+      }
+    }
+
   private val routes: HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "calculated-state" / "latest"  => getLatestCalculatedState
-    case GET -> Root / "swaps" / allowSpendHashString => getSwapByAllowSpendHash(allowSpendHashString)
+    case GET -> Root / "calculated-state" / "latest"                   => getLatestCalculatedState
+    case GET -> Root / "swaps" / allowSpendHashString                  => getSwapByAllowSpendHash(allowSpendHashString)
+    case GET -> Root / "addresses" / AddressVar(address) / "vote-info" => getAddressVoteInfo(address)
   }
 
   val public: HttpRoutes[F] =

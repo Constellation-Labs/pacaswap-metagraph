@@ -24,8 +24,8 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.Utils._
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
