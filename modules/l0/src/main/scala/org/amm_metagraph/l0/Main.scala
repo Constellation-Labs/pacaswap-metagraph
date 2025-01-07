@@ -7,12 +7,16 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.l0.CurrencyL0App
+import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotStateProof}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.{JsonSerializer => JsonBrotliBinaryCodec}
+import io.constellationnetwork.node.shared.domain.rewards.Rewards
+import io.constellationnetwork.node.shared.snapshot.currency.CurrencySnapshotEvent
 import io.constellationnetwork.schema.cluster.ClusterId
 import io.constellationnetwork.schema.semver.{MetagraphVersion, TessellationVersion}
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
@@ -54,4 +58,8 @@ object Main
       .asResource
   } yield l1Service).some
 
+  override def rewards(
+    implicit sp: SecurityProvider[IO]
+  ): Option[Rewards[IO, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotEvent]] =
+    RewardsService.make[IO].some
 }

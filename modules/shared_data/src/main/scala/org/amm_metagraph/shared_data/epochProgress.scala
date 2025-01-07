@@ -6,8 +6,9 @@ object epochProgress {
   private val oneEpochProgress = 43.seconds
 
   val oneEpochProgressInSeconds: Int = oneEpochProgress.toSeconds.toInt
-  val epochProgressOneDay: Int = (1.day / oneEpochProgress).toInt
-  val epochProgress6Months: Long = epochProgressOneDay * 180L
+  val epochProgressOneDay: Long = (1.day / oneEpochProgress).toLong
+  val epochProgress1Month: Long = epochProgressOneDay * 30L
+  val epochProgress6Months: Long = epochProgress1Month * 6L
   val epochProgress1Year: Long = epochProgress6Months * 2
   val epochProgress2Years: Long = epochProgress1Year * 2
 }

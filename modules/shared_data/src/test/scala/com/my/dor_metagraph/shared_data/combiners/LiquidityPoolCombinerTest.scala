@@ -11,6 +11,7 @@ import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
@@ -25,7 +26,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
+import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -50,6 +51,15 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         PosDouble.MinValue,
         PosDouble.MinValue
       )
+    ),
+    Rewards(
+      Amount.empty,
+      Amount.empty,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      EpochProgress.MinValue,
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     )
   )
 
