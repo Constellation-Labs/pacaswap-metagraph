@@ -7,13 +7,16 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
+import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
@@ -28,8 +31,13 @@ object LiquidityPool {
   )
 
   @derive(encoder, decoder)
-  case class LiquidityProviders(
-    providers: Map[Address, Long]
+  @newtype
+  case class ShareAmount(value: Amount)
+
+  @derive(encoder, decoder)
+  case class PoolShares(
+    totalShares: PosLong,
+    addressShares: Map[Address, ShareAmount]
   )
 
   @derive(encoder, decoder)
@@ -39,8 +47,7 @@ object LiquidityPool {
     tokenB: TokenInformation,
     owner: Address,
     k: Double,
-    totalLiquidity: Long,
-    liquidityProviders: LiquidityProviders
+    poolShares: PoolShares
   )
 
   def getLiquidityPools(state: AmmCalculatedState): Map[String, LiquidityPool] =
@@ -77,4 +84,11 @@ object LiquidityPool {
         Async[F].raiseError[LiquidityPool](new IllegalStateException("Liquidity Pool does not exist"))
       )(Async[F].pure)
 
+  def getPendingLiquidityPoolUpdates(
+    state: AmmCalculatedState
+  ): Set[Signed[LiquidityPoolUpdate]] =
+    state.pendingUpdates.collect {
+      case pendingUpdate @ Signed(liquidityPoolUpdate: LiquidityPoolUpdate, _) =>
+        Signed(liquidityPoolUpdate, pendingUpdate.proofs)
+    }
 }

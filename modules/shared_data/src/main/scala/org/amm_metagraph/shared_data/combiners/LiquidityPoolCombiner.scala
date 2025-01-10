@@ -8,10 +8,13 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SharedArtifact
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
@@ -78,7 +81,7 @@ object LiquidityPoolCombiner {
           poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
           amountA = liquidityPoolUpdate.tokenAAmount.value
           amountB = liquidityPoolUpdate.tokenBAmount.value
-          poolTotalLiquidity = math.sqrt(amountA.toDouble * amountB.toDouble).toTokenAmountFormat
+          poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
 
           liquidityPool = LiquidityPool(
             poolId,
@@ -92,8 +95,10 @@ object LiquidityPoolCombiner {
             ),
             signerAddress,
             (amountA * amountB).toDouble,
-            poolTotalLiquidity,
-            LiquidityProviders(Map(signerAddress -> poolTotalLiquidity))
+            PoolShares(
+              poolTotalShares,
+              Map(signerAddress -> ShareAmount(Amount(poolTotalShares)))
+            )
           )
 
           updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedLiquidityPoolUpdate

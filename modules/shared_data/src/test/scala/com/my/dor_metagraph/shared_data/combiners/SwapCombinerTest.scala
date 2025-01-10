@@ -12,6 +12,7 @@ import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendTransaction
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.schema.{SnapshotOrdinal, artifact}
@@ -54,8 +55,7 @@ object SwapCombinerTest extends MutableIOSuite {
       tokenB,
       owner,
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
-      math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
-      LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
+      PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
     (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }
@@ -162,15 +162,15 @@ object SwapCombinerTest extends MutableIOSuite {
           case transaction: SpendTransaction => transaction
         }
 
-      spendTransaction = swapSpendTransactions.find(_.allowSpendRef.get === signedAllowSpend.hash)
+      spendTransaction = swapSpendTransactions.find(_.allowSpendRef.exists(_ === signedAllowSpend.hash))
     } yield
       expect.eql(1100000L, addressSwapResponse.fromToken.amount.value.fromTokenAmountFormat) &&
         expect.eql(primaryToken.identifier.get, addressSwapResponse.fromToken.identifier.get) &&
-        expect.eql(1823154.05651777, addressSwapResponse.toToken.amount.value.fromTokenAmountFormat) &&
+        expect.eql(1818181.81818181, addressSwapResponse.toToken.amount.value.fromTokenAmountFormat) &&
         expect.eql(1000000L.toTokenAmountFormat, oldLiquidityPool.tokenA.amount.value) &&
         expect.eql(2000000L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
         expect.eql(1100000L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(1823154.05651777.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
+        expect.eql(1818181.81818181.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
         expect.eql(allowSpend.amount.value.value, spendTransaction.get.amount.value.value)
   }
 

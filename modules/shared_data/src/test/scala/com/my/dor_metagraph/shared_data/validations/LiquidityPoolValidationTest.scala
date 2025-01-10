@@ -14,6 +14,7 @@ import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
@@ -24,6 +25,7 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -54,8 +56,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       tokenB,
       owner,
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
-      math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat,
-      LiquidityProviders(Map(owner -> math.sqrt(tokenA.amount.value.toDouble * tokenB.amount.value.toDouble).toTokenAmountFormat))
+      PoolShares(1L.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
     (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
   }

@@ -9,10 +9,12 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
@@ -28,55 +30,65 @@ import org.amm_metagraph.shared_data.types.States._
 
 object StakingCombiner {
 
+  private case class UpdatedTokenInformation(
+    primaryTokenInformation: TokenInformation,
+    pairTokenInformation: TokenInformation,
+    newlyIssuedShares: Long
+  )
+
   private def getUpdatedTokenInformation(
     stakingUpdate: StakingUpdate,
     liquidityPool: LiquidityPool
-  ): (TokenInformation, TokenInformation, Long) = {
-    val primaryToken = if (stakingUpdate.tokenAId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
-    val pairToken = if (stakingUpdate.tokenBId == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
+  ): UpdatedTokenInformation = {
+    val (primaryToken, pairToken) = if (stakingUpdate.tokenAId == liquidityPool.tokenA.identifier) {
+      (liquidityPool.tokenA, liquidityPool.tokenB)
+    } else {
+      (liquidityPool.tokenB, liquidityPool.tokenA)
+    }
 
     val currentPrimaryTokenAmount = primaryToken.amount.value.fromTokenAmountFormat
     val currentPairTokenAmount = pairToken.amount.value.fromTokenAmountFormat
 
     val incomingPrimaryAmount = stakingUpdate.tokenAAmount.value
-    val incomingPairAmount =
-      (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Calculate equivalent pair needed to maintain the invariant
+    val incomingPairAmount = (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Maintain invariant
 
-    val liquidityMinted = math.min(
-      incomingPrimaryAmount * liquidityPool.totalLiquidity / primaryToken.amount.value.toDouble,
-      incomingPairAmount * liquidityPool.totalLiquidity / pairToken.amount.value.toDouble
-    )
+    val relativeDepositIncrease = incomingPrimaryAmount.toDouble / (currentPrimaryTokenAmount + incomingPrimaryAmount)
+    val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value.fromTokenAmountFormat
 
-    (
+    UpdatedTokenInformation(
       primaryToken.copy(amount = incomingPrimaryAmount.toTokenAmountFormat.toPosLongUnsafe),
       pairToken.copy(amount = incomingPairAmount.toTokenAmountFormat.toPosLongUnsafe),
-      liquidityMinted.toTokenAmountFormat
+      newlyIssuedShares.toTokenAmountFormat
     )
   }
 
   private def updateLiquidityPool(
     liquidityPool: LiquidityPool,
     signerAddress: Address,
-    primaryToken: TokenInformation,
-    pairToken: TokenInformation,
-    liquidityMinted: Long
+    updatedTokenInformation: UpdatedTokenInformation
   ): LiquidityPool = {
+    val primaryToken = updatedTokenInformation.primaryTokenInformation
+    val pairToken = updatedTokenInformation.pairTokenInformation
+    val newlyIssuedShares = updatedTokenInformation.newlyIssuedShares
+
     val tokenA = if (liquidityPool.tokenA.identifier == primaryToken.identifier) primaryToken else pairToken
     val tokenB = if (liquidityPool.tokenB.identifier == pairToken.identifier) pairToken else primaryToken
 
     val updatedTokenAAmount = (liquidityPool.tokenA.amount.value + tokenA.amount.value).toPosLongUnsafe
     val updatedTokenBAmount = (liquidityPool.tokenB.amount.value + tokenB.amount.value).toPosLongUnsafe
 
-    val addressLiquidity = liquidityPool.liquidityProviders.providers.getOrElse(signerAddress, 0L)
-    val updatedTotalLiquidity = liquidityPool.totalLiquidity + liquidityMinted
-    val updatedLiquidityProviders = liquidityPool.liquidityProviders.providers.updated(signerAddress, addressLiquidity + liquidityMinted)
+    val addressSharesAmount = liquidityPool.poolShares.addressShares.getOrElse(signerAddress, ShareAmount(Amount.empty))
+    val updatedAddressSharesAmount = ShareAmount(Amount(NonNegLong.unsafeFrom(addressSharesAmount.value.value.value + newlyIssuedShares)))
+    val updatedAddressShares = liquidityPool.poolShares.addressShares.updated(signerAddress, updatedAddressSharesAmount)
 
     liquidityPool.copy(
       tokenA = tokenA.copy(amount = updatedTokenAAmount),
       tokenB = tokenB.copy(amount = updatedTokenBAmount),
       k = updatedTokenAAmount.value.fromTokenAmountFormat * updatedTokenBAmount.value.fromTokenAmountFormat,
-      totalLiquidity = updatedTotalLiquidity,
-      liquidityProviders = LiquidityProviders(updatedLiquidityProviders)
+      poolShares = PoolShares(
+        (liquidityPool.poolShares.totalShares.value + newlyIssuedShares).toPosLongUnsafe,
+        updatedAddressShares
+      )
     )
   }
 
@@ -153,14 +165,14 @@ object StakingCombiner {
         for {
           poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
-          (primaryToken, pairToken, liquidityMinted) = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
-          liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, primaryToken, pairToken, liquidityMinted)
+          updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
+          liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
 
           stakingCalculatedStateAddress = StakingCalculatedStateAddress(
             stakingUpdate.tokenAAllowSpend,
             stakingUpdate.tokenBAllowSpend,
-            primaryToken,
-            pairToken,
+            updatedTokenInformation.primaryTokenInformation,
+            updatedTokenInformation.pairTokenInformation,
             currentSnapshotOrdinal,
             maybeLastStakingInfo
           )
