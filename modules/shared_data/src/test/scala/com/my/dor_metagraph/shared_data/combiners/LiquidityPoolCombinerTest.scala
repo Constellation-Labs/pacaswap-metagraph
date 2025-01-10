@@ -22,9 +22,10 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.Utils.{LongOps, buildLiquidityPoolUniqueIdentifier}
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.LiquidityPool.buildLiquidityPoolUniqueIdentifier
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
 

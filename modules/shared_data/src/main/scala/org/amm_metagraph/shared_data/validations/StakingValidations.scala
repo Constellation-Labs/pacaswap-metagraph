@@ -1,18 +1,16 @@
 package org.amm_metagraph.shared_data.validations
 
-import cats.data.NonEmptySet
 import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.SignatureProof
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
-import org.amm_metagraph.shared_data.Utils.{buildLiquidityPoolUniqueIdentifier, getAllowSpendLastSyncGlobalSnapshotState, toAddress}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendLastSyncGlobalSnapshotState
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getPendingStakeUpdates, getStakingCalculatedState}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
@@ -25,11 +23,11 @@ object StakingValidations {
     valid.pure
 
   def stakingValidationsL0[F[_]: Async: Hasher](
-    stakingUpdate: StakingUpdate,
-    state: AmmCalculatedState,
-    proofs: NonEmptySet[SignatureProof]
+    signedStakingUpdate: Signed[StakingUpdate],
+    state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    address <- toAddress(proofs.head)
+    address <- signedStakingUpdate.proofs.head.id.toAddress
+    stakingUpdate = signedStakingUpdate.value
 
     stakingCalculatedState = getStakingCalculatedState(state)
     pendingStaking = getPendingStakeUpdates(state)

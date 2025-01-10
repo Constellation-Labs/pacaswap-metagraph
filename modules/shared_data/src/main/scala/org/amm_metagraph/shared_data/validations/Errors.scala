@@ -18,6 +18,30 @@ object Errors {
     def whenA(cond: Boolean): DataApplicationValidationType = if (cond) invalid else valid
   }
 
+  case object AllocationPercentageExceed extends DataApplicationValidationError {
+    val message = "Allocation percentage exceed"
+  }
+
+  case object NotSignedExclusivelyByAddressOwner extends DataApplicationValidationError {
+    val message = "Not signed exclusively by address owner"
+  }
+
+  case object ParentOrdinalLowerThenLastProcessedTxOrdinal extends DataApplicationValidationError {
+    val message = "Parent ordinal lower then last processed tx ordinal"
+  }
+
+  case object DailyAllocationExceed extends DataApplicationValidationError {
+    val message = "Daily allocation exceed"
+  }
+
+  case object HasNoMatchingParent extends DataApplicationValidationError {
+    val message = "Has no matching parent"
+  }
+
+  case object MissingVotingWeight extends DataApplicationValidationError {
+    val message = "Missing voting weight"
+  }
+
   case object StakingAmountShouldBeGreaterThanZero extends DataApplicationValidationError {
     val message = "Staking amount should be greater than zero (0)"
   }

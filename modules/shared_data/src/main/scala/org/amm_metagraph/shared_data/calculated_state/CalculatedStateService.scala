@@ -52,7 +52,8 @@ object CalculatedStateService {
                   updatedOperations,
                   updatedPendingUpdates,
                   updatedSpendTransactions,
-                  state.votingWeights
+                  state.votingWeights,
+                  state.allocations
                 )
               ),
               true

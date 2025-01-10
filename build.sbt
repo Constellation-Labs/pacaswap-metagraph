@@ -8,11 +8,11 @@ ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports
 
-
 ThisBuild / assemblyMergeStrategy := {
-  case "logback.xml" => MergeStrategy.first
-  case x if x.contains("io.netty.versions.properties") => MergeStrategy.discard
-  case PathList(xs@_*) if xs.last == "module-info.class" => MergeStrategy.first
+  case "logback.xml"                                       => MergeStrategy.first
+  case x if x.contains("io.netty.versions.properties")     => MergeStrategy.discard
+  case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
+  case x if x.contains("rally-version.properties")         => MergeStrategy.concat
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
@@ -30,10 +30,11 @@ lazy val commonTestSettings = Seq(
   ).map(_ % Test)
 )
 
-lazy val root = (project in file(".")).
-  settings(
+lazy val root = (project in file("."))
+  .settings(
     name := "amm_metagraph"
-  ).aggregate(sharedData, currencyL0, currencyL1, dataL1)
+  )
+  .aggregate(sharedData, currencyL0, currencyL1, dataL1)
 
 lazy val sharedData = (project in file("modules/shared_data"))
   .enablePlugins(AshScriptPlugin)

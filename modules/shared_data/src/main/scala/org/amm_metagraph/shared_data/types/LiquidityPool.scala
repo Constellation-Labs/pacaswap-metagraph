@@ -1,15 +1,19 @@
 package org.amm_metagraph.shared_data.types
 
+import cats.MonadThrow
+import cats.effect.Async
+import cats.syntax.all._
+
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.CurrencyId
-import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
@@ -53,11 +57,24 @@ object LiquidityPool {
       .collect { case t: LiquidityPoolCalculatedState => t }
       .getOrElse(LiquidityPoolCalculatedState.empty)
 
-  def getPendingLiquidityPoolUpdates(
-    state: AmmCalculatedState
-  ): Set[Signed[LiquidityPoolUpdate]] =
-    state.pendingUpdates.collect {
-      case pendingUpdate @ Signed(liquidityPoolUpdate: LiquidityPoolUpdate, _) =>
-        Signed(liquidityPoolUpdate, pendingUpdate.proofs)
-    }
+  def buildLiquidityPoolUniqueIdentifier[F[_]: MonadThrow](
+    maybeTokenAId: Option[CurrencyId],
+    maybeTokenBId: Option[CurrencyId]
+  ): F[PoolId] =
+    SortedSet(maybeTokenAId, maybeTokenBId).flatten
+      .mkString("-")
+      .pure[F]
+      .ensure(new IllegalArgumentException("You should provide at least one currency token identifier"))(_.nonEmpty)
+      .map(PoolId(_))
+
+  def getLiquidityPoolByPoolId[F[_]: Async](
+    liquidityPoolsCalculatedState: Map[String, LiquidityPool],
+    poolId: PoolId
+  ): F[LiquidityPool] =
+    liquidityPoolsCalculatedState
+      .get(poolId.value)
+      .fold(
+        Async[F].raiseError[LiquidityPool](new IllegalStateException("Liquidity Pool does not exist"))
+      )(Async[F].pure)
+
 }

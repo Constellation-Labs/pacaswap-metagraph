@@ -1,6 +1,7 @@
 package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.currency.dataApplication.DataUpdate
+import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
@@ -9,8 +10,8 @@ import io.constellationnetwork.security.hash.Hash
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
-import io.circe.refined._
-import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
+import org.amm_metagraph.shared_data.types.LiquidityPool.PoolId
 
 object DataUpdates {
   @derive(encoder, decoder)
@@ -50,4 +51,13 @@ object DataUpdates {
     minPrice: Option[PosLong],
     maxPrice: Option[PosLong]
   ) extends AmmUpdate
+
+  @derive(decoder, encoder)
+  case class RewardAllocationVoteUpdate(
+    address: Address,
+    parent: RewardAllocationVoteReference,
+    allocations: Seq[(String, PosLong)]
+  ) extends AmmUpdate {
+    val ordinal: RewardAllocationVoteOrdinal = parent.ordinal.next
+  }
 }
