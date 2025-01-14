@@ -54,12 +54,15 @@ object DummyL0Context {
     gsEpochProgress: EpochProgress = EpochProgress.MinValue
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
-      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
-      def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = ???
       def getLastCurrencySnapshot: F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
       def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
       def getLastCurrencySnapshotCombined: F[Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]] = ???
       def securityProvider: SecurityProvider[F] = ???
-      def getCurrencyId: F[CurrencyId] = ???
+      def getCurrencyId: F[CurrencyId] = CurrencyId(metagraphAddress).pure[F]
+      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
+      def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
+        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
+        globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)
+      } yield Some((globalIncrementalSnapshot, globalSnapshotInfo))
     }
 }

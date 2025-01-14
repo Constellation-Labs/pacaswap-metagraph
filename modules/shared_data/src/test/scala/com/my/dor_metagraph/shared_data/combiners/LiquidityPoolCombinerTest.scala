@@ -59,6 +59,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         )
       )
     )
+
   test("Successfully create a liquidity pool") { implicit res =>
     implicit val (h, sp) = res
 
@@ -136,7 +137,10 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
         expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
         expect.eql(tokenBId.get, updatedLiquidityPool.tokenB.identifier.get) &&
-        expect.eql(5000d, updatedLiquidityPool.k)
+        expect.eql(5000d, updatedLiquidityPool.k) &&
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
+        expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value)
   }
 
   test("Successfully create a liquidity pool - L0Token - DAG") { implicit res =>
@@ -217,6 +221,9 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
         expect.eql(50L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
         expect.eql(tokenBId.isEmpty, updatedLiquidityPool.tokenB.identifier.isEmpty) &&
-        expect.eql(5000d, updatedLiquidityPool.k)
+        expect.eql(5000d, updatedLiquidityPool.k) &&
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
+        expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value)
   }
 }
