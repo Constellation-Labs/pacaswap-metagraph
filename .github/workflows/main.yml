@@ -1,0 +1,11 @@
+name: main
+
+on:
+  pull_request: {}
+
+jobs:
+  call-workflow-setup-environment:
+    uses: ./.github/workflows/setup-environment.yml
+  call-workflow-start-environment:
+    needs: call-workflow-setup-environment
+    uses: ./.github/workflows/start-environment.yml

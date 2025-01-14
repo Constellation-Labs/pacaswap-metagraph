@@ -79,9 +79,9 @@ object GovernanceCombiner {
     val unlockEpochValue = tokenLock.unlockEpoch.value.value
     val syncEpochProgressValue = lastSyncGlobalSnapshotEpochProgress.value.value
 
-    if (syncEpochProgressValue + epochProgress2Years >= unlockEpochValue) {
+    if (syncEpochProgressValue + epochProgress2Years <= unlockEpochValue) {
       tokenLock.amount.value.value * twoYearsMultiplier
-    } else if (syncEpochProgressValue + epochProgress1Year >= unlockEpochValue) {
+    } else if (syncEpochProgressValue + epochProgress1Year <= unlockEpochValue) {
       tokenLock.amount.value.value * oneYearMultiplier
     } else {
       tokenLock.amount.value.value * sixMonthsMultiplier
