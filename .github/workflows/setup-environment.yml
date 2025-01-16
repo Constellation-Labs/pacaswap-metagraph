@@ -1,0 +1,163 @@
+name: Setup environment
+
+on:
+  workflow_call:
+
+jobs:
+  setup-hypergraph:
+    name: Setup Hypergraph
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adding-testing-templates
+
+      - name: Setup Java and scala
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          JAVA_VERSION: 11
+        uses: "./.github/templates/actions/setup_java_and_scala"
+
+      - name: Setup Hypergraph
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: "./.github/templates/actions/hypergraph/setup"
+
+      - name: Cache Maven (~/.m2)
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Upload hypergraph artifacts to run CI tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypergraph
+          path: .github/code/hypergraph
+          retention-days: 7
+
+      - name: Upload shared_jars artifacts to run CI tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared_jars
+          path: .github/code/shared_jars
+          retention-days: 7
+
+  setup-amm-metagraph:
+    name: Setup AMM Metagraph
+    runs-on: ubuntu-22.04
+    needs: setup-hypergraph
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adding-testing-templates
+
+      - name: Setup Java and scala
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          JAVA_VERSION: 11
+        uses: "./.github/templates/actions/setup_java_and_scala"
+
+      - name: Cache Maven (~/.m2) - Reuse from setup hypergraph
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Setup AMM Metagraph
+        with:
+          METAGRAPH_NAME: amm-metagraph
+          INCLUDE_DATA_LAYER: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: "./.github/templates/actions/metagraph/setup"
+
+      - name: Upload amm-metagraph artifacts to run CI tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: amm-metagraph
+          path: .github/code/metagraphs/amm-metagraph
+          retention-days: 7
+
+  setup-currency-metagraph-1:
+    name: Setup Currency Metagraph - 1
+    runs-on: ubuntu-22.04
+    needs: setup-hypergraph
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adding-testing-templates
+
+      - name: Setup Java and scala
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          JAVA_VERSION: 11
+        uses: "./.github/templates/actions/setup_java_and_scala"
+
+      - name: Cache Maven (~/.m2) - Reuse from setup hypergraph
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Setup Currency Metagraph - 1
+        with:
+          METAGRAPH_NAME: currency-metagraph-1
+          TEMPLATE_NAME: base_currency_metagraph
+          INCLUDE_DATA_LAYER: false
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: "./.github/templates/actions/metagraph/setup"
+
+      - name: Upload currency-metagraph-1 artifacts to run CI tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: currency-metagraph-1
+          path: .github/code/metagraphs/currency-metagraph-1
+          retention-days: 7
+
+  setup-currency-metagraph-2:
+    name: Setup Currency Metagraph - 2
+    runs-on: ubuntu-22.04
+    needs: setup-hypergraph
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: adding-testing-templates
+
+      - name: Setup Java and scala
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          JAVA_VERSION: 11
+        uses: "./.github/templates/actions/setup_java_and_scala"
+
+      - name: Cache Maven (~/.m2) - Reuse from setup hypergraph
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Setup Currency Metagraph - 2
+        with:
+          METAGRAPH_NAME: currency-metagraph-2
+          TEMPLATE_NAME: base_currency_metagraph
+          INCLUDE_DATA_LAYER: false
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: "./.github/templates/actions/metagraph/setup"
+
+      - name: Upload currency-metagraph-2 artifacts to run CI tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: currency-metagraph-2
+          path: .github/code/metagraphs/currency-metagraph-2
+          retention-days: 7
