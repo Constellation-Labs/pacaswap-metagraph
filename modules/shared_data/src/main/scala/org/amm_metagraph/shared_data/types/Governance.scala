@@ -10,6 +10,7 @@ import cats.syntax.semigroup._
 import io.constellationnetwork.ext.crypto._
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema._
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.tokenLock.TokenLock
 import io.constellationnetwork.security.hash.Hash
@@ -22,11 +23,14 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import eu.timepit.refined.auto.autoRefineV
 import eu.timepit.refined.cats._
-import eu.timepit.refined.types.numeric.{NonNegDouble, NonNegLong}
+import eu.timepit.refined.types.numeric.{NonNegDouble, NonNegInt, NonNegLong}
 import io.circe.refined._
 import io.circe.{Decoder, Encoder}
 import io.estatico.newtype.macros.newtype
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
 import org.amm_metagraph.shared_data.epochProgress.oneEpochProgressInSeconds
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
 
 object Governance {
@@ -39,7 +43,7 @@ object Governance {
   }
 
   object RewardAllocationVoteOrdinal {
-    val first: RewardAllocationVoteOrdinal = RewardAllocationVoteOrdinal(1L)
+    val first: RewardAllocationVoteOrdinal = RewardAllocationVoteOrdinal(0L)
 
     implicit val decoder: Decoder[RewardAllocationVoteOrdinal] = deriving
     implicit val encoder: Encoder[RewardAllocationVoteOrdinal] = deriving
@@ -61,18 +65,18 @@ object Governance {
 
   @derive(encoder, decoder)
   case class VotingWeightInfo(
-    weight: NonNegDouble,
+    weight: NonNegLong,
     tokenLock: TokenLock
   )
 
   @derive(encoder, decoder)
   case class VotingWeight(
-    total: NonNegDouble,
+    total: NonNegLong,
     info: List[VotingWeightInfo]
   )
 
   object VotingWeight {
-    def empty: VotingWeight = VotingWeight(NonNegDouble.MinValue, List.empty)
+    def empty: VotingWeight = VotingWeight(NonNegLong.MinValue, List.empty)
   }
 
   sealed abstract class AllocationCategory(val value: String) extends StringEnumEntry
@@ -89,65 +93,88 @@ object Governance {
   }
 
   @derive(encoder, decoder)
-  @newtype
-  case class AllocationId(value: String)
-
-  @derive(encoder, decoder)
   case class Allocation(
-    id: AllocationId,
+    id: String,
     category: AllocationCategory,
-    weight: NonNegDouble
+    percentage: NonNegDouble
   )
 
   @derive(encoder, decoder)
-  case class AllocationEpochProgressInfo(
-    allocationGlobalEpochProgress: EpochProgress,
+  case class MonthlyReference(
     expireGlobalEpochProgress: EpochProgress,
-    monthReference: Int
+    monthReference: NonNegInt
   )
 
-  object AllocationEpochProgressInfo {
-    def empty: AllocationEpochProgressInfo =
-      AllocationEpochProgressInfo(
+  object MonthlyReference {
+    def empty: MonthlyReference =
+      MonthlyReference(
         EpochProgress.MinValue,
-        EpochProgress.MinValue,
-        Int.MinValue
+        NonNegInt.MinValue
       )
 
-    def getAllocationEpochProgressInfo(
+    def getMonthlyReference(
+      environment: Environment,
       globalEpochProgress: EpochProgress
-    ): AllocationEpochProgressInfo = {
-      def getSecondsUntilMonthEnd: Long = {
-        val now = LocalDateTime.now(ZoneId.of("UTC"))
-        val lastDayOfMonth = YearMonth.now(ZoneId.of("UTC")).atEndOfMonth()
-        val monthEnd = LocalDateTime.of(lastDayOfMonth.getYear, lastDayOfMonth.getMonth, lastDayOfMonth.getDayOfMonth, 23, 59, 59)
-        val duration = Duration.between(now, monthEnd)
-        duration.getSeconds
+    ): MonthlyReference =
+      environment match {
+        case ApplicationConfig.Dev =>
+          MonthlyReference(
+            EpochProgress(NonNegLong.unsafeFrom(globalEpochProgress.value.value + 3L)),
+            YearMonth.now(ZoneId.of("UTC")).getMonth.getValue.toNonNegIntUnsafe
+          )
+        case ApplicationConfig.Prod =>
+          def getSecondsUntilMonthEnd: Long = {
+            val now = LocalDateTime.now(ZoneId.of("UTC"))
+            val lastDayOfMonth = YearMonth.now(ZoneId.of("UTC")).atEndOfMonth()
+            val monthEnd = LocalDateTime.of(lastDayOfMonth.getYear, lastDayOfMonth.getMonth, lastDayOfMonth.getDayOfMonth, 23, 59, 59)
+            val duration = Duration.between(now, monthEnd)
+            duration.getSeconds
+          }
+
+          val secondsUntilMonthEnd = getSecondsUntilMonthEnd
+          val epochProgressesUntilMonthEnd = secondsUntilMonthEnd / oneEpochProgressInSeconds
+          val expireGlobalEpochProgressValue = globalEpochProgress.value.value + epochProgressesUntilMonthEnd
+          val expireGlobalEpochProgress = EpochProgress(NonNegLong.unsafeFrom(expireGlobalEpochProgressValue))
+
+          MonthlyReference(
+            expireGlobalEpochProgress,
+            YearMonth.now(ZoneId.of("UTC")).getMonth.getValue.toNonNegIntUnsafe
+          )
       }
+  }
 
-      val secondsUntilMonthEnd = getSecondsUntilMonthEnd
-      val epochProgressesUntilMonthEnd = secondsUntilMonthEnd / oneEpochProgressInSeconds
-      val expireGlobalEpochProgressValue = globalEpochProgress.value.value + epochProgressesUntilMonthEnd
-      val expireGlobalEpochProgress = EpochProgress(NonNegLong.unsafeFrom(expireGlobalEpochProgressValue))
+  @derive(encoder, decoder)
+  case class AllocationsRewards(
+    monthReference: NonNegInt,
+    epochProgressToReward: EpochProgress,
+    rewardsInfo: Map[String, Double]
+  )
 
-      AllocationEpochProgressInfo(
-        globalEpochProgress,
-        expireGlobalEpochProgress,
-        YearMonth.now(ZoneId.of("UTC")).getMonth.getValue
-      )
-    }
+  object AllocationsRewards {
+    def empty: AllocationsRewards = AllocationsRewards(0, EpochProgress.MinValue, Map.empty)
+  }
+
+  @derive(encoder, decoder)
+  case class Allocations(
+    monthlyReference: MonthlyReference,
+    usersAllocations: Map[Address, UserAllocations],
+    allocationsRewards: List[AllocationsRewards]
+  )
+
+  object Allocations {
+    def empty: Allocations = Allocations(MonthlyReference.empty, Map.empty, List.empty)
   }
 
   @derive(encoder, decoder)
   case class UserAllocations(
     credits: Double,
     reference: RewardAllocationVoteReference,
-    allocationEpochProgressInfo: AllocationEpochProgressInfo,
+    allocationGlobalEpochProgress: EpochProgress,
     allocations: List[Allocation]
   )
 
   object UserAllocations {
     def empty: UserAllocations =
-      UserAllocations(maxCredits, RewardAllocationVoteReference.empty, AllocationEpochProgressInfo.empty, List.empty)
+      UserAllocations(maxCredits, RewardAllocationVoteReference.empty, EpochProgress.MinValue, List.empty)
   }
 }

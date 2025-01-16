@@ -9,9 +9,11 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
 import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWeight, maxCredits}
+import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations.isSignedExclusivelyByValidation
@@ -23,13 +25,15 @@ object GovernanceValidations {
     exceedingAllocationPercentage(rewardAllocationVoteUpdate).pure
 
   def rewardAllocationValidationsL0[F[_]: Async](
+    applicationConfig: ApplicationConfig,
     rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
     state: AmmCalculatedState,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = {
     val lastAllocations = state.allocations
     val lastVotingWeights = state.votingWeights
-    val lastUserAllocation = lastAllocations.get(rewardAllocationVoteUpdate.address)
+    val liquidityPools = getLiquidityPoolCalculatedState(state)
+    val lastUserAllocation = lastAllocations.usersAllocations.get(rewardAllocationVoteUpdate.address)
 
     for {
       isSignedExclusivelyBy <- isSignedExclusivelyByValidation(rewardAllocationVoteUpdate, rewardAllocationVoteUpdate.address)
@@ -42,11 +46,17 @@ object GovernanceValidations {
         lastVotingWeights,
         rewardAllocationVoteUpdate.address
       )
+      isValidId = allocationIdValidation(
+        applicationConfig,
+        rewardAllocationVoteUpdate,
+        liquidityPools
+      )
     } yield
       isSignedExclusivelyBy
         .productR(lastTransactionRef)
         .productR(dailyLimitAllocation)
         .productR(walletHasVotingWeight)
+        .productR(isValidId)
   }
 
   private def exceedingAllocationPercentage(
@@ -86,7 +96,7 @@ object GovernanceValidations {
   ): DataApplicationValidationErrorOr[Unit] =
     lastUserAllocation.fold(valid) { allocation =>
       getUpdatedCredits(
-        allocation.allocationEpochProgressInfo.allocationGlobalEpochProgress.value.value,
+        allocation.allocationGlobalEpochProgress.value.value,
         allocation.credits,
         lastCurrencySnapshotEpochProgress.value.value,
         maxCredits
@@ -98,4 +108,17 @@ object GovernanceValidations {
     address: Address
   ): DataApplicationValidationErrorOr[Unit] =
     MissingVotingWeight.unlessA(lastVotingWeights.get(address).exists(_.total.value > 0.0d))
+
+  private def allocationIdValidation(
+    applicationConfig: ApplicationConfig,
+    rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
+    liquidityPools: LiquidityPoolCalculatedState
+  ): DataApplicationValidationErrorOr[Unit] = {
+    val allocationIds = rewardAllocationVoteUpdate.allocations.map { case (id, _) => id }
+    val liquidityPoolIds = liquidityPools.liquidityPools.keySet
+
+    InvalidAllocationId.whenA(
+      allocationIds.exists(id => !liquidityPoolIds.contains(id) && id != applicationConfig.nodeValidatorsGovernanceAllocationId)
+    )
+  }
 }

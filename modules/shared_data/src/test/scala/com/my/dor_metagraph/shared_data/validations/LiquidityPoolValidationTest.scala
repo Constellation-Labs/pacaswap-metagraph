@@ -26,6 +26,9 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -100,8 +103,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
+
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(liquidityPoolUpdate)
     } yield expect.eql(Valid(()), response)
   }
@@ -121,8 +136,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
+
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(liquidityPoolUpdate)
     } yield {
       val expectedError = response match {
@@ -154,8 +181,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
+
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
@@ -181,8 +220,19 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
@@ -208,8 +258,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
+
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
@@ -248,8 +310,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
+    val config = ApplicationConfig(
+      "NodeValidators",
+      Dev,
+      Governance(
+        VotingWeightMultipliers(
+          PosDouble.MinValue,
+          PosDouble.MinValue,
+          PosDouble.MinValue
+        )
+      )
+    )
+
     for {
-      validationService <- ValidationService.make[IO]
+      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)

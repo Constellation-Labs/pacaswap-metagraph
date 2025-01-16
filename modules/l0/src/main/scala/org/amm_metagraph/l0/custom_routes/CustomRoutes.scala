@@ -16,7 +16,7 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
-import org.amm_metagraph.shared_data.types.Governance.{Allocation, AllocationEpochProgressInfo, RewardAllocationVoteReference}
+import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, getPendingSwapUpdates, getSwapCalculatedState}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
@@ -48,7 +48,7 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
   case class VoteInfoResponse(
     credits: Double,
     parent: RewardAllocationVoteReference,
-    allocationEpochProgressInfo: AllocationEpochProgressInfo,
+    monthlyReference: MonthlyReference,
     allocations: List[Allocation]
   )
 
@@ -104,22 +104,50 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
 
   private def getAddressVoteInfo(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      calculatedState.state.allocations.get(address).fold(NotFound()) { addressAllocations =>
+      calculatedState.state.allocations.usersAllocations.get(address).fold(NotFound()) { addressAllocations =>
         Ok(
           VoteInfoResponse(
             addressAllocations.credits,
             addressAllocations.reference,
-            addressAllocations.allocationEpochProgressInfo,
+            calculatedState.state.allocations.monthlyReference,
             addressAllocations.allocations
           )
         )
       }
     }
 
+  private def getAddressVoteWeight(address: Address): F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      calculatedState.state.votingWeights.get(address).fold(NotFound()) { addressVotingWeights =>
+        Ok(addressVotingWeights)
+      }
+    }
+
+  private def getAddressVoteInfoLastReference(address: Address): F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      calculatedState.state.allocations.usersAllocations
+        .get(address)
+        .fold(
+          Ok(
+            RewardAllocationVoteReference(RewardAllocationVoteOrdinal.first, Hash.empty)
+          )
+        ) { addressAllocations =>
+          Ok(addressAllocations.reference)
+        }
+    }
+
+  private def getAllocationsRewards: F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      Ok(calculatedState.state.allocations.allocationsRewards)
+    }
+
   private val routes: HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "calculated-state" / "latest"                   => getLatestCalculatedState
-    case GET -> Root / "swaps" / allowSpendHashString                  => getSwapByAllowSpendHash(allowSpendHashString)
-    case GET -> Root / "addresses" / AddressVar(address) / "vote-info" => getAddressVoteInfo(address)
+    case GET -> Root / "calculated-state" / "latest"                                      => getLatestCalculatedState
+    case GET -> Root / "swaps" / allowSpendHashString                                     => getSwapByAllowSpendHash(allowSpendHashString)
+    case GET -> Root / "addresses" / AddressVar(address) / "vote-info"                    => getAddressVoteInfo(address)
+    case GET -> Root / "addresses" / AddressVar(address) / "vote-weight"                  => getAddressVoteWeight(address)
+    case GET -> Root / "addresses" / AddressVar(address) / "vote-info" / "last-reference" => getAddressVoteInfoLastReference(address)
+    case GET -> Root / "governance" / "allocations" / "rewards"                           => getAllocationsRewards
   }
 
   val public: HttpRoutes[F] =

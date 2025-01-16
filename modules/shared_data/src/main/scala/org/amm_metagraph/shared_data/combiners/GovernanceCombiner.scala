@@ -11,12 +11,14 @@ import io.constellationnetwork.schema.tokenLock.TokenLock
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.types.numeric.NonNegInt
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
 import org.amm_metagraph.shared_data.epochProgress.{epochProgress1Year, epochProgress2Years}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
-import org.amm_metagraph.shared_data.types.Governance.AllocationEpochProgressInfo.getAllocationEpochProgressInfo
+import org.amm_metagraph.shared_data.types.Governance.MonthlyReference.getMonthlyReference
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
@@ -24,11 +26,8 @@ import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object GovernanceCombiner {
-  private val sixMonthsMultiplier: Double = 0.25
-  private val oneYearMultiplier: Double = 0.5
-  private val twoYearsMultiplier: Double = 1
-
   def updateVotingWeights(
+    applicationConfig: ApplicationConfig,
     currentCalculatedState: AmmCalculatedState,
     lastCurrencySnapshotInfo: CurrencySnapshotInfo,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
@@ -47,16 +46,23 @@ object GovernanceCombiner {
         val addedTokenLocks = fetchedTokenLocks.diff(currentTokenLocks)
 
         val updatedInfo =
-          updateVotingWeightInfo(currentAddressVotingWeight.info, addedTokenLocks, removedTokenLocks, lastSyncGlobalSnapshotEpochProgress)
+          updateVotingWeightInfo(
+            applicationConfig,
+            currentAddressVotingWeight.info,
+            addedTokenLocks,
+            removedTokenLocks,
+            lastSyncGlobalSnapshotEpochProgress
+          )
         val updatedWeight = updatedInfo.map(_.weight.value).sum
 
-        acc.updated(address, VotingWeight(updatedWeight.toNonNegDoubleUnsafe, updatedInfo))
+        acc.updated(address, VotingWeight(updatedWeight.toNonNegLongUnsafe, updatedInfo))
       }
     }
       .getOrElse(currentVotingWeights)
   }
 
   private def updateVotingWeightInfo(
+    applicationConfig: ApplicationConfig,
     currentVotingWeightInfo: List[VotingWeightInfo],
     addedTokenLocks: Set[TokenLock],
     removedTokenLocks: Set[TokenLock],
@@ -65,26 +71,27 @@ object GovernanceCombiner {
     val filteredInfo = currentVotingWeightInfo.filterNot(info => removedTokenLocks.contains(info.tokenLock))
 
     val newInfo = addedTokenLocks.toList.map { lock =>
-      val weight = calculateWeight(lock, lastSyncGlobalSnapshotEpochProgress)
-      VotingWeightInfo(weight.toNonNegDoubleUnsafe, lock)
+      val weight = calculateWeight(applicationConfig, lock, lastSyncGlobalSnapshotEpochProgress)
+      VotingWeightInfo(weight.toLong.toNonNegLongUnsafe, lock)
     }
 
     filteredInfo ++ newInfo
   }
 
   private def calculateWeight(
+    applicationConfig: ApplicationConfig,
     tokenLock: TokenLock,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
   ): Double = {
     val unlockEpochValue = tokenLock.unlockEpoch.value.value
     val syncEpochProgressValue = lastSyncGlobalSnapshotEpochProgress.value.value
-
+    val votingWeightMultipliers = applicationConfig.governance.votingWeightMultipliers
     if (syncEpochProgressValue + epochProgress2Years <= unlockEpochValue) {
-      tokenLock.amount.value.value * twoYearsMultiplier
+      tokenLock.amount.value.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier.value
     } else if (syncEpochProgressValue + epochProgress1Year <= unlockEpochValue) {
-      tokenLock.amount.value.value * oneYearMultiplier
+      tokenLock.amount.value.value * votingWeightMultipliers.lockForOneYearMultiplier.value
     } else {
-      tokenLock.amount.value.value * sixMonthsMultiplier
+      tokenLock.amount.value.value * votingWeightMultipliers.lockForSixMonthsMultiplier.value
     }
   }
 
@@ -99,33 +106,30 @@ object GovernanceCombiner {
 
     RewardAllocationVoteReference.of(signedRewardAllocationVoteUpdate).flatMap { reference =>
       val allocationsSum = signedRewardAllocationVoteUpdate.allocations.map { case (_, weight) => weight.value }.sum
-      val userVotingWeight = acc.calculated.votingWeights.getOrElse(signedRewardAllocationVoteUpdate.address, VotingWeight.empty)
 
       val allocationsUpdate = signedRewardAllocationVoteUpdate.allocations.map {
         case (key, weight) =>
-          val votingWeight = userVotingWeight.total.value * (weight.value / allocationsSum.toDouble)
+          val votingWeight = weight.value / allocationsSum.toDouble
           val category = if (liquidityPools.contains(key)) {
             AllocationCategory.LiquidityPool
           } else {
             AllocationCategory.NodeOperator
           }
 
-          Allocation(AllocationId(key), category, votingWeight.toNonNegDoubleUnsafe)
+          Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
       }.toList
-      val allocationEpochProgressInfo = getAllocationEpochProgressInfo(globalEpochProgress)
-
-      acc.calculated.allocations
+      acc.calculated.allocations.usersAllocations
         .get(signedRewardAllocationVoteUpdate.address)
         .fold {
           UserAllocations(
             maxCredits,
             reference,
-            allocationEpochProgressInfo,
+            globalEpochProgress,
             allocationsUpdate
           ).pure
         } { existing =>
           getUpdatedCredits(
-            existing.allocationEpochProgressInfo.allocationGlobalEpochProgress.value.value,
+            existing.allocationGlobalEpochProgress.value.value,
             existing.credits,
             globalEpochProgress.value.value,
             maxCredits
@@ -135,40 +139,99 @@ object GovernanceCombiner {
               UserAllocations(
                 updatedCredits,
                 reference,
-                allocationEpochProgressInfo,
+                globalEpochProgress,
                 allocationsUpdate
               ).pure
           )
         }
         .map { allocationsCalculatedState =>
+          val updatedUsersAllocation = acc.calculated.allocations
+            .focus(_.usersAllocations)
+            .modify(_.updated(signedRewardAllocationVoteUpdate.address, allocationsCalculatedState))
+
           val updatedAllocations = acc.calculated
             .focus(_.allocations)
-            .modify(_.updated(signedRewardAllocationVoteUpdate.address, allocationsCalculatedState))
+            .replace(updatedUsersAllocation)
 
           acc.focus(_.calculated).replace(updatedAllocations)
         }
     }
   }
 
-  def cleanExpiredAllocations(
+  private def calculateAllocationRewards(
     acc: DataState[AmmOnChainState, AmmCalculatedState],
-    globalEpochProgress: EpochProgress
+    monthlyReference: MonthlyReference,
+    currentMetagraphEpochProgress: EpochProgress
+  ): AllocationsRewards = {
+    val votingWeights = acc.calculated.votingWeights
+
+    acc.calculated.allocations.usersAllocations.foldLeft(
+      AllocationsRewards(
+        monthlyReference.monthReference,
+        currentMetagraphEpochProgress,
+        Map.empty
+      )
+    ) { (allocationsRewards, userAllocation) =>
+      userAllocation match {
+        case (address, allocationDetails) =>
+          votingWeights.get(address).fold(allocationsRewards) { votingWeight =>
+            val updatedRewardsInfo = allocationDetails.allocations.foldLeft(allocationsRewards.rewardsInfo) {
+              case (rewardsInfo, allocation) =>
+                val percentage = allocation.percentage.value
+                val allocationAmount = votingWeight.total.value * percentage
+                rewardsInfo.updated(allocation.id, rewardsInfo.getOrElse(allocation.id, 0d) + allocationAmount)
+            }
+
+            allocationsRewards.focus(_.rewardsInfo).replace(updatedRewardsInfo)
+          }
+      }
+    }
+  }
+
+  def handleMonthlyGovernanceRewards(
+    applicationConfig: ApplicationConfig,
+    state: DataState[AmmOnChainState, AmmCalculatedState],
+    globalEpochProgress: EpochProgress,
+    currentMetagraphEpochProgress: EpochProgress
   ): DataState[AmmOnChainState, AmmCalculatedState] = {
-    val filteredAllocations = acc.calculated.allocations.map {
-      case (address, allocations) =>
-        val isExpired = globalEpochProgress > allocations.allocationEpochProgressInfo.expireGlobalEpochProgress
+    val monthlyReference = state.calculated.allocations.monthlyReference
 
-        val matchesVotingWeight = acc.calculated.votingWeights.get(address).exists { votingWeight =>
-          votingWeight.total == allocations.allocations.map(_.weight.value).sum.toNonNegDoubleUnsafe
-        }
-
-        if (!isExpired && matchesVotingWeight) {
-          address -> allocations
-        } else {
-          address -> allocations.copy(allocations = List.empty)
-        }
+    val (monthlyReferenceParsed, stateParsed) = if (monthlyReference.monthReference == NonNegInt.MinValue) {
+      val monthlyRef = getMonthlyReference(applicationConfig.environment, globalEpochProgress)
+      (monthlyRef, state.focus(_.calculated.allocations.monthlyReference).replace(monthlyRef))
+    } else {
+      (monthlyReference, state)
     }
 
-    acc.focus(_.calculated.allocations).replace(filteredAllocations)
+    val isExpired = globalEpochProgress > monthlyReferenceParsed.expireGlobalEpochProgress
+    if (!isExpired) {
+      stateParsed
+    } else {
+      val filteredAllocations = stateParsed.calculated.allocations.usersAllocations.map {
+        case (address, allocations) => address -> allocations.copy(allocations = List.empty)
+      }
+
+      val allocationsRewards = calculateAllocationRewards(
+        stateParsed,
+        monthlyReferenceParsed,
+        currentMetagraphEpochProgress
+      )
+
+      val currentAllocationsRewards = (
+        stateParsed.calculated.allocations.allocationsRewards :+ allocationsRewards
+      )
+        .sortBy(-_.epochProgressToReward.value.value)
+        .take(3)
+
+      val updatedMonthlyReference = getMonthlyReference(applicationConfig.environment, globalEpochProgress)
+
+      stateParsed
+        .focus(_.calculated.allocations.usersAllocations)
+        .replace(filteredAllocations)
+        .focus(_.calculated.allocations.allocationsRewards)
+        .replace(currentAllocationsRewards)
+        .focus(_.calculated.allocations.monthlyReference)
+        .replace(updatedMonthlyReference)
+    }
   }
 }

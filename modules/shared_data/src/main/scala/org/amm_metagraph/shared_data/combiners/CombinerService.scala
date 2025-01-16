@@ -12,9 +12,10 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.getCombinedSpendTransactions
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.combiners.GovernanceCombiner.{
-  cleanExpiredAllocations,
   combineRewardAllocationVoteUpdate,
+  handleMonthlyGovernanceRewards,
   updateVotingWeights
 }
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
@@ -33,7 +34,9 @@ trait CombinerService[F[_]] {
 }
 
 object CombinerService {
-  def make[F[_]: Async: Hasher: SecurityProvider]: F[CombinerService[F]] = Async[F].delay {
+  def make[F[_]: Async: Hasher: SecurityProvider](
+    applicationConfig: ApplicationConfig
+  ): F[CombinerService[F]] = Async[F].delay {
     new CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
 
@@ -52,6 +55,7 @@ object CombinerService {
               logger.error(message) >> new Exception(message).raiseError[F, EpochProgress]
             }
           currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+          currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
 
           newState =
             DataState(
@@ -63,6 +67,7 @@ object CombinerService {
           updates = incomingUpdates ++ pendingUpdates
 
           updatedVotingWeights = updateVotingWeights(
+            applicationConfig,
             newState.calculated,
             lastCurrencySnapshotInfo,
             lastSyncGlobalEpochProgress
@@ -125,9 +130,14 @@ object CombinerService {
                 }
             }
 
-          stateCombinedCleaningAllocations = cleanExpiredAllocations(stateCombinedByUpdates, lastSyncGlobalEpochProgress)
+          stateCombinedGovernanceRewards = handleMonthlyGovernanceRewards(
+            applicationConfig,
+            stateCombinedByUpdates,
+            lastSyncGlobalEpochProgress,
+            currentSnapshotEpochProgress
+          )
 
-        } yield stateCombinedCleaningAllocations).handleErrorWith { e =>
+        } yield stateCombinedGovernanceRewards).handleErrorWith { e =>
           logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
         }
     }

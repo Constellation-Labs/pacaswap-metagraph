@@ -13,7 +13,7 @@ import io.constellationnetwork.schema.cluster.ClusterId
 import io.constellationnetwork.schema.semver.{MetagraphVersion, TessellationVersion}
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
-import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
+import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.types.codecs.JsonBinaryCodec
 import org.amm_metagraph.shared_data.validations.ValidationService
 
@@ -30,8 +30,9 @@ object Main
     implicit0(sp: SecurityProvider[IO]) <- SecurityProvider.forAsync[IO]
     implicit0(json2bin: JsonSerializer[IO]) <- JsonBinaryCodec.forSync[IO].asResource
     implicit0(hasher: Hasher[IO]) = Hasher.forJson[IO]
-    calculatedStateService <- CalculatedStateService.make[IO].asResource
-    validationService <- ValidationService.make[IO].asResource
-    l1Service <- DataL1Service.make[IO](calculatedStateService, validationService).asResource
+
+    config <- ApplicationConfigOps.readDefault[IO].asResource
+    validationService <- ValidationService.make[IO](config).asResource
+    l1Service <- DataL1Service.make[IO](validationService).asResource
   } yield l1Service).some
 }
