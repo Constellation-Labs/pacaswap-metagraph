@@ -49,7 +49,6 @@ jobs:
           name: amm-metagraph
           path: .github/code/metagraphs/amm-metagraph
 
-
       - name: Start Hypergraph
         uses: "./.github/templates/actions/hypergraph/start"
         with:
@@ -69,32 +68,42 @@ jobs:
 
       - name: Start token lock tests
         shell: bash
+        env:
+          GL0_URL: ${{ secrets.GL0_URL }}
+          AMM_ML0_URL: ${{ secrets.AMM_ML0_URL }}
+          AMM_CL1_URL: ${{ secrets.AMM_CL1_URL }}
+          AMM_DL1_URL: ${{ secrets.AMM_DL1_URL }}
+          TOKEN_LOCKS: ${{ secrets.TOKEN_LOCKS }}
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
-          
-          echo "METAGRAPH_ID=$METAGRAPH_ID"
+          echo "METAGRAPH_ID: $METAGRAPH_ID"
           
           cd .github/action_scripts
           node governance/token_lock_test.js \
-          http://localhost:9000 \
-          http://localhost:8000 \
-          http://localhost:8100 \
-          http://localhost:8200 \
-          $METAGRAPH_ID \
-          '[{"privateKey":"8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8","lockAmount":1000,"multiplier":0.25,"expireEpochProgress":5000},{"privateKey":"7bf1b37351f164ae4cdc5f10a55987163d42bf68e607383e7fa5121f7e7624ed","lockAmount":1000,"multiplier":0.25,"expireEpochProgress":5000}]'
+            $GL0_URL \
+            $AMM_ML0_URL \
+            $AMM_CL1_URL \
+            $AMM_DL1_URL \
+            $METAGRAPH_ID \
+            "$TOKEN_LOCKS"
 
       - name: Start vote allocation tests
         shell: bash
+        env:
+          GL0_URL: ${{ secrets.GL0_URL }}
+          AMM_ML0_URL: ${{ secrets.AMM_ML0_URL }}
+          AMM_CL1_URL: ${{ secrets.AMM_CL1_URL }}
+          AMM_DL1_URL: ${{ secrets.AMM_DL1_URL }}
+          VOTE_ALLOCATIONS: ${{ secrets.VOTE_ALLOCATIONS }}
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
-          
-          echo "METAGRAPH_ID=$METAGRAPH_ID"
+          echo "METAGRAPH_ID: $METAGRAPH_ID"
           
           cd .github/action_scripts
           node governance/vote_allocation_test.js \
-          http://localhost:9000 \
-          http://localhost:8000 \
-          http://localhost:8100 \
-          http://localhost:8200 \
-          $METAGRAPH_ID \
-          '[{"privateKey":"8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8", "allocations": [{"key": "NodeValidators", "amount": 10}]}]'
+            $GL0_URL \
+            $AMM_ML0_URL \
+            $AMM_CL1_URL \
+            $AMM_DL1_URL \
+            $METAGRAPH_ID \
+            "$VOTE_ALLOCATIONS"
