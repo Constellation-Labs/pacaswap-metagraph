@@ -1,7 +1,7 @@
 package org.amm_metagraph.shared_data
 
-import eu.timepit.refined.types.all.NonNegDouble
-import eu.timepit.refined.types.numeric.PosLong
+import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}
+import eu.timepit.refined.types.numeric.{NonNegInt, PosLong}
 
 object refined {
 
@@ -26,5 +26,14 @@ object refined {
   implicit class NonNegDoubleOps(value: Double) {
     def toNonNegDoubleUnsafe: NonNegDouble =
       NonNegDouble.unsafeFrom(value)
+  }
+
+  implicit class NonNegLongOps(value: Long) {
+    def toNonNegLongUnsafe: NonNegLong =
+      NonNegLong.unsafeFrom(value)
+  }
+  implicit class NonNegIntOps(value: Int) {
+    def toNonNegIntUnsafe: NonNegInt =
+      NonNegInt.unsafeFrom(value)
   }
 }

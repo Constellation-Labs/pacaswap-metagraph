@@ -71,7 +71,7 @@ object States {
     pendingUpdates: Set[Signed[AmmUpdate]] = Set.empty[Signed[AmmUpdate]],
     spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction],
     votingWeights: Map[Address, VotingWeight] = Map.empty,
-    allocations: Map[Address, UserAllocations] = Map.empty
+    allocations: Allocations = Allocations.empty
   ) extends DataCalculatedState
 
 }

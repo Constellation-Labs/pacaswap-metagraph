@@ -1,4 +1,4 @@
-const fetch = require( 'node-fetch' );
+const axios = require( 'axios' );
 
 const sleep = ( ms ) => {
     return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
@@ -20,12 +20,11 @@ const main = async () => {
     console.log(`Starting to check if url: ${url} is started`)
     for( let idx = 0; idx < 11; idx++ ) {
         try {
-            const response = await fetch( url, {
-                method: 'GET',
+            const response = await axios.get(url, {
                 headers: {
                     Accept: 'application/json'
                 }
-            } );
+            });
 
             if( response.status === 200 ) {
                 console.log( `${clusterName} started` );

@@ -6,6 +6,6 @@ on:
 jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
-  call-workflow-start-environment:
+  call-governance-tests:
     needs: call-workflow-setup-environment
-    uses: ./.github/workflows/start-environment.yml
+    uses: ./.github/workflows/governance_tests.yml

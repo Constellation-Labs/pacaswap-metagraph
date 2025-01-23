@@ -47,11 +47,6 @@ object MetagraphL0Service {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
         DataState(AmmOnChainState(List.empty), AmmCalculatedState(Map.empty))
 
-      override def validateUpdate(
-        update: AmmUpdate
-      )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] =
-        validationService.validateUpdate(update)
-
       override def validateData(
         state: DataState[AmmOnChainState, AmmCalculatedState],
         updates: NonEmptyList[Signed[AmmUpdate]]

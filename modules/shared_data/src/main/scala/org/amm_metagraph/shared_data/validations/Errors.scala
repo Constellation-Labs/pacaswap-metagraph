@@ -42,6 +42,10 @@ object Errors {
     val message = "Missing voting weight"
   }
 
+  case object InvalidAllocationId extends DataApplicationValidationError {
+    val message = "Invalid allocation ID"
+  }
+
   case object StakingAmountShouldBeGreaterThanZero extends DataApplicationValidationError {
     val message = "Staking amount should be greater than zero (0)"
   }

@@ -9,6 +9,7 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.GovernanceValidations.{rewardAllocationValidationsL0, rewardAllocationValidationsL1}
@@ -28,7 +29,9 @@ trait ValidationService[F[_]] {
 }
 
 object ValidationService {
-  def make[F[_]: Async: SecurityProvider: Hasher]: F[ValidationService[F]] = Async[F].delay {
+  def make[F[_]: Async: SecurityProvider: Hasher](
+    applicationConfig: ApplicationConfig
+  ): F[ValidationService[F]] = Async[F].delay {
     new ValidationService[F] {
       private def validateL1(update: AmmUpdate): F[DataApplicationValidationErrorOr[Unit]] = update match {
         case stakingUpdate: StakingUpdate                           => stakingValidationsL1(stakingUpdate)
@@ -51,6 +54,7 @@ object ValidationService {
             case swapUpdate: SwapUpdate                   => swapValidationsL0(swapUpdate, state)
             case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
               rewardAllocationValidationsL0(
+                applicationConfig,
                 Signed(rewardAllocationVoteUpdate, signedUpdate.proofs),
                 state,
                 lastSyncGlobalSnapshot.epochProgress

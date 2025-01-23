@@ -9,8 +9,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: adding-testing-templates
 
       - name: Setup Java and scala
         env:
@@ -52,8 +50,6 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: adding-testing-templates
 
       - name: Setup Java and scala
         env:
@@ -90,8 +86,6 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: adding-testing-templates
 
       - name: Setup Java and scala
         env:
@@ -129,8 +123,6 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: adding-testing-templates
 
       - name: Setup Java and scala
         env:

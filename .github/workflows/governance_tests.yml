@@ -1,0 +1,100 @@
+name: Governance tests
+
+on:
+  workflow_call:
+
+jobs:
+  governance-tests:
+    runs-on: Ubuntu-22-64-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: .github/action_scripts/package-lock.json
+
+      - name: Installing node dependencies
+        shell: bash
+        run: |
+          cd .github/action_scripts
+          npm i @stardust-collective/dag4
+          npm i js-sha256
+          npm i axios
+          npm i brotli
+          npm i zod
+
+      - name: Download shared_jars artifacts
+        uses: actions/download-artifact@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: shared_jars
+          path: .github/code/shared_jars
+
+      - name: Download Hypergraph Artifact
+        uses: actions/download-artifact@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: hypergraph
+          path: .github/code/hypergraph
+
+      - name: Download AMM Metagraph Artifact
+        uses: actions/download-artifact@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: amm-metagraph
+          path: .github/code/metagraphs/amm-metagraph
+
+
+      - name: Start Hypergraph
+        uses: "./.github/templates/actions/hypergraph/start"
+        with:
+          INCLUDE_DAG_L1: true
+          DAG_L0_PORT_PREFIX: 90
+          DAG_L1_PORT_PREFIX: 91
+
+      - name: Start Metagraph - AMM
+        uses: "./.github/templates/actions/metagraph/start"
+        with:
+          INCLUDE_DATA_L1: true
+          METAGRAPH_NAME: amm-metagraph
+          DL0_PORT_PREFIX: 90
+          ML0_PORT_PREFIX: 80
+          CL1_PORT_PREFIX: 81
+          DL1_PORT_PREFIX: 82
+
+      - name: Start token lock tests
+        shell: bash
+        run: |
+          METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
+          
+          echo "METAGRAPH_ID=$METAGRAPH_ID"
+          
+          cd .github/action_scripts
+          node governance/token_lock_test.js \
+          http://localhost:9000 \
+          http://localhost:8000 \
+          http://localhost:8100 \
+          http://localhost:8200 \
+          $METAGRAPH_ID \
+          '[{"privateKey":"8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8","lockAmount":1000,"multiplier":0.25,"expireEpochProgress":5000},{"privateKey":"7bf1b37351f164ae4cdc5f10a55987163d42bf68e607383e7fa5121f7e7624ed","lockAmount":1000,"multiplier":0.25,"expireEpochProgress":5000}]'
+
+      - name: Start vote allocation tests
+        shell: bash
+        run: |
+          METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
+          
+          echo "METAGRAPH_ID=$METAGRAPH_ID"
+          
+          cd .github/action_scripts
+          node governance/vote_allocation_test.js \
+          http://localhost:9000 \
+          http://localhost:8000 \
+          http://localhost:8100 \
+          http://localhost:8200 \
+          $METAGRAPH_ID \
+          '[{"privateKey":"8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8", "allocations": [{"key": "NodeValidators", "amount": 10}]}]'
