@@ -6,6 +6,9 @@ on:
 jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
+    secrets: inherit
+
   call-governance-tests:
     needs: call-workflow-setup-environment
     uses: ./.github/workflows/governance_tests.yml
+    secrets: inherit
