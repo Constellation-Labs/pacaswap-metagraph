@@ -84,7 +84,7 @@ object StakingCombiner {
     liquidityPool.copy(
       tokenA = tokenA.copy(amount = updatedTokenAAmount),
       tokenB = tokenB.copy(amount = updatedTokenBAmount),
-      k = updatedTokenAAmount.value.fromTokenAmountFormat * updatedTokenBAmount.value.fromTokenAmountFormat,
+      k = BigInt(updatedTokenAAmount.value) * BigInt(updatedTokenBAmount.value),
       poolShares = PoolShares(
         (liquidityPool.poolShares.totalShares.value + newlyIssuedShares).toPosLongUnsafe,
         updatedAddressShares

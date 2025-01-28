@@ -11,6 +11,7 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.signature.Signed
 
+import derevo.cats.eqv
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
@@ -20,7 +21,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, eqv)
   @newtype
   case class PoolId(value: String)
 
@@ -46,7 +47,7 @@ object LiquidityPool {
     tokenA: TokenInformation,
     tokenB: TokenInformation,
     owner: Address,
-    k: Double,
+    k: BigInt,
     poolShares: PoolShares
   )
 

@@ -15,6 +15,7 @@ import org.amm_metagraph.shared_data.validations.GovernanceValidations.{rewardAl
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations.{liquidityPoolValidationsL0, liquidityPoolValidationsL1}
 import org.amm_metagraph.shared_data.validations.StakingValidations.{stakingValidationsL0, stakingValidationsL1}
 import org.amm_metagraph.shared_data.validations.SwapValidations.{swapValidationsL0, swapValidationsL1}
+import org.amm_metagraph.shared_data.validations.WithdrawalValidations.{withdrawalValidationsL0, withdrawalValidationsL1}
 
 trait ValidationService[F[_]] {
   def validateUpdate(
@@ -32,6 +33,7 @@ object ValidationService {
     new ValidationService[F] {
       private def validateL1(update: AmmUpdate): F[DataApplicationValidationErrorOr[Unit]] = update match {
         case stakingUpdate: StakingUpdate                           => stakingValidationsL1(stakingUpdate)
+        case withdrawalUpdate: WithdrawalUpdate                     => withdrawalValidationsL1(withdrawalUpdate)
         case liquidityPoolUpdate: LiquidityPoolUpdate               => liquidityPoolValidationsL1(liquidityPoolUpdate)
         case swapUpdate: SwapUpdate                                 => swapValidationsL1(swapUpdate)
         case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate => rewardAllocationValidationsL1(rewardAllocationVoteUpdate)
@@ -47,6 +49,7 @@ object ValidationService {
           )
           result <- signedUpdate.value match {
             case stakingUpdate: StakingUpdate             => stakingValidationsL0(Signed(stakingUpdate, signedUpdate.proofs), state)
+            case withdrawalUpdate: WithdrawalUpdate       => withdrawalValidationsL0(Signed(withdrawalUpdate, signedUpdate.proofs), state)
             case liquidityPoolUpdate: LiquidityPoolUpdate => liquidityPoolValidationsL0(liquidityPoolUpdate, state)
             case swapUpdate: SwapUpdate                   => swapValidationsL0(swapUpdate, state)
             case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>

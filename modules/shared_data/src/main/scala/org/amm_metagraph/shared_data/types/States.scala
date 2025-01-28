@@ -15,6 +15,7 @@ import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateAddress
 
 object States {
   @derive(encoder, decoder)
@@ -44,6 +45,15 @@ object States {
   }
 
   @derive(encoder, decoder)
+  case class WithdrawalCalculatedState(
+    confirmed: Map[Address, Set[WithdrawalCalculatedStateAddress]]
+  ) extends AmmOffChainState
+
+  object WithdrawalCalculatedState {
+    def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(Map.empty)
+  }
+
+  @derive(encoder, decoder)
   case class SwapCalculatedState(
     confirmed: Map[Address, Set[SwapCalculatedStateAddress]]
   ) extends AmmOffChainState
@@ -56,13 +66,15 @@ object States {
   sealed abstract class OperationType(val value: String) extends StringEnumEntry
 
   object OperationType extends StringEnum[OperationType] with StringCirceEnum[OperationType] {
-    val values = findValues
+    val values: IndexedSeq[OperationType] = findValues
 
     case object Staking extends OperationType("Staking")
 
     case object LiquidityPool extends OperationType("LiquidityPool")
 
     case object Swap extends OperationType("Swap")
+
+    case object Withdrawal extends OperationType("Withdrawal")
   }
 
   @derive(encoder, decoder)

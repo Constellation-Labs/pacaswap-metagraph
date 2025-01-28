@@ -94,7 +94,7 @@ object LiquidityPoolCombiner {
               liquidityPoolUpdate.tokenBAmount.value.toTokenAmountFormat.toPosLongUnsafe
             ),
             signerAddress,
-            (amountA * amountB).toDouble,
+            BigInt(amountA) * BigInt(amountB),
             PoolShares(
               poolTotalShares,
               Map(signerAddress -> ShareAmount(Amount(poolTotalShares)))

@@ -55,7 +55,7 @@ object StakingCombinerTest extends MutableIOSuite {
       tokenA.copy(amount = tokenA.amount.value.toTokenAmountFormat.toPosLongUnsafe),
       tokenB.copy(amount = tokenB.amount.value.toTokenAmountFormat.toPosLongUnsafe),
       owner,
-      (tokenA.amount.value * tokenB.amount.value).toDouble,
+      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
     (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
@@ -181,8 +181,8 @@ object StakingCombinerTest extends MutableIOSuite {
         expect.eql(200L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(50L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
         expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(5000d, oldLiquidityPool.k) &&
-        expect.eql(20000d, updatedLiquidityPool.k) &&
+        expect.eql(BigInt(5000), oldLiquidityPool.k) &&
+        expect.eql(BigInt(20000), updatedLiquidityPool.k) &&
         expect.eql(1.toTokenAmountFormat, oldLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
@@ -291,8 +291,8 @@ object StakingCombinerTest extends MutableIOSuite {
         expect.eql(200L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(50L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
         expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(5000d, oldLiquidityPool.k) &&
-        expect.eql(20000d, updatedLiquidityPool.k) &&
+        expect.eql(BigInt(5000), oldLiquidityPool.k) &&
+        expect.eql(BigInt(20000), updatedLiquidityPool.k) &&
         expect.eql(1.toTokenAmountFormat, oldLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(2, updatedLiquidityPool.poolShares.addressShares.size) &&
