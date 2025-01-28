@@ -70,6 +70,18 @@ object Errors {
     val message = "Different allow spend destination"
   }
 
+  case object WithdrawalInsufficientShares extends DataApplicationValidationError {
+    val message: String = "Insufficient shares for withdrawal"
+  }
+
+  case object WithdrawalAlreadyPending extends DataApplicationValidationError {
+    val message: String = "Withdrawal already pending for this pool"
+  }
+
+  case object WithdrawalOrdinalLowerThanLastConfirmed extends DataApplicationValidationError {
+    val message: String = "Withdrawal ordinal lower than last confirmed"
+  }
+
   case object LiquidityPoolNotEnoughInformation extends DataApplicationValidationError {
     val message = "You should provide at 2 tokens, or at least 1 token to use DAG as the second one"
   }

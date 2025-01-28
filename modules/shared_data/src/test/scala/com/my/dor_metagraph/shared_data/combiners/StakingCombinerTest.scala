@@ -80,7 +80,7 @@ object StakingCombinerTest extends MutableIOSuite {
       tokenA,
       tokenB,
       owner,
-      (tokenA.amount.value * tokenB.amount.value).toDouble,
+      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(totalShares, shares)
     )
     (

@@ -11,7 +11,8 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
-import org.amm_metagraph.shared_data.types.LiquidityPool.PoolId
+import org.amm_metagraph.shared_data.types.LiquidityPool.{PoolId, ShareAmount}
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
 
 object DataUpdates {
   @derive(encoder, decoder)
@@ -37,6 +38,17 @@ object DataUpdates {
     tokenBId: Option[CurrencyId],
     maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate
+
+  @derive(decoder, encoder)
+  case class WithdrawalUpdate(
+    tokenAId: Option[CurrencyId],
+    tokenBId: Option[CurrencyId],
+    shareToWithdraw: ShareAmount,
+    parent: WithdrawalReference,
+    maxValidGsEpochProgress: EpochProgress
+  ) extends AmmUpdate {
+    val ordinal: WithdrawalOrdinal = parent.ordinal.next
+  }
 
   @derive(decoder, encoder)
   case class SwapUpdate(
