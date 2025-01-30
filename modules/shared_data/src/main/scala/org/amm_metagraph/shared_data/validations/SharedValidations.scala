@@ -29,7 +29,7 @@ object SharedValidations {
 
   def validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
     allowSpendRef: Hash,
-    existingPendingUpdates: Set[Signed[AmmUpdate]],
+    existingPendingUpdates: Set[_ <: Signed[AmmUpdate]],
     existingSpendTransactions: SortedSet[SpendTransaction]
   ): DataApplicationValidationErrorOr[Unit] = {
     val updateAlreadyExists = existingPendingUpdates.exists(_.value match {

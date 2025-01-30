@@ -59,7 +59,7 @@ object SwapCombiner {
     currentSnapshotOrdinal: SnapshotOrdinal
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val swapUpdate = signedSwapUpdate.value
-    val confirmedSwaps = getSwapCalculatedState(acc.calculated).confirmed
+    val swapCalculatedState = getSwapCalculatedState(acc.calculated)
 
     val updates = swapUpdate :: acc.onChain.updates
 
@@ -68,21 +68,22 @@ object SwapCombiner {
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
           gsEpochProgress = lastSyncHashedGIS.epochProgress
-          updatedPendingCalculatedState =
+          updatedPendingSwapsCalculatedState =
             if (swapUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              acc.calculated.pendingUpdates - signedSwapUpdate
-            } else if (!acc.calculated.pendingUpdates.contains(signedSwapUpdate)) {
-              acc.calculated.pendingUpdates + signedSwapUpdate
+              swapCalculatedState.pending - signedSwapUpdate
+            } else if (!swapCalculatedState.pending.contains(signedSwapUpdate)) {
+              swapCalculatedState.pending + signedSwapUpdate
             } else {
-              acc.calculated.pendingUpdates
+              swapCalculatedState.pending
             }
 
-          newSwapState = SwapCalculatedState(confirmedSwaps)
+          newSwapState = swapCalculatedState
+            .focus(_.pending)
+            .replace(updatedPendingSwapsCalculatedState)
+
           updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
+            .focus(_.operations)
             .modify(_.updated(OperationType.Swap, newSwapState))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
 
         } yield
           DataState(
@@ -91,11 +92,11 @@ object SwapCombiner {
           )
 
       case Some(hashedAllowSpend) =>
-        val liquidityPoolsCalculatedState = getLiquidityPools(acc.calculated)
+        val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
         for {
           poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
+          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
           (fromTokenInfo, toTokenInfo) = getUpdatedTokenInformation(swapUpdate, liquidityPool)
           liquidityPoolUpdated = updateLiquidityPool(liquidityPool, fromTokenInfo, toTokenInfo)
 
@@ -113,25 +114,29 @@ object SwapCombiner {
             currentSnapshotOrdinal
           )
 
-          updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedSwapUpdate
-          newSwapState = SwapCalculatedState(
-            confirmedSwaps.updatedWith(swapUpdate.sourceAddress) {
-              case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
-              case None                 => Some(Set(swapCalculatedStateAddress))
-            }
-          )
+          updatedPendingCalculatedState = swapCalculatedState.pending - signedSwapUpdate
 
-          newLiquidityPoolState = LiquidityPoolCalculatedState(
-            liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated)
-          )
+          newSwapState = swapCalculatedState
+            .focus(_.confirmed.value)
+            .modify(current =>
+              current.updatedWith(swapUpdate.sourceAddress) {
+                case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
+                case None                 => Some(Set(swapCalculatedStateAddress))
+              }
+            )
+            .focus(_.pending)
+            .replace(updatedPendingCalculatedState)
+
+          newLiquidityPoolState =
+            liquidityPoolsCalculatedState
+              .focus(_.confirmed.value)
+              .modify(_.updated(poolId.value, liquidityPoolUpdated))
 
           updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
+            .focus(_.operations)
             .modify(_.updated(OperationType.Swap, newSwapState))
-            .focus(_.confirmedOperations)
+            .focus(_.operations)
             .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
 
           spendAction: SharedArtifact = generateSpendAction(hashedAllowSpend)
 

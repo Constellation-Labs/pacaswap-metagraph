@@ -63,7 +63,10 @@ object CombinerService {
               oldState.calculated
             )
 
-          pendingUpdates = oldState.calculated.pendingUpdates
+          pendingUpdates: Set[Signed[AmmUpdate]] = oldState.calculated.operations.values
+            .flatMap(_.pending)
+            .toSet
+
           updates = incomingUpdates ++ pendingUpdates
 
           updatedVotingWeights = updateVotingWeights(
@@ -94,11 +97,24 @@ object CombinerService {
                     combinedState <- signedUpdate.value match {
                       case stakingUpdate: StakingUpdate =>
                         logger.info(s"Received staking update: $stakingUpdate") >>
-                          combineStaking(acc, Signed(stakingUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
+                          combineStaking(
+                            applicationConfig,
+                            acc,
+                            Signed(stakingUpdate, signedUpdate.proofs),
+                            address,
+                            currentSnapshotOrdinal,
+                            lastSyncGlobalEpochProgress
+                          )
 
                       case liquidityPoolUpdate: LiquidityPoolUpdate =>
                         logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>
-                          combineLiquidityPool(acc, Signed(liquidityPoolUpdate, signedUpdate.proofs), address)
+                          combineLiquidityPool(
+                            applicationConfig,
+                            acc,
+                            Signed(liquidityPoolUpdate, signedUpdate.proofs),
+                            address,
+                            lastSyncGlobalEpochProgress
+                          )
 
                       case swapUpdate: SwapUpdate =>
                         logger.info(s"Received swap update: $swapUpdate") >>

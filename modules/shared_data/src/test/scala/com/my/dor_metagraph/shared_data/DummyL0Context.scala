@@ -59,7 +59,9 @@ object DummyL0Context {
       def getLastCurrencySnapshotCombined: F[Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]] = ???
       def securityProvider: SecurityProvider[F] = ???
       def getCurrencyId: F[CurrencyId] = CurrencyId(metagraphAddress).pure[F]
-      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = ???
+      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = for {
+        globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
+      } yield Some(globalIncrementalSnapshot)
       def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
         globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
         globalSnapshotInfo = buildGlobalSnapshotInfo(allowSpends)

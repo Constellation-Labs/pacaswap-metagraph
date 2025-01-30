@@ -26,7 +26,7 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
@@ -40,6 +40,19 @@ import weaver.MutableIOSuite
 
 object StakingValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
+
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    )
+  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -64,7 +77,12 @@ object StakingValidationTest extends MutableIOSuite {
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
       PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(
@@ -104,17 +122,6 @@ object StakingValidationTest extends MutableIOSuite {
       100L.toPosLongUnsafe,
       pairToken.identifier,
       EpochProgress.MaxValue
-    )
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
     )
 
     for {
@@ -183,17 +190,6 @@ object StakingValidationTest extends MutableIOSuite {
           Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
         )
       )
-      config = ApplicationConfig(
-        "NodeValidators",
-        Dev,
-        Governance(
-          VotingWeightMultipliers(
-            PosDouble.MinValue,
-            PosDouble.MinValue,
-            PosDouble.MinValue
-          )
-        )
-      )
 
       validationService <- ValidationService.make[IO](config)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
@@ -220,18 +216,6 @@ object StakingValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
-    )
-
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -261,18 +245,22 @@ object StakingValidationTest extends MutableIOSuite {
       Map(
         OperationType.LiquidityPool -> liquidityPoolCalculatedState,
         OperationType.Staking -> StakingCalculatedState(
-          Map(
-            signerAddress -> Set(
-              StakingCalculatedStateAddress(
-                Hash.empty,
-                Hash.empty,
-                primaryToken,
-                pairToken,
-                SnapshotOrdinal.MinValue,
-                none
+          ConfirmedStakingCalculatedState(
+            Map(
+              signerAddress -> Set(
+                StakingCalculatedStateAddress(
+                  Hash.empty,
+                  Hash.empty,
+                  primaryToken,
+                  pairToken,
+                  SnapshotOrdinal.MinValue,
+                  none
+                )
               )
             )
-          )
+          ),
+          Set.empty,
+          Set.empty
         )
       )
     )
@@ -287,17 +275,6 @@ object StakingValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
-    )
 
     for {
       validationService <- ValidationService.make[IO](config)

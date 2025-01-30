@@ -9,14 +9,17 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.schema.balance.Amount
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
@@ -37,13 +40,14 @@ object LiquidityPoolCombiner {
   }
 
   def combineLiquidityPool[F[_]: Async: Hasher](
+    applicationConfig: ApplicationConfig,
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate],
-    signerAddress: Address
+    signerAddress: Address,
+    lastSyncGlobalEpochProgress: EpochProgress
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val liquidityPoolUpdate = signedLiquidityPoolUpdate.value
-    val liquidityPools = getLiquidityPools(acc.calculated)
-    val existentLiquidityPools = getLiquidityPoolCalculatedState(acc.calculated).liquidityPools
+    val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
     val updates = liquidityPoolUpdate :: acc.onChain.updates
     (
@@ -54,21 +58,22 @@ object LiquidityPoolCombiner {
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
           gsEpochProgress = lastSyncHashedGIS.epochProgress
-          updatedPendingCalculatedState =
+          updatedLiquidityPoolPending =
             if (liquidityPoolUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              acc.calculated.pendingUpdates - signedLiquidityPoolUpdate
-            } else if (!acc.calculated.pendingUpdates.contains(signedLiquidityPoolUpdate)) {
-              acc.calculated.pendingUpdates + signedLiquidityPoolUpdate
+              liquidityPoolCalculatedState.pending - signedLiquidityPoolUpdate
+            } else if (!liquidityPoolCalculatedState.pending.contains(signedLiquidityPoolUpdate)) {
+              liquidityPoolCalculatedState.pending + signedLiquidityPoolUpdate
             } else {
-              acc.calculated.pendingUpdates
+              liquidityPoolCalculatedState.pending
             }
 
-          newLiquidityPoolState = LiquidityPoolCalculatedState(existentLiquidityPools)
+          newLiquidityPoolState = liquidityPoolCalculatedState
+            .focus(_.pending)
+            .replace(updatedLiquidityPoolPending)
+
           updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
+            .focus(_.operations)
             .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
 
         } yield
           DataState(
@@ -79,36 +84,6 @@ object LiquidityPoolCombiner {
       case (Some(_), Some(_)) =>
         for {
           poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
-          amountA = liquidityPoolUpdate.tokenAAmount.value
-          amountB = liquidityPoolUpdate.tokenBAmount.value
-          poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
-
-          liquidityPool = LiquidityPool(
-            poolId,
-            TokenInformation(
-              liquidityPoolUpdate.tokenAId,
-              liquidityPoolUpdate.tokenAAmount.value.toTokenAmountFormat.toPosLongUnsafe
-            ),
-            TokenInformation(
-              liquidityPoolUpdate.tokenBId,
-              liquidityPoolUpdate.tokenBAmount.value.toTokenAmountFormat.toPosLongUnsafe
-            ),
-            signerAddress,
-            (amountA * amountB).toDouble,
-            PoolShares(
-              poolTotalShares,
-              Map(signerAddress -> ShareAmount(Amount(poolTotalShares)))
-            )
-          )
-
-          updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedLiquidityPoolUpdate
-          updatedLiquidityPoolCalculatedState = LiquidityPoolCalculatedState(liquidityPools.updated(poolId.value, liquidityPool))
-          updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
-            .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
-
           allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
             liquidityPoolUpdate.tokenAAllowSpend
           )
@@ -117,13 +92,114 @@ object LiquidityPoolCombiner {
             liquidityPoolUpdate.tokenBAllowSpend
           )
 
-          spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
-        } yield
-          DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState,
-            spendTransactions
+          maybeFailedUpdate = validateUpdate(
+            applicationConfig,
+            signedLiquidityPoolUpdate,
+            allowSpendTokenA.get,
+            allowSpendTokenB.get,
+            lastSyncGlobalEpochProgress
           )
+
+          response = maybeFailedUpdate match {
+            case Some(failedCalculatedState) =>
+              val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
+                .focus(_.failed)
+                .modify(_ + failedCalculatedState)
+              val updatedCalculatedState = acc.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
+
+              DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState
+              )
+            case None =>
+              val amountA = liquidityPoolUpdate.tokenAAmount.value
+              val amountB = liquidityPoolUpdate.tokenBAmount.value
+              val poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
+
+              val liquidityPool = LiquidityPool(
+                poolId,
+                TokenInformation(
+                  liquidityPoolUpdate.tokenAId,
+                  liquidityPoolUpdate.tokenAAmount.value.toTokenAmountFormat.toPosLongUnsafe
+                ),
+                TokenInformation(
+                  liquidityPoolUpdate.tokenBId,
+                  liquidityPoolUpdate.tokenBAmount.value.toTokenAmountFormat.toPosLongUnsafe
+                ),
+                signerAddress,
+                (amountA * amountB).toDouble,
+                PoolShares(
+                  poolTotalShares,
+                  Map(signerAddress -> ShareAmount(Amount(poolTotalShares)))
+                )
+              )
+
+              val updatedPendingCalculatedState = liquidityPoolCalculatedState.pending - signedLiquidityPoolUpdate
+              val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
+                .focus(_.confirmed.value)
+                .modify(liquidityPools => liquidityPools.updated(poolId.value, liquidityPool))
+                .focus(_.pending)
+                .replace(updatedPendingCalculatedState)
+
+              val updatedCalculatedState = acc.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
+              val spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
+
+              DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState,
+                spendTransactions
+              )
+          }
+        } yield response
+    }
+  }
+
+  def validateUpdate(
+    applicationConfig: ApplicationConfig,
+    signedUpdate: Signed[LiquidityPoolUpdate],
+    allowSpendTokenA: Hashed[AllowSpend],
+    allowSpendTokenB: Hashed[AllowSpend],
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Option[FailedCalculatedState] = {
+    val update = signedUpdate.value
+    if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
+      FailedCalculatedState(
+        AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
+        EpochProgress(
+          NonNegLong.unsafeFrom(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+        ),
+        signedUpdate
+      ).some
+    } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
+      FailedCalculatedState(
+        AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
+        EpochProgress(
+          NonNegLong.unsafeFrom(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+        ),
+        signedUpdate
+      ).some
+    } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+      FailedCalculatedState(
+        AllowSpendExpired(allowSpendTokenA.signed.value),
+        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+        signedUpdate
+      ).some
+    } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+      FailedCalculatedState(
+        AllowSpendExpired(allowSpendTokenB.signed.value),
+        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+        signedUpdate
+      ).some
+    } else {
+      None
     }
   }
 }

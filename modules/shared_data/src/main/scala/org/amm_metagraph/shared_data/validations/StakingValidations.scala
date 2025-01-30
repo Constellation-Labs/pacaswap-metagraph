@@ -39,7 +39,7 @@ object StakingValidations {
     )
     confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
       stakingUpdate,
-      stakingCalculatedState.confirmed.get(address)
+      stakingCalculatedState.confirmed.value.get(address)
     )
     pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
       stakingUpdate,
@@ -51,12 +51,12 @@ object StakingValidations {
     )
     tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
       stakingUpdate.tokenAAllowSpend,
-      state.pendingUpdates,
+      stakingCalculatedState.pending,
       state.spendTransactions
     )
     tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
       stakingUpdate.tokenBAllowSpend,
-      state.pendingUpdates,
+      stakingCalculatedState.pending,
       state.spendTransactions
     )
   } yield

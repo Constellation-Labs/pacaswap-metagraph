@@ -2,8 +2,10 @@ package org.amm_metagraph.shared_data.app
 
 import cats.effect.kernel.Sync
 
-import eu.timepit.refined.api.RefType
-import eu.timepit.refined.types.numeric.PosDouble
+import io.constellationnetwork.schema.epoch.EpochProgress
+
+import eu.timepit.refined.pureconfig._
+import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import pureconfig._
 import pureconfig.error.CannotConvert
@@ -19,12 +21,8 @@ object ApplicationConfigOps {
 }
 
 object ConfigReaders {
-  implicit val posDoubleReader: ConfigReader[PosDouble] = ConfigReader.fromString[PosDouble] { str =>
-    RefType.applyRef[PosDouble](str.toDouble) match {
-      case Right(value) => Right(value)
-      case Left(error)  => Left(CannotConvert(str, "PosDouble", error))
-    }
-  }
+  implicit val epochProgressReader: ConfigReader[EpochProgress] = ConfigReader[NonNegLong].map(EpochProgress(_))
+
   implicit val votingWeightMultipliersConfigReader: ConfigReader[ApplicationConfig.VotingWeightMultipliers] = deriveReader
   implicit val governanceConfigReader: ConfigReader[ApplicationConfig.Governance] = deriveReader
   implicit val configReader: ConfigReader[Environment] = ConfigReader.fromString[Environment] {

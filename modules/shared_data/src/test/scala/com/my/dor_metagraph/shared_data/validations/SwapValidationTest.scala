@@ -25,7 +25,7 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
@@ -38,6 +38,19 @@ import weaver.MutableIOSuite
 
 object SwapValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
+
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    )
+  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -61,7 +74,12 @@ object SwapValidationTest extends MutableIOSuite {
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
       PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(
@@ -105,18 +123,6 @@ object SwapValidationTest extends MutableIOSuite {
       none,
       none,
       none
-    )
-
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
     )
 
     for {
@@ -177,18 +183,6 @@ object SwapValidationTest extends MutableIOSuite {
         )
       )
 
-      config = ApplicationConfig(
-        "NodeValidators",
-        Dev,
-        Governance(
-          VotingWeightMultipliers(
-            PosDouble.MinValue,
-            PosDouble.MinValue,
-            PosDouble.MinValue
-          )
-        )
-      )
-
       validationService <- ValidationService.make[IO](config)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
@@ -218,17 +212,6 @@ object SwapValidationTest extends MutableIOSuite {
       none
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
-    )
 
     for {
       validationService <- ValidationService.make[IO](config)
@@ -275,17 +258,6 @@ object SwapValidationTest extends MutableIOSuite {
       Some(20000L)
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
-    val config = ApplicationConfig(
-      "NodeValidators",
-      Dev,
-      Governance(
-        VotingWeightMultipliers(
-          PosDouble.MinValue,
-          PosDouble.MinValue,
-          PosDouble.MinValue
-        )
-      )
-    )
 
     for {
       validationService <- ValidationService.make[IO](config)
