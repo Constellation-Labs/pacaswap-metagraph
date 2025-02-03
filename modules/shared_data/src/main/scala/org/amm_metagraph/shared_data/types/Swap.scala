@@ -32,9 +32,9 @@ object Swap {
   )
 
   def getSwapCalculatedState(
-    calculatedState: AmmCalculatedState
+    state: AmmCalculatedState
   ): SwapCalculatedState =
-    calculatedState.confirmedOperations
+    state.operations
       .get(OperationType.Swap)
       .collect { case t: SwapCalculatedState => t }
       .getOrElse(SwapCalculatedState.empty)
@@ -42,7 +42,7 @@ object Swap {
   def getPendingSwapUpdates(
     state: AmmCalculatedState
   ): Set[Signed[SwapUpdate]] =
-    state.pendingUpdates.collect {
+    getSwapCalculatedState(state).pending.collect {
       case pendingUpdate @ Signed(swapUpdate: SwapUpdate, _) =>
         Signed(swapUpdate, pendingUpdate.proofs)
     }

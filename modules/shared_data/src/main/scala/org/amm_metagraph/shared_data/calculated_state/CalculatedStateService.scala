@@ -37,12 +37,11 @@ object CalculatedStateService {
         ): F[Boolean] =
           stateRef.modify { currentState =>
             val currentCalculatedState = currentState.state
-            val updatedOperations = state.confirmedOperations.foldLeft(currentCalculatedState.confirmedOperations) {
+            val updatedOperations = state.operations.foldLeft(currentCalculatedState.operations) {
               case (acc, (address, value)) =>
                 acc.updated(address, value)
             }
 
-            val updatedPendingUpdates = currentCalculatedState.pendingUpdates ++ state.pendingUpdates
             val updatedSpendTransactions = currentCalculatedState.spendTransactions ++ state.spendTransactions
 
             (
@@ -50,7 +49,6 @@ object CalculatedStateService {
                 snapshotOrdinal,
                 AmmCalculatedState(
                   updatedOperations,
-                  updatedPendingUpdates,
                   updatedSpendTransactions,
                   state.votingWeights,
                   state.allocations

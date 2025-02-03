@@ -1,8 +1,11 @@
 package org.amm_metagraph.shared_data.app
 
+import io.constellationnetwork.schema.epoch.EpochProgress
+
 import eu.timepit.refined.types.numeric.PosDouble
 
 case class ApplicationConfig(
+  failedOperationsExpirationEpochProgresses: EpochProgress,
   nodeValidatorsGovernanceAllocationId: String,
   environment: ApplicationConfig.Environment,
   governance: ApplicationConfig.Governance

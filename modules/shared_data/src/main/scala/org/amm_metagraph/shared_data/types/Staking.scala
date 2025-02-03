@@ -33,7 +33,7 @@ object Staking {
   def getStakingCalculatedState(
     calculatedState: AmmCalculatedState
   ): StakingCalculatedState =
-    calculatedState.confirmedOperations
+    calculatedState.operations
       .get(OperationType.Staking)
       .collect { case t: StakingCalculatedState => t }
       .getOrElse(StakingCalculatedState.empty)
@@ -41,7 +41,7 @@ object Staking {
   def getPendingStakeUpdates(
     state: AmmCalculatedState
   ): Set[Signed[StakingUpdate]] =
-    state.pendingUpdates.collect {
+    getStakingCalculatedState(state).pending.collect {
       case pendingUpdate @ Signed(stakingUpdate: StakingUpdate, _) =>
         Signed(stakingUpdate, pendingUpdate.proofs)
     }

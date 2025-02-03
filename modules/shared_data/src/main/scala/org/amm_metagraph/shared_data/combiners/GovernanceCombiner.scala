@@ -102,7 +102,7 @@ object GovernanceCombiner {
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("GovernanceCombiner")
 
-    val liquidityPools = getLiquidityPoolCalculatedState(acc.calculated).liquidityPools
+    val liquidityPools = getLiquidityPoolCalculatedState(acc.calculated).confirmed.value
 
     RewardAllocationVoteReference.of(signedRewardAllocationVoteUpdate).flatMap { reference =>
       val allocationsSum = signedRewardAllocationVoteUpdate.allocations.map { case (_, weight) => weight.value }.sum

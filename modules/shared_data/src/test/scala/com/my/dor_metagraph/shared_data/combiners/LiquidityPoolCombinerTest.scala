@@ -20,18 +20,37 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.dor_metagraph.shared_data.combiners.StakingCombinerTest.buildLiquidityPoolCalculatedState
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool.buildLiquidityPoolUniqueIdentifier
+import org.amm_metagraph.shared_data.types.LiquidityPool.{TokenInformation, buildLiquidityPoolUniqueIdentifier}
+import org.amm_metagraph.shared_data.types.States.OperationType.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
 
 object LiquidityPoolCombinerTest extends MutableIOSuite {
 
   type Res = (Hasher[IO], SecurityProvider[IO])
+
+  private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    )
+  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -79,7 +98,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MinValue),
+        SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -123,15 +142,17 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
 
       liquidityPoolResponse <- combineLiquidityPool[IO](
+        config,
         state,
         liquidityPoolUpdate,
-        ownerAddress
+        ownerAddress,
+        EpochProgress.MinValue
       )
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
       updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
@@ -162,7 +183,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MinValue),
+        SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -206,16 +227,18 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
 
       liquidityPoolResponse <- combineLiquidityPool[IO](
+        config,
         state,
         liquidityPoolUpdate,
-        ownerAddress
+        ownerAddress,
+        EpochProgress.MinValue
       )
 
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
       updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId.value)
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId.value)
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
@@ -225,5 +248,185 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
         expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value)
+  }
+
+  test("Return failed due staking more than allowSpend") { implicit res =>
+    implicit val (h, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong(1)),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong(1)),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          pairToken.identifier,
+          primaryToken.amount,
+          pairToken.amount,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+      liquidityPoolResponse <- combineLiquidityPool[IO](
+        config,
+        state,
+        liquidityPoolUpdate,
+        ownerAddress,
+        futureEpoch
+      )
+      liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        liquidityPoolCalculatedState.failed.toList.length === 1,
+        liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        liquidityPoolCalculatedState.failed.toList.head.reason == AmountGreaterThanAllowSpendLimit(allowSpendTokenA)
+      )
+  }
+
+  test("Return expired epoch progress when update exceeds allowSpend limit") { implicit res =>
+    implicit val (h, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          pairToken.identifier,
+          primaryToken.amount,
+          pairToken.amount,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+      liquidityPoolResponse <- combineLiquidityPool[IO](
+        config,
+        state,
+        liquidityPoolUpdate,
+        ownerAddress,
+        futureEpoch
+      )
+      liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        liquidityPoolCalculatedState.failed.toList.length === 1,
+        liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        liquidityPoolCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
+      )
   }
 }

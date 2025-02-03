@@ -32,8 +32,10 @@ object refined {
     def toNonNegLongUnsafe: NonNegLong =
       NonNegLong.unsafeFrom(value)
   }
+
   implicit class NonNegIntOps(value: Int) {
     def toNonNegIntUnsafe: NonNegInt =
       NonNegInt.unsafeFrom(value)
   }
+
 }

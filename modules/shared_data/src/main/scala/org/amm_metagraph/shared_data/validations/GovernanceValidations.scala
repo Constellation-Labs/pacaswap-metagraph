@@ -115,7 +115,7 @@ object GovernanceValidations {
     liquidityPools: LiquidityPoolCalculatedState
   ): DataApplicationValidationErrorOr[Unit] = {
     val allocationIds = rewardAllocationVoteUpdate.allocations.map { case (id, _) => id }
-    val liquidityPoolIds = liquidityPools.liquidityPools.keySet
+    val liquidityPoolIds = liquidityPools.confirmed.value.keySet
 
     InvalidAllocationId.whenA(
       allocationIds.exists(id => !liquidityPoolIds.contains(id) && id != applicationConfig.nodeValidatorsGovernanceAllocationId)

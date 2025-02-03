@@ -51,16 +51,16 @@ object LiquidityPool {
   )
 
   def getLiquidityPools(state: AmmCalculatedState): Map[String, LiquidityPool] =
-    state.confirmedOperations.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
-      case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.liquidityPools
+    state.operations.get(OperationType.LiquidityPool).fold(Map.empty[String, LiquidityPool]) {
+      case liquidityPoolsCalculatedState: LiquidityPoolCalculatedState => liquidityPoolsCalculatedState.confirmed.value
       case _                                                           => Map.empty
     }
 
   def getLiquidityPoolCalculatedState(
     calculatedState: AmmCalculatedState
   ): LiquidityPoolCalculatedState =
-    calculatedState.confirmedOperations
-      .get(OperationType.Staking)
+    calculatedState.operations
+      .get(OperationType.LiquidityPool)
       .collect { case t: LiquidityPoolCalculatedState => t }
       .getOrElse(LiquidityPoolCalculatedState.empty)
 
@@ -87,7 +87,7 @@ object LiquidityPool {
   def getPendingLiquidityPoolUpdates(
     state: AmmCalculatedState
   ): Set[Signed[LiquidityPoolUpdate]] =
-    state.pendingUpdates.collect {
+    getLiquidityPoolCalculatedState(state).pending.collect {
       case pendingUpdate @ Signed(liquidityPoolUpdate: LiquidityPoolUpdate, _) =>
         Signed(liquidityPoolUpdate, pendingUpdate.proofs)
     }

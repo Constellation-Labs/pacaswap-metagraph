@@ -10,6 +10,7 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.balance.Amount
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
@@ -17,6 +18,7 @@ import io.constellationnetwork.security.{Hashed, Hasher}
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
@@ -46,19 +48,20 @@ object StakingCombiner {
       (liquidityPool.tokenB, liquidityPool.tokenA)
     }
 
-    val currentPrimaryTokenAmount = primaryToken.amount.value.fromTokenAmountFormat
-    val currentPairTokenAmount = pairToken.amount.value.fromTokenAmountFormat
+    val currentPrimaryTokenAmount = primaryToken.amount.value
+    val currentPairTokenAmount = pairToken.amount.value
 
     val incomingPrimaryAmount = stakingUpdate.tokenAAmount.value
-    val incomingPairAmount = (incomingPrimaryAmount * currentPairTokenAmount) / currentPrimaryTokenAmount // Maintain invariant
+    val incomingPairAmount =
+      (BigDecimal(incomingPrimaryAmount) * BigDecimal(currentPairTokenAmount)) / BigDecimal(currentPrimaryTokenAmount) // Maintain invariant
 
     val relativeDepositIncrease = incomingPrimaryAmount.toDouble / (currentPrimaryTokenAmount + incomingPrimaryAmount)
-    val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value.fromTokenAmountFormat
+    val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
 
     UpdatedTokenInformation(
-      primaryToken.copy(amount = incomingPrimaryAmount.toTokenAmountFormat.toPosLongUnsafe),
-      pairToken.copy(amount = incomingPairAmount.toTokenAmountFormat.toPosLongUnsafe),
-      newlyIssuedShares.toTokenAmountFormat
+      primaryToken.copy(amount = incomingPrimaryAmount.toPosLongUnsafe),
+      pairToken.copy(amount = incomingPairAmount.toLong.toPosLongUnsafe),
+      newlyIssuedShares.toLong
     )
   }
 
@@ -105,15 +108,15 @@ object StakingCombiner {
   }
 
   def combineStaking[F[_]: Async: Hasher](
+    applicationConfig: ApplicationConfig,
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedStakingUpdate: Signed[StakingUpdate],
     signerAddress: Address,
-    currentSnapshotOrdinal: SnapshotOrdinal
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    lastSyncGlobalEpochProgress: EpochProgress
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val stakingUpdate = signedStakingUpdate.value
-
-    val confirmedStaking = getStakingCalculatedState(acc.calculated).confirmed
-
+    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
     val updates = stakingUpdate :: acc.onChain.updates
 
     (
@@ -126,19 +129,20 @@ object StakingCombiner {
           gsEpochProgress = lastSyncHashedGIS.epochProgress
           updatedPendingCalculatedState =
             if (stakingUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              acc.calculated.pendingUpdates - signedStakingUpdate
-            } else if (!acc.calculated.pendingUpdates.contains(signedStakingUpdate)) {
-              acc.calculated.pendingUpdates + signedStakingUpdate
+              stakingCalculatedState.pending - signedStakingUpdate
+            } else if (!stakingCalculatedState.pending.contains(signedStakingUpdate)) {
+              stakingCalculatedState.pending + signedStakingUpdate
             } else {
-              acc.calculated.pendingUpdates
+              stakingCalculatedState.pending
             }
 
-          newStakingState = StakingCalculatedState(confirmedStaking)
-          updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
-            .modify(_.updated(OperationType.Staking, newStakingState))
-            .focus(_.pendingUpdates)
+          newStakingState = stakingCalculatedState
+            .focus(_.pending)
             .replace(updatedPendingCalculatedState)
+
+          updatedCalculatedState = acc.calculated
+            .focus(_.operations)
+            .modify(_.updated(OperationType.Staking, newStakingState))
 
         } yield
           DataState(
@@ -147,9 +151,9 @@ object StakingCombiner {
           )
 
       case (Some(_), Some(_)) =>
-        val liquidityPoolsCalculatedState = getLiquidityPools(acc.calculated)
+        val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
-        val maybeLastStakingInfo = confirmedStaking.get(signerAddress) match {
+        val maybeLastStakingInfo = stakingCalculatedState.confirmed.value.get(signerAddress) match {
           case Some(stakingState: StakingCalculatedStateAddress) =>
             StakingCalculatedStateLastReference(
               stakingState.tokenAAllowSpend,
@@ -163,38 +167,6 @@ object StakingCombiner {
         }
 
         for {
-          poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
-          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
-          updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
-          liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
-
-          stakingCalculatedStateAddress = StakingCalculatedStateAddress(
-            stakingUpdate.tokenAAllowSpend,
-            stakingUpdate.tokenBAllowSpend,
-            updatedTokenInformation.primaryTokenInformation,
-            updatedTokenInformation.pairTokenInformation,
-            currentSnapshotOrdinal,
-            maybeLastStakingInfo
-          )
-
-          updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedStakingUpdate
-          updatedStakingCalculatedState = StakingCalculatedState(
-            confirmedStaking.updatedWith(signerAddress) {
-              case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
-              case None                 => Some(Set(stakingCalculatedStateAddress))
-            }
-          )
-
-          updatedLiquidityPool = LiquidityPoolCalculatedState(liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated))
-
-          updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
-            .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
-            .focus(_.confirmedOperations)
-            .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
-
           allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
             stakingUpdate.tokenAAllowSpend
           )
@@ -203,14 +175,127 @@ object StakingCombiner {
             stakingUpdate.tokenBAllowSpend
           )
 
-          spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
-
-        } yield
-          DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState,
-            spendTransactions
+          poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+          updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
+          maybeFailedUpdate = validateUpdate(
+            applicationConfig,
+            signedStakingUpdate,
+            updatedTokenInformation,
+            allowSpendTokenA.get,
+            allowSpendTokenB.get,
+            lastSyncGlobalEpochProgress
           )
+          response = maybeFailedUpdate match {
+            case Some(failedCalculatedState) =>
+              val updatedStakingCalculatedState = stakingCalculatedState
+                .focus(_.failed)
+                .modify(_ + failedCalculatedState)
+              val updatedCalculatedState = acc.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+
+              DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState
+              )
+
+            case None =>
+              val liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
+              val stakingCalculatedStateAddress =
+                StakingCalculatedStateAddress(
+                  stakingUpdate.tokenAAllowSpend,
+                  stakingUpdate.tokenBAllowSpend,
+                  updatedTokenInformation.primaryTokenInformation,
+                  updatedTokenInformation.pairTokenInformation,
+                  currentSnapshotOrdinal,
+                  maybeLastStakingInfo
+                )
+
+              val updatedPendingCalculatedState = stakingCalculatedState.pending - signedStakingUpdate
+
+              val updatedStakingCalculatedState =
+                stakingCalculatedState
+                  .focus(_.confirmed.value)
+                  .modify(current =>
+                    current.updatedWith(signerAddress) {
+                      case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
+                      case None                 => Some(Set(stakingCalculatedStateAddress))
+                    }
+                  )
+                  .focus(_.pending)
+                  .replace(updatedPendingCalculatedState)
+
+              val updatedLiquidityPool = liquidityPoolsCalculatedState
+                .focus(_.confirmed.value)
+                .modify(_.updated(poolId.value, liquidityPoolUpdated))
+
+              val updatedCalculatedState = acc.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
+
+              val spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
+
+              DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState,
+                spendTransactions
+              )
+          }
+        } yield response
+    }
+  }
+
+  def validateUpdate(
+    applicationConfig: ApplicationConfig,
+    signedUpdate: Signed[StakingUpdate],
+    tokenInformation: UpdatedTokenInformation,
+    allowSpendTokenA: Hashed[AllowSpend],
+    allowSpendTokenB: Hashed[AllowSpend],
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Option[FailedCalculatedState] = {
+    val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currency) {
+      (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
+    } else {
+      (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
+    }
+
+    if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
+      FailedCalculatedState(
+        AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
+        EpochProgress(
+          NonNegLong.unsafeFrom(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+        ),
+        signedUpdate
+      ).some
+    } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
+      FailedCalculatedState(
+        AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
+        EpochProgress(
+          NonNegLong.unsafeFrom(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+        ),
+        signedUpdate
+      ).some
+    } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+      FailedCalculatedState(
+        AllowSpendExpired(allowSpendTokenA.signed.value),
+        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+        signedUpdate
+      ).some
+    } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+      FailedCalculatedState(
+        AllowSpendExpired(allowSpendTokenB.signed.value),
+        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+        signedUpdate
+      ).some
+    } else {
+      None
     }
   }
 }

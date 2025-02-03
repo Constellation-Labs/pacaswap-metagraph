@@ -8,6 +8,7 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.DataAppl
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
+import org.amm_metagraph.shared_data.types.Swap.getSwapCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
 
@@ -33,10 +34,11 @@ object SwapValidations {
         swapUpdate,
         liquidityPoolsCalculatedState
       )
+      swapCalculatedState = getSwapCalculatedState(state)
       swapValidationsL1 <- swapValidationsL1(swapUpdate)
       allowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
         swapUpdate.allowSpendReference,
-        state.pendingUpdates,
+        swapCalculatedState.pending,
         state.spendTransactions
       )
     } yield

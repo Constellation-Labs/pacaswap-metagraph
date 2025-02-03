@@ -57,7 +57,12 @@ object SwapCombinerTest extends MutableIOSuite {
       tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
       PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(
@@ -141,18 +146,18 @@ object SwapCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed(ownerAddress).head
+      swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      addressSwapResponse = swapCalculatedState.confirmed.value(ownerAddress).head
 
       oldLiquidityPoolCalculatedState = state.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
+      oldLiquidityPool = oldLiquidityPoolCalculatedState.confirmed.value(poolId)
 
       updatedLiquidityPoolCalculatedState = swapResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId)
 
       swapSpendTransactions = swapResponse.sharedArtifacts.collect {
         case action: artifact.SpendAction => action
@@ -232,9 +237,9 @@ object SwapCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = swapResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      confirmedSwapResponse = swapCalculatedState.confirmed.get(ownerAddress)
-      pendingSwapResponse = swapResponse.calculated.pendingUpdates
+      swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      confirmedSwapResponse = swapCalculatedState.confirmed.value.get(ownerAddress)
+      pendingSwapResponse = swapCalculatedState.pending
       pendingSwapResponseValue = pendingSwapResponse.head.value.asInstanceOf[SwapUpdate]
 
     } yield
@@ -302,9 +307,9 @@ object SwapCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      swapCalculatedState = stakeResponse.calculated.confirmedOperations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      confirmedSwapResponse = swapCalculatedState.confirmed.get(ownerAddress)
-      pendingSwapResponse = stakeResponse.calculated.pendingUpdates
+      swapCalculatedState = stakeResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      confirmedSwapResponse = swapCalculatedState.confirmed.value.get(ownerAddress)
+      pendingSwapResponse = swapCalculatedState.pending
 
     } yield
       expect.eql(none, confirmedSwapResponse) &&

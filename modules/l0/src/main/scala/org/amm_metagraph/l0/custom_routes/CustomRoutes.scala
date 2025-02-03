@@ -94,7 +94,7 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
         .find(_.value.allowSpendReference === allowSpendHash)
         .map(buildPendingSwapResponse)
         .orElse {
-          swapCalculatedState.confirmed.values.flatten
+          swapCalculatedState.confirmed.value.values.flatten
             .find(_.allowSpendReference === allowSpendHash)
             .map(buildConfirmedSwapResponse)
         }

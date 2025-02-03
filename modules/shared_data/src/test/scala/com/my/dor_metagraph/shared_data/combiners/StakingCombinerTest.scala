@@ -24,17 +24,35 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
 
 object StakingCombinerTest extends MutableIOSuite {
 
   type Res = (Hasher[IO], SecurityProvider[IO])
+
+  private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    )
+  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -45,20 +63,32 @@ object StakingCombinerTest extends MutableIOSuite {
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
     tokenB: TokenInformation,
-    owner: Address
+    owner: Address,
+    additionalProvider: Option[(Address, ShareAmount)] = None
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = org.amm_metagraph.shared_data.types.LiquidityPool.PoolId(s"$primaryAddressAsString-$pairAddressAsString")
+    val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
+
+    val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
+    val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
+
+    val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
+
     val liquidityPool = LiquidityPool(
       poolId,
-      tokenA.copy(amount = tokenA.amount.value.toTokenAmountFormat.toPosLongUnsafe),
-      tokenB.copy(amount = tokenB.amount.value.toTokenAmountFormat.toPosLongUnsafe),
+      tokenA,
+      tokenB,
       owner,
       (tokenA.amount.value * tokenB.amount.value).toDouble,
-      PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
+      PoolShares(totalShares, shares)
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(
@@ -82,25 +112,37 @@ object StakingCombinerTest extends MutableIOSuite {
       )
     )
 
-  test("Test combining successfully when liquidity pool exists - single provider shares") { implicit res =>
+  test("Test successful staking - single provider") { implicit res =>
     implicit val (h, sp) = res
 
-    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
-    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
+
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MinValue),
+        SwapAmount(PosLong(100)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -143,74 +185,75 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       stakeResponse <- combineStaking[IO](
+        config,
         state,
         stakingUpdate,
         ownerAddress,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        EpochProgress.MinValue
       )
 
-      stakingCalculatedState = stakeResponse.calculated.confirmedOperations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
-      addressStakedResponse = stakingCalculatedState.confirmed(ownerAddress).head
-
-      oldLiquidityPoolCalculatedState = state.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+      oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
+      updatedLiquidityPool = stakeResponse.calculated
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
-
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
-        .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
+        .confirmed
+        .value(poolId)
 
       stakingSpendTransactions = stakeResponse.sharedArtifacts.collect {
-        case action: artifact.SpendAction => action
+        case action: artifact.SpendAction => action.output
+      }.collect {
+        case transaction: SpendTransaction => transaction
       }
-        .flatMap(action => List(action.input, action.output))
-        .collect {
-          case transaction: SpendTransaction => transaction
-        }
-      tokenASpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.exists(_ === signedAllowSpendA.hash))
-      tokenBSpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.exists(_ === signedAllowSpendB.hash))
 
     } yield
-      expect.eql(100L.toTokenAmountFormat, addressStakedResponse.tokenA.amount.value) &&
-        expect.eql(primaryToken.identifier.get, addressStakedResponse.tokenA.identifier.get) &&
-        expect.eql(50L.toTokenAmountFormat, addressStakedResponse.tokenB.amount.value) &&
-        expect.eql(pairToken.identifier.get, addressStakedResponse.tokenB.identifier.get) &&
-        expect.eql(100L.toTokenAmountFormat, oldLiquidityPool.tokenA.amount.value) &&
-        expect.eql(200L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(50L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
-        expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(5000d, oldLiquidityPool.k) &&
-        expect.eql(20000d, updatedLiquidityPool.k) &&
-        expect.eql(1.toTokenAmountFormat, oldLiquidityPool.poolShares.totalShares.value) &&
-        expect.eql(1.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
-        expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
-        expect.eql(1.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value) &&
-        expect.eql(allowSpendTokenA.amount.value.value, tokenASpendTransaction.get.amount.value.value) &&
-        expect.eql(allowSpendTokenB.amount.value.value, tokenBSpendTransaction.get.amount.value.value)
+      expect.all(
+        oldLiquidityPool.tokenA.amount.value === toFixedPoint(100.0),
+        oldLiquidityPool.tokenB.amount.value === toFixedPoint(50.0),
+        oldLiquidityPool.poolShares.totalShares.value === toFixedPoint(1),
+        oldLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1),
+        updatedLiquidityPool.tokenA.amount.value === toFixedPoint(200.0),
+        updatedLiquidityPool.tokenB.amount.value === toFixedPoint(100.0),
+        updatedLiquidityPool.poolShares.totalShares.value === toFixedPoint(1.5),
+        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.5),
+        stakingSpendTransactions.size === 2
+      )
   }
 
-  test("Test combining successfully when liquidity pool exists - multiple provider shares") { implicit res =>
+  test("Test successful staking - multiple providers") { implicit res =>
     implicit val (h, sp) = res
 
-    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
-    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val poolOwnerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
-    val stakingAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Kc")
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, poolOwnerAddress)
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val secondProviderAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Kt")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
+      primaryToken,
+      pairToken,
+      ownerAddress,
+      Some(secondProviderAddress -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
+    )
+
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
+
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MinValue),
+        SwapAmount(PosLong(100)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -239,7 +282,7 @@ object StakingCombinerTest extends MutableIOSuite {
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
-          100L.toPosLongUnsafe,
+          PosLong.unsafeFrom(toFixedPoint(100.0)),
           pairToken.identifier,
           EpochProgress.MaxValue
         )
@@ -253,53 +296,30 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       stakeResponse <- combineStaking[IO](
+        config,
         state,
         stakingUpdate,
-        stakingAddress,
-        SnapshotOrdinal.MinValue
+        ownerAddress,
+        SnapshotOrdinal.MinValue,
+        EpochProgress.MinValue
       )
 
-      stakingCalculatedState = stakeResponse.calculated.confirmedOperations(OperationType.Staking).asInstanceOf[StakingCalculatedState]
-      addressStakedResponse = stakingCalculatedState.confirmed(stakingAddress).head
-
-      oldLiquidityPoolCalculatedState = state.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+      oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
+      updatedLiquidityPool = stakeResponse.calculated
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-      oldLiquidityPool = oldLiquidityPoolCalculatedState.liquidityPools(poolId)
-
-      updatedLiquidityPoolCalculatedState = stakeResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
-        .asInstanceOf[LiquidityPoolCalculatedState]
-      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.liquidityPools(poolId)
-
-      stakingSpendTransactions = stakeResponse.sharedArtifacts.collect {
-        case action: artifact.SpendAction => action
-      }
-        .flatMap(action => List(action.input, action.output))
-        .collect {
-          case transaction: SpendTransaction => transaction
-        }
-      tokenASpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.exists(_ === signedAllowSpendA.hash))
-      tokenBSpendTransaction = stakingSpendTransactions.find(_.allowSpendRef.exists(_ === signedAllowSpendB.hash))
+        .confirmed
+        .value(poolId)
 
     } yield
-      expect.eql(100L.toTokenAmountFormat, addressStakedResponse.tokenA.amount.value) &&
-        expect.eql(primaryToken.identifier.get, addressStakedResponse.tokenA.identifier.get) &&
-        expect.eql(50L.toTokenAmountFormat, addressStakedResponse.tokenB.amount.value) &&
-        expect.eql(pairToken.identifier.get, addressStakedResponse.tokenB.identifier.get) &&
-        expect.eql(100L.toTokenAmountFormat, oldLiquidityPool.tokenA.amount.value) &&
-        expect.eql(200L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
-        expect.eql(50L.toTokenAmountFormat, oldLiquidityPool.tokenB.amount.value) &&
-        expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenB.amount.value) &&
-        expect.eql(5000d, oldLiquidityPool.k) &&
-        expect.eql(20000d, updatedLiquidityPool.k) &&
-        expect.eql(1.toTokenAmountFormat, oldLiquidityPool.poolShares.totalShares.value) &&
-        expect.eql(1.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
-        expect.eql(2, updatedLiquidityPool.poolShares.addressShares.size) &&
-        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(poolOwnerAddress).value.value.value) &&
-        expect.eql(0.5.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(stakingAddress).value.value.value) &&
-        expect.eql(allowSpendTokenA.amount.value.value, tokenASpendTransaction.get.amount.value.value) &&
-        expect.eql(allowSpendTokenB.amount.value.value, tokenBSpendTransaction.get.amount.value.value)
+      expect.all(
+        oldLiquidityPool.poolShares.addressShares.size === 2,
+        oldLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.0),
+        oldLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0),
+        updatedLiquidityPool.poolShares.addressShares.size === 2,
+        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(2.0),
+        updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0)
+      )
   }
 
   test("Throws error if liquidity pool does not exists") { implicit res =>
@@ -360,10 +380,12 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       result <- combineStaking[IO](
+        config,
         state,
         stakingUpdate,
         ownerAddress,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        EpochProgress.MinValue
       ).attempt.map {
         case Left(e: IllegalStateException) =>
           expect(e.getMessage == "Liquidity Pool does not exist")
@@ -373,5 +395,187 @@ object StakingCombinerTest extends MutableIOSuite {
           failure("Expected exception was not thrown")
       }
     } yield result
+  }
+
+  test("Return failed due staking more than allowSpend") { implicit res =>
+    implicit val (h, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong(1)),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong(1)),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          100L.toPosLongUnsafe,
+          pairToken.identifier,
+          futureEpoch
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+
+      stakeResponse <- combineStaking[IO](
+        config,
+        state,
+        stakingUpdate,
+        ownerAddress,
+        SnapshotOrdinal.MinValue,
+        futureEpoch
+      )
+      stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
+    } yield
+      expect.all(
+        stakingCalculatedState.failed.toList.length === 1,
+        stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        stakingCalculatedState.failed.toList.head.reason == AmountGreaterThanAllowSpendLimit(allowSpendTokenA)
+      )
+  }
+
+  test("Return expired epoch progress when update exceeds allowSpend limit") { implicit res =>
+    implicit val (h, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong(100)),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MinValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          100L.toPosLongUnsafe,
+          pairToken.identifier,
+          futureEpoch
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap(
+          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
+        )
+      )
+
+      stakeResponse <- combineStaking[IO](
+        config,
+        state,
+        stakingUpdate,
+        ownerAddress,
+        SnapshotOrdinal.MinValue,
+        futureEpoch
+      )
+      stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
+    } yield
+      expect.all(
+        stakingCalculatedState.failed.toList.length === 1,
+        stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        stakingCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
+      )
   }
 }
