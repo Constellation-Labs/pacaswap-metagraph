@@ -23,11 +23,7 @@ import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGloba
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.{
-  StakingCalculatedStateAddress,
-  StakingCalculatedStateLastReference,
-  getStakingCalculatedState
-}
+import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 
 object StakingCombiner {
@@ -153,19 +149,6 @@ object StakingCombiner {
       case (Some(_), Some(_)) =>
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
-        val maybeLastStakingInfo = stakingCalculatedState.confirmed.value.get(signerAddress) match {
-          case Some(stakingState: StakingCalculatedStateAddress) =>
-            StakingCalculatedStateLastReference(
-              stakingState.tokenAAllowSpend,
-              stakingState.tokenBAllowSpend,
-              stakingState.tokenA,
-              stakingState.tokenB,
-              stakingState.ordinal
-            ).some
-
-          case _ => none
-        }
-
         for {
           allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
             stakingUpdate.tokenAAllowSpend
@@ -177,7 +160,9 @@ object StakingCombiner {
 
           poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+
           updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
+
           maybeFailedUpdate = validateUpdate(
             applicationConfig,
             signedStakingUpdate,
@@ -186,6 +171,9 @@ object StakingCombiner {
             allowSpendTokenB.get,
             lastSyncGlobalEpochProgress
           )
+
+          stakingReference <- StakingReference.of(signedStakingUpdate)
+
           response = maybeFailedUpdate match {
             case Some(failedCalculatedState) =>
               val updatedStakingCalculatedState = stakingCalculatedState
@@ -208,8 +196,8 @@ object StakingCombiner {
                   stakingUpdate.tokenBAllowSpend,
                   updatedTokenInformation.primaryTokenInformation,
                   updatedTokenInformation.pairTokenInformation,
-                  currentSnapshotOrdinal,
-                  maybeLastStakingInfo
+                  stakingReference,
+                  StakingOrdinal(currentSnapshotOrdinal.value)
                 )
 
               val updatedPendingCalculatedState = stakingCalculatedState.pending - signedStakingUpdate

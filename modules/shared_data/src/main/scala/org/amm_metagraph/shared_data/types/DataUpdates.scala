@@ -12,6 +12,7 @@ import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{PoolId, ShareAmount}
+import org.amm_metagraph.shared_data.types.Staking.{StakingOrdinal, StakingReference}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
 
 object DataUpdates {
@@ -36,8 +37,11 @@ object DataUpdates {
     tokenAId: Option[CurrencyId],
     tokenAAmount: PosLong,
     tokenBId: Option[CurrencyId],
+    parent: StakingReference,
     maxValidGsEpochProgress: EpochProgress
-  ) extends AmmUpdate
+  ) extends AmmUpdate {
+    val ordinal: StakingOrdinal = parent.ordinal.next
+  }
 
   @derive(decoder, encoder)
   case class WithdrawalUpdate(

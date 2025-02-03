@@ -70,6 +70,10 @@ object Errors {
     val message = "Different allow spend destination"
   }
 
+  case object StakingOrdinalLowerThanLastConfirmed extends DataApplicationValidationError {
+    val message: String = "Staking ordinal lower than last confirmed"
+  }
+
   case object WithdrawalInsufficientShares extends DataApplicationValidationError {
     val message: String = "Insufficient shares for withdrawal"
   }

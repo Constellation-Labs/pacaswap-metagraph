@@ -3,9 +3,9 @@ package com.my.dor_metagraph.shared_data.validations
 import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+
+import scala.collection.immutable.SortedMap
+
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
@@ -18,6 +18,10 @@ import io.constellationnetwork.security._
 import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
+
+import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.refined.PosLongOps
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -26,8 +30,6 @@ import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolDoesNotExists, WithdrawalAlreadyPending, WithdrawalInsufficientShares}
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 import weaver.MutableIOSuite
-
-import scala.collection.immutable.SortedMap
 
 object WithdrawalValidationsTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
@@ -63,7 +65,12 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(totalShares, shares)
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(
@@ -240,8 +247,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, signerAddress)
 
       ammCalculatedState = AmmCalculatedState(
-        Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState),
-        pendingUpdates = Set(withdrawalUpdate)
+        Map(
+          OperationType.LiquidityPool -> liquidityPoolCalculatedState,
+          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(withdrawalUpdate))
+        )
       )
 
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)

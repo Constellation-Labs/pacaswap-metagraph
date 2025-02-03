@@ -13,13 +13,7 @@ object Dependencies {
       if (artifact.isEmpty) "decline" else s"decline-$artifact"
     } % V.decline
   object Libraries {
-    val tessellationKernel = tessellation("kernel")
-    val tessellationDAGL1 = tessellation("dag-l1")
-    val tessellationNodeShared = tessellation("node-shared")
-    val tessellationShared = tessellation("shared")
-    val tessellationKeytool = tessellation("keytool")
-    val tessellationCurrencyL0 = tessellation("currency-l0")
-    val tessellationCurrencyL1 = tessellation("currency-l1")
+    val tessellationSdk = tessellation("sdk")
     val declineCore = decline()
     val declineEffect = decline("effect")
     val declineRefined = decline("refined")

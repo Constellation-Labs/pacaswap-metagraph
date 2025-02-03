@@ -23,6 +23,7 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, getWithdrawalCalculatedState}
 
 object WithdrawalCombiner {
   private case class WithdrawalTokenAmounts(
@@ -115,18 +116,18 @@ object WithdrawalCombiner {
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val withdrawalUpdate = signedWithdrawalUpdate.value
     val updates = withdrawalUpdate :: acc.onChain.updates
+    val withdrawalCalculatedState = getWithdrawalCalculatedState(acc.calculated)
 
     for {
       lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
       gsEpochProgress = lastSyncHashedGIS.epochProgress
 
-      liquidityPoolsCalculatedState = getLiquidityPools(acc.calculated)
+      liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
-      liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState, poolId)
+      liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
 
       result <- calculateWithdrawalAmounts(liquidityPool, withdrawalUpdate.shareToWithdraw, signerAddress) match {
         case Some(withdrawalAmounts) =>
-          println(withdrawalAmounts)
           val liquidityPoolUpdated = updateLiquidityPool(
             liquidityPool,
             signerAddress,
@@ -134,16 +135,32 @@ object WithdrawalCombiner {
             withdrawalAmounts
           )
 
-          val updatedPendingCalculatedState = acc.calculated.pendingUpdates - signedWithdrawalUpdate
-          val updatedLiquidityPool = LiquidityPoolCalculatedState(
-            liquidityPoolsCalculatedState.updated(poolId.value, liquidityPoolUpdated)
-          )
+          val withdrawalCalculatedStateAddress =
+            WithdrawalCalculatedStateAddress(
+              withdrawalUpdate.tokenAId,
+              withdrawalUpdate.tokenBId,
+              withdrawalUpdate.shareToWithdraw,
+              withdrawalUpdate.parent,
+              withdrawalUpdate.ordinal
+            )
 
-          val updatedCalculatedState = acc.calculated
-            .focus(_.confirmedOperations)
-            .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
+          val updatedPendingCalculatedState = withdrawalCalculatedState.pending - signedWithdrawalUpdate
+          val newWithdrawalState =
+            withdrawalCalculatedState
+              .focus(_.confirmed.value)
+              .modify(current =>
+                current.updatedWith(signerAddress) {
+                  case Some(confirmedWithdrawals) => Some(confirmedWithdrawals + withdrawalCalculatedStateAddress)
+                  case None                       => Some(Set(withdrawalCalculatedStateAddress))
+                }
+              )
+              .focus(_.pending)
+              .replace(updatedPendingCalculatedState)
+
+          val newLiquidityPoolState =
+            liquidityPoolsCalculatedState
+              .focus(_.confirmed.value)
+              .modify(_.updated(poolId.value, liquidityPoolUpdated))
 
           val spendTransactions = generateSpendTransactions(
             withdrawalUpdate.tokenAId,
@@ -153,6 +170,12 @@ object WithdrawalCombiner {
             signerAddress
           )
 
+          val updatedCalculatedState = acc.calculated
+            .focus(_.operations)
+            .modify(_.updated(OperationType.Withdrawal, newWithdrawalState))
+            .focus(_.operations)
+            .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+
           DataState[AmmOnChainState, AmmCalculatedState](
             AmmOnChainState(updates),
             updatedCalculatedState,
@@ -160,23 +183,28 @@ object WithdrawalCombiner {
           ).pure[F]
 
         case None =>
-          val updatedPendingCalculatedState =
+          val updatedPendingWithdrawalsCalculatedState =
             if (withdrawalUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              acc.calculated.pendingUpdates - signedWithdrawalUpdate
-            } else if (!acc.calculated.pendingUpdates.contains(signedWithdrawalUpdate)) {
-              acc.calculated.pendingUpdates + signedWithdrawalUpdate
+              withdrawalCalculatedState.pending - signedWithdrawalUpdate
+            } else if (!withdrawalCalculatedState.pending.contains(signedWithdrawalUpdate)) {
+              withdrawalCalculatedState.pending + signedWithdrawalUpdate
             } else {
-              acc.calculated.pendingUpdates
+              withdrawalCalculatedState.pending
             }
 
-          val updatedCalculatedState = acc.calculated
-            .focus(_.pendingUpdates)
-            .replace(updatedPendingCalculatedState)
+          val newWithdrawalState = withdrawalCalculatedState
+            .focus(_.pending)
+            .replace(updatedPendingWithdrawalsCalculatedState)
 
-          DataState[AmmOnChainState, AmmCalculatedState](
+          val updatedCalculatedState = acc.calculated
+            .focus(_.operations)
+            .modify(_.updated(OperationType.Withdrawal, newWithdrawalState))
+
+          DataState(
             AmmOnChainState(updates),
             updatedCalculatedState
           ).pure[F]
+
       }
     } yield result
   }

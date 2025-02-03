@@ -23,13 +23,13 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
-import io.estatico.newtype.ops._
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineWithdrawal
 import org.amm_metagraph.shared_data.refined.PosLongOps
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import weaver.MutableIOSuite
@@ -69,7 +69,12 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(totalShares, shares)
     )
-    (poolId.value, LiquidityPoolCalculatedState(Map(poolId.value -> liquidityPool)))
+    (
+      poolId.value,
+      LiquidityPoolCalculatedState.empty.copy(confirmed =
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+      )
+    )
   }
 
   def getFakeSignedUpdate(update: WithdrawalUpdate): Signed[WithdrawalUpdate] =
@@ -136,11 +141,11 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue
       )
 
-      oldLiquidityPool = liquidityPoolCalculatedState.liquidityPools(poolId)
       updatedLiquidityPool = withdrawalResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-        .liquidityPools(poolId)
+        .confirmed
+        .value(poolId)
 
       withdrawalSpendTransactions = withdrawalResponse.sharedArtifacts.collect {
         case action: artifact.SpendAction => action.output
@@ -211,9 +216,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-        .liquidityPools(poolId)
+        .confirmed
+        .value(poolId)
 
     } yield
       expect.all(
@@ -350,9 +356,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
-        .confirmedOperations(OperationType.LiquidityPool)
+        .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
-        .liquidityPools(poolId)
+        .confirmed
+        .value(poolId)
 
     } yield
       expect.all(
@@ -455,6 +462,6 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         SnapshotOrdinal(NonNegLong.MaxValue) // Set to maximum to ensure epoch progress validation fails
       )
 
-    } yield expect(result.calculated.pendingUpdates.isEmpty)
+    } yield expect(result.calculated.operations(Withdrawal).pending.isEmpty)
   }
 }

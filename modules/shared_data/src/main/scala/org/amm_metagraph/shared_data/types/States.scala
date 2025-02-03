@@ -54,6 +54,15 @@ object States {
   }
 
   @derive(encoder, decoder)
+  case class ConfirmedWithdrawalCalculatedState(
+    value: Map[Address, Set[WithdrawalCalculatedStateAddress]]
+  ) extends ConfirmedCalculatedState
+
+  object ConfirmedWithdrawalCalculatedState {
+    def empty: ConfirmedWithdrawalCalculatedState = ConfirmedWithdrawalCalculatedState(Map.empty)
+  }
+
+  @derive(encoder, decoder)
   case class ConfirmedSwapCalculatedState(
     value: Map[Address, Set[SwapCalculatedStateAddress]]
   ) extends ConfirmedCalculatedState
@@ -101,11 +110,17 @@ object States {
 
   @derive(encoder, decoder)
   case class WithdrawalCalculatedState(
-    confirmed: Map[Address, Set[WithdrawalCalculatedStateAddress]]
+    confirmed: ConfirmedWithdrawalCalculatedState,
+    pending: Set[Signed[WithdrawalUpdate]],
+    failed: Set[FailedCalculatedState]
   ) extends AmmOffChainState
 
   object WithdrawalCalculatedState {
-    def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(Map.empty)
+    def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(
+      ConfirmedWithdrawalCalculatedState.empty,
+      Set.empty,
+      Set.empty
+    )
   }
 
   @derive(encoder, decoder)

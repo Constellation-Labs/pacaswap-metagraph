@@ -2,18 +2,19 @@ package org.amm_metagraph.shared_data.validations
 
 import cats.effect.Async
 import cats.syntax.all._
+
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
-import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
-import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
-import org.amm_metagraph.shared_data.validations.Errors._
+
 import eu.timepit.refined.auto._
+import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.validations.Errors._
 
 object WithdrawalValidations {
   def withdrawalValidationsL1[F[_]: Async: Hasher](
@@ -27,6 +28,7 @@ object WithdrawalValidations {
   )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
     address <- signedWithdrawalUpdate.proofs.head.id.toAddress
     withdrawalUpdate = signedWithdrawalUpdate.value
+    withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
 
@@ -43,10 +45,10 @@ object WithdrawalValidations {
 
     withdrawalNotPending <- validateIfWithdrawalNotPending(
       signedWithdrawalUpdate,
-      state.pendingUpdates
+      withdrawalCalculatedState.pending
     )
 
-    lastRef = lastRefValidation(signedWithdrawalUpdate, state, address)
+    lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, address)
 
   } yield
     liquidityPoolExists
@@ -82,16 +84,14 @@ object WithdrawalValidations {
   } yield result
 
   private def lastRefValidation(
+    withdrawalCalculatedState: WithdrawalCalculatedState,
     signedWithdrawal: Signed[WithdrawalUpdate],
-    state: AmmCalculatedState,
     address: Address
   ): DataApplicationValidationErrorOr[Unit] = {
-    val lastConfirmedOrdinal: Option[WithdrawalOrdinal] = state.confirmedOperations
-      .get(Withdrawal)
-      .collect { case w: WithdrawalCalculatedState => w.confirmed }
-      .flatMap(_.get(address))
-      .flatMap(_.maxByOption(_.ordinal))
-      .map(_.withdrawalOrdinal)
+    val lastConfirmedOrdinal: Option[WithdrawalOrdinal] = withdrawalCalculatedState.confirmed.value
+      .get(address)
+      .flatMap(_.maxByOption(_.ordinal.value.value))
+      .map(_.ordinal)
 
     lastConfirmedOrdinal match {
       case Some(last) if last.value >= signedWithdrawal.ordinal.value => WithdrawalOrdinalLowerThanLastConfirmed.invalid
@@ -101,7 +101,7 @@ object WithdrawalValidations {
 
   private def validateIfWithdrawalNotPending[F[_]: Async: Hasher](
     signedWithdrawal: Signed[WithdrawalUpdate],
-    pendingUpdates: Set[Signed[AmmUpdate]]
+    pendingUpdates: Set[Signed[WithdrawalUpdate]]
   ): F[DataApplicationValidationErrorOr[Unit]] =
     for {
       updateHash <- signedWithdrawal.toHashed.map(_.hash)

@@ -5,13 +5,15 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendLastSyncGlobalSnapshotState
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
-import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, getPendingStakeUpdates, getStakingCalculatedState}
+import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
@@ -59,6 +61,9 @@ object StakingValidations {
       stakingCalculatedState.pending,
       state.spendTransactions
     )
+
+    lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, address)
+
   } yield
     validAllowSpends
       .productR(confirmedTransactionAlreadyExists)
@@ -66,6 +71,7 @@ object StakingValidations {
       .productR(liquidityPoolExists)
       .productR(tokenAAllowSpendIsDuplicated)
       .productR(tokenBAllowSpendIsDuplicated)
+      .productR(lastRef)
 
   private def validateIfConfirmedTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,
@@ -106,4 +112,20 @@ object StakingValidations {
     } else {
       valid
     }
+
+  private def lastRefValidation(
+    stakingCalculatedState: StakingCalculatedState,
+    signedStaking: Signed[StakingUpdate],
+    address: Address
+  ): DataApplicationValidationErrorOr[Unit] = {
+    val lastConfirmedOrdinal: Option[StakingOrdinal] = stakingCalculatedState.confirmed.value
+      .get(address)
+      .flatMap(_.maxByOption(_.ordinal.value.value))
+      .map(_.ordinal)
+
+    lastConfirmedOrdinal match {
+      case Some(last) if last.value >= signedStaking.ordinal.value => StakingOrdinalLowerThanLastConfirmed.invalid
+      case _                                                       => valid
+    }
+  }
 }
