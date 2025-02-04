@@ -4,11 +4,32 @@ import cats.syntax.all._
 
 import scala.collection.immutable.SortedSet
 
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
-import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hashed
 
 object SpendTransactions {
+
+  def generateSpendActionWithoutInput(
+    token: Option[CurrencyId],
+    amount: SwapAmount,
+    destination: Address
+  ): SpendAction =
+    SpendAction(
+      SpendTransaction(
+        none,
+        token,
+        amount,
+        destination
+      ),
+      SpendTransaction(
+        none,
+        token,
+        amount,
+        destination
+      )
+    )
 
   def generateSpendAction(
     hashedAllowSpend: Hashed[AllowSpend]

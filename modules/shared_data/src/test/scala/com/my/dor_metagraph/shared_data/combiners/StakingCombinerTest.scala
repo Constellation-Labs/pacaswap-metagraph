@@ -32,6 +32,7 @@ import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
@@ -80,7 +81,7 @@ object StakingCombinerTest extends MutableIOSuite {
       tokenA,
       tokenB,
       owner,
-      (tokenA.amount.value * tokenB.amount.value).toDouble,
+      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(totalShares, shares)
     )
     (
@@ -142,7 +143,7 @@ object StakingCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong(100)),
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -152,7 +153,7 @@ object StakingCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MaxValue),
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -171,8 +172,9 @@ object StakingCombinerTest extends MutableIOSuite {
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
-          100L.toPosLongUnsafe,
+          PosLong.unsafeFrom(toFixedPoint(100.0)),
           pairToken.identifier,
+          StakingReference.empty,
           EpochProgress.MaxValue
         )
       )
@@ -253,7 +255,7 @@ object StakingCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong(100)),
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -263,7 +265,7 @@ object StakingCombinerTest extends MutableIOSuite {
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         none,
-        SwapAmount(PosLong.MaxValue),
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -284,6 +286,7 @@ object StakingCombinerTest extends MutableIOSuite {
           primaryToken.identifier,
           PosLong.unsafeFrom(toFixedPoint(100.0)),
           pairToken.identifier,
+          StakingReference.empty,
           EpochProgress.MaxValue
         )
       )
@@ -368,6 +371,7 @@ object StakingCombinerTest extends MutableIOSuite {
           primaryToken.identifier,
           100L.toPosLongUnsafe,
           pairToken.identifier,
+          StakingReference.empty,
           EpochProgress.MaxValue
         )
       )
@@ -458,6 +462,7 @@ object StakingCombinerTest extends MutableIOSuite {
           primaryToken.identifier,
           100L.toPosLongUnsafe,
           pairToken.identifier,
+          StakingReference.empty,
           futureEpoch
         )
       )
@@ -549,6 +554,7 @@ object StakingCombinerTest extends MutableIOSuite {
           primaryToken.identifier,
           100L.toPosLongUnsafe,
           pairToken.identifier,
+          StakingReference.empty,
           futureEpoch
         )
       )

@@ -30,12 +30,12 @@ object SwapCombiner {
     val toTokenInfo = if (swapUpdate.swapToPair == liquidityPool.tokenA.identifier) liquidityPool.tokenA else liquidityPool.tokenB
 
     val swapAmount = swapUpdate.maxAmount.value.value
-    val newFromTokenReserve = fromTokenInfo.amount.value.fromTokenAmountFormat + swapAmount
-    val newToTokenReserve = liquidityPool.k / newFromTokenReserve
+    val newFromTokenReserve = fromTokenInfo.amount.value + swapAmount
+    val newToTokenReserve = (BigDecimal(liquidityPool.k) / BigDecimal(newFromTokenReserve)).toLong
 
     (
       fromTokenInfo.copy(amount = newFromTokenReserve.toTokenAmountFormat.toPosLongUnsafe),
-      toTokenInfo.copy(amount = newToTokenReserve.toTokenAmountFormat.toPosLongUnsafe)
+      toTokenInfo.copy(amount = newToTokenReserve.toPosLongUnsafe)
     )
   }
 

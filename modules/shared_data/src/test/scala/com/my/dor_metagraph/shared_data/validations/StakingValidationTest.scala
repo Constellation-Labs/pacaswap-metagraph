@@ -13,7 +13,6 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
-import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -33,7 +32,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, Vot
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingOrdinal, StakingReference}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
@@ -74,7 +73,7 @@ object StakingValidationTest extends MutableIOSuite {
       tokenA,
       tokenB,
       owner,
-      tokenA.amount.value.fromTokenAmountFormat * tokenB.amount.value.fromTokenAmountFormat,
+      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
     )
     (
@@ -121,6 +120,7 @@ object StakingValidationTest extends MutableIOSuite {
       primaryToken.identifier,
       100L.toPosLongUnsafe,
       pairToken.identifier,
+      StakingReference.empty,
       EpochProgress.MaxValue
     )
 
@@ -180,6 +180,7 @@ object StakingValidationTest extends MutableIOSuite {
         primaryToken.identifier,
         100L.toPosLongUnsafe,
         pairToken.identifier,
+        StakingReference.empty,
         EpochProgress.MaxValue
       )
 
@@ -212,6 +213,7 @@ object StakingValidationTest extends MutableIOSuite {
       primaryToken.identifier,
       100L.toPosLongUnsafe,
       pairToken.identifier,
+      StakingReference.empty,
       EpochProgress.MaxValue
     )
 
@@ -253,8 +255,8 @@ object StakingValidationTest extends MutableIOSuite {
                   Hash.empty,
                   primaryToken,
                   pairToken,
-                  SnapshotOrdinal.MinValue,
-                  none
+                  StakingReference.empty,
+                  StakingOrdinal.first
                 )
               )
             )
@@ -271,6 +273,7 @@ object StakingValidationTest extends MutableIOSuite {
       primaryToken.identifier,
       100L.toPosLongUnsafe,
       pairToken.identifier,
+      StakingReference.empty,
       EpochProgress.MaxValue
     )
 

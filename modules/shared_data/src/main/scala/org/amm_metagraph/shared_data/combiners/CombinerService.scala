@@ -21,6 +21,7 @@ import org.amm_metagraph.shared_data.combiners.GovernanceCombiner.{
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
+import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineWithdrawal
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -105,6 +106,10 @@ object CombinerService {
                             currentSnapshotOrdinal,
                             lastSyncGlobalEpochProgress
                           )
+
+                      case withdrawalUpdate: WithdrawalUpdate =>
+                        logger.info(s"Received withdrawal update: $withdrawalUpdate") >>
+                          combineWithdrawal(acc, Signed(withdrawalUpdate, signedUpdate.proofs), address, currentSnapshotOrdinal)
 
                       case liquidityPoolUpdate: LiquidityPoolUpdate =>
                         logger.info(s"Received liquidity pool update: $liquidityPoolUpdate") >>

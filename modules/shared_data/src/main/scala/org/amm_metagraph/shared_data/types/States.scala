@@ -17,6 +17,7 @@ import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateAddress
 
 object States {
   @derive(encoder, decoder)
@@ -50,6 +51,15 @@ object States {
 
   object ConfirmedStakingCalculatedState {
     def empty: ConfirmedStakingCalculatedState = ConfirmedStakingCalculatedState(Map.empty)
+  }
+
+  @derive(encoder, decoder)
+  case class ConfirmedWithdrawalCalculatedState(
+    value: Map[Address, Set[WithdrawalCalculatedStateAddress]]
+  ) extends ConfirmedCalculatedState
+
+  object ConfirmedWithdrawalCalculatedState {
+    def empty: ConfirmedWithdrawalCalculatedState = ConfirmedWithdrawalCalculatedState(Map.empty)
   }
 
   @derive(encoder, decoder)
@@ -99,6 +109,21 @@ object States {
   }
 
   @derive(encoder, decoder)
+  case class WithdrawalCalculatedState(
+    confirmed: ConfirmedWithdrawalCalculatedState,
+    pending: Set[Signed[WithdrawalUpdate]],
+    failed: Set[FailedCalculatedState]
+  ) extends AmmOffChainState
+
+  object WithdrawalCalculatedState {
+    def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(
+      ConfirmedWithdrawalCalculatedState.empty,
+      Set.empty,
+      Set.empty
+    )
+  }
+
+  @derive(encoder, decoder)
   case class SwapCalculatedState(
     confirmed: ConfirmedSwapCalculatedState,
     pending: Set[Signed[SwapUpdate]],
@@ -117,13 +142,15 @@ object States {
   sealed abstract class OperationType(val value: String) extends StringEnumEntry
 
   object OperationType extends StringEnum[OperationType] with StringCirceEnum[OperationType] {
-    val values = findValues
+    val values: IndexedSeq[OperationType] = findValues
 
     case object Staking extends OperationType("Staking")
 
     case object LiquidityPool extends OperationType("LiquidityPool")
 
     case object Swap extends OperationType("Swap")
+
+    case object Withdrawal extends OperationType("Withdrawal")
   }
 
   @derive(encoder, decoder)
