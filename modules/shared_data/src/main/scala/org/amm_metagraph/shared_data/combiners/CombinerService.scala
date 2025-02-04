@@ -123,7 +123,13 @@ object CombinerService {
 
                       case swapUpdate: SwapUpdate =>
                         logger.info(s"Received swap update: $swapUpdate") >>
-                          combineSwap(acc, Signed(swapUpdate, signedUpdate.proofs), currentSnapshotOrdinal)
+                          combineSwap(
+                            applicationConfig,
+                            acc,
+                            Signed(swapUpdate, signedUpdate.proofs),
+                            currentSnapshotOrdinal,
+                            lastSyncGlobalEpochProgress
+                          )
 
                       case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
                         logger.info(s"Received reward allocation vote update: $rewardAllocationVoteUpdate") >>

@@ -166,5 +166,8 @@ object States {
 
   case class AllowSpendExpired(allowSpend: AllowSpend) extends FailedCalculatedStateReason
   case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailedCalculatedStateReason
+  case class SwapLessThanMinAmount() extends FailedCalculatedStateReason
+  case class SwapPriceBelowAcceptableMinPrice() extends FailedCalculatedStateReason
+  case class SwapPriceExceedsAcceptableMaxPrice() extends FailedCalculatedStateReason
 
 }
