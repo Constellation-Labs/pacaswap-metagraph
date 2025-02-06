@@ -1,0 +1,202 @@
+openapi: 3.0.0
+info:
+  title: Constellation PacaSwap Metagraph
+  description: "API for the PacaSwap Metagraph Layer 0 node handling swaps, liquidity pools, voting and governance"
+  contact:
+    email: developer@stardustcollective.org
+  version: 0.0.1
+tags:
+  - name: Swap
+    description: Manages swap operations and queries
+  - name: LPs
+    description: Manages liquidity pool operations
+  - name: Vote
+    description: Handles voting operations and weight calculations
+  - name: Governance
+    description: Manages reward allocations and governance
+paths:
+  /swap/quote:
+    post:
+      tags:
+        - Swap
+      summary: Get swap quote
+      description: Get a quote for swapping one token for another, including rate, price impact, and estimated amounts
+      requestBody:
+        description: Swap quote parameters
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  $ref: './components.yml#/components/schemas/SwapQuoteRequest'
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: './components.yml#/components/schemas/SwapQuote'
+        400:
+          description: Invalid request parameters
+        404:
+          description: Token pair not found
+        500:
+          description: Internal server error
+  /swaps/{allowSpendHash}:
+    get:
+      tags:
+        - Swap
+      summary: Get swap details
+      description: Retrieve swap information by allowSpendHash. Returns both pending and confirmed swaps.
+      parameters:
+        - name: allowSpendHash
+          in: path
+          required: true
+          description: Hash of the allow spend transaction
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/Swap'
+        404:
+          description: Swap not found
+  /liquidity-pools:
+    get:
+      tags:
+        - LPs
+      summary: List liquidity pools
+      description: List all liquidity pools
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: './components.yml#/components/schemas/LiquidityPool'
+                  meta:
+                    $ref: './components.yml#/components/schemas/Pagination'
+  /liquidity-pools/{poolID}:
+    get:
+      tags:
+        - LPs
+      summary: Show liquidity pool
+      description: Show liquidity pool by pool ID
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LiquidityPool'              
+  /addresses/{address}/vote-info:
+    get:
+      tags:
+        - Vote
+      summary: Get address voting info
+      description: Retrieve voting information for a specific address including credits and allocations
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/VoteInfo'
+        404:
+          description: Address not found
+  /addresses/{address}/vote-info/last-reference:
+    get:
+      tags:
+        - Vote
+      summary: Get last vote reference
+      description: Retrieve the last reference for vote information of a specific address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LastReference'
+  /addresses/{address}/vote-weight:
+    get:
+      tags:
+        - Vote
+      summary: Get voting weight
+      description: Retrieve the vote weight for a specific address based on token locks
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/VotingWeight'
+        404:
+          description: Address not found
+  /governance/allocations/rewards:
+    get:
+      tags:
+        - Governance
+      summary: Get allocation rewards
+      description: Retrieve current governance allocation rewards
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/GovAllocationRewards'

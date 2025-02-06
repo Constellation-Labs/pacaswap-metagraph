@@ -1,0 +1,35 @@
+openapi: 3.0.0
+info:
+  title: Constellation Data Layer 1
+  description: "API for the Data Layer 1 (DL1) node handling data storage and retrieval"
+  contact:
+    email: developer@stardustcollective.org
+  version: 0.0.1
+tags:
+  - name: DataUpdate
+    description: Handles signed data updates for various operations
+paths:
+  /data:
+    post:
+      tags:
+        - DataUpdate
+      summary: Submit a signed data update
+      description: Submit a signed data update for processing. The update can be one of several types including liquidity pool, staking, withdrawal, swap or governance updates.
+      requestBody:
+        description: Signed data update
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yml#/components/schemas/SignedDataUpdate'
+      responses:
+        200:
+          description: Update successfully processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hash:
+                    type: string
+                    description: Hash of the processed update

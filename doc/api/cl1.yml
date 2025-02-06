@@ -1,0 +1,8 @@
+openapi: 3.0.0
+info:
+  title: Constellation Currency Layer 1
+  description: "API for the Currency Layer 1 (CL1) node handling basic currency operations"
+  contact:
+    email: developer@stardustcollective.org
+  version: 0.0.1
+# TODO: Add CL1-specific endpoints when implemented

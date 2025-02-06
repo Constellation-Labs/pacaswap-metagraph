@@ -4,6 +4,8 @@
 metals.sbt
 .bsp/
 .bloop/
+.metals/
+.vscode/
 target/
 project/project/
 node_modules/

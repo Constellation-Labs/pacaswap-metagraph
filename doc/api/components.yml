@@ -1,0 +1,369 @@
+# Shared components for API documentation
+components:
+  schemas:
+    LiquidityPoolUpdate:
+      type: object
+      description: A liquidity pool update
+      properties:
+        tokenAAllowSpend: 
+          type: string
+        tokenBAllowSpend: 
+          type: string  
+        tokenAId:
+          type: string
+        tokenBId: 
+          type: string
+        tokenAAmount:
+          type: integer
+        tokenBAmount: 
+          type: integer
+        maxValidGsEpochProgress: 
+          type: integer
+    StakingUpdate:
+      type: object
+      properties:
+        tokenAAllowSpend: 
+          type: string
+        tokenBAllowSpend: 
+          type: string  
+        tokenAId:
+          type: string
+        tokenBId: 
+          type: string
+        tokenAAmount:
+          type: integer
+        maxValidGsEpochProgress: 
+          type: integer  
+        parent: 
+          $ref: '#/components/schemas/LastReference'
+    WithdrawalUpdate: 
+      type: object
+      properties:
+        tokenAId:
+          type: string
+        tokenBId: 
+          type: string
+        shareToWithdraw: 
+          type: integer
+        maxValidGsEpochProgress: 
+          type: integer
+        parent:
+          $ref: '#/components/schemas/LastReference'
+    SwapUpdate:
+      type: object
+      properties:
+        sourceAddress:
+          type: string
+        swapFromPair:
+          type: string
+        swapToPair:
+          type: string
+        allowSpendReference:
+          type: string
+        minAmount:
+          type: integer
+        maxAmount:
+          type: integer
+        maxValidGsEpochProgress:
+          type: integer
+        minPrice:
+          type: integer
+        maxPrice:
+          type: integer
+    RewardAllocationVoteUpdate:
+      type: object
+      properties:
+        address:
+          type: string
+        parent:
+          $ref: '#/components/schemas/LastReference'
+        allocations:
+          type: array
+          items:  
+            type: object
+            example: 
+              DAG/DOR: 12
+              DAG/PACA: 75
+              NodeOperators: 13
+    Proof:
+      type: object
+      description: A cryptographic proof
+      properties:
+        id:
+          type: string
+          description: Identifier for the proof
+        signature:
+          type: string
+          description: Cryptographic signature
+    SignedDataUpdate:
+      type: object
+      description: A signed data update with proofs
+      properties:
+        value:
+          oneOf:
+            - $ref: '#/components/schemas/LiquidityPoolUpdate'
+            - $ref: '#/components/schemas/StakingUpdate'
+            - $ref: '#/components/schemas/WithdrawalUpdate'
+            - $ref: '#/components/schemas/SwapUpdate'
+            - $ref: '#/components/schemas/RewardAllocationVoteUpdate'
+        proofs:
+          type: array
+          description: Cryptographic proofs validating the update
+          items:
+            $ref: '#/components/schemas/Proof'
+
+    LastReference:
+      type: object
+      description: Reference to previous state
+      properties:
+        ordinal:
+          type: integer
+          description: Ordinal number of the reference
+        hash:
+          type: string
+          description: Hash of the referenced state
+
+    LiquidityPool:
+      type: object
+      description: Liquidity pool information
+      properties:
+        poolId:
+          type: string
+          description: Unique identifier for the pool
+        tokenA:
+          type: object
+          properties:
+            id: 
+              type: string
+              description: Currency ID of token A
+            amount: 
+              type: integer
+              description: Amount of token A in pool
+            price:
+              type: number
+              description: Value of token A in terms of token B
+        tokenB:
+          type: object
+          properties:
+            id: 
+              type: string
+              description: Currency ID of token B
+            amount: 
+              type: integer
+              description: Amount of token B in pool
+            price:
+              type: number      
+              description: Value of token B in terms of token A
+        owner:
+          type: string
+          description: Address of pool owner/creator
+        k:
+          type: integer
+          description: Constant product k value
+        totalShares:
+          type: integer
+          description: Total number of LP shares
+
+    Swap:
+      type: object
+      description: Information about a swap operation
+      properties:
+        sourceAddress:
+          type: string
+          description: Address that initiated the swap
+          example: 'DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL'
+        swapFromPair:
+          type: string
+          description: Source token currency ID
+        swapToPair:
+          type: string
+          description: Destination token currency ID
+        allowSpendReference:
+          type: string
+          description: Allow spend hash reference
+        minAmount:
+          type: integer
+          description: Minimum swap amount
+        maxAmount:
+          type: integer
+          description: Maximum swap amount
+        maxValidGsEpochProgress:
+          type: integer
+          description: Maximum valid global snapshot epoch progress
+        state:
+          type: string
+          description: Current state of the swap
+          enum: [Pending, Confirmed, Failed]
+
+    VoteInfo:
+      type: object
+      description: Voting information for an address
+      properties:
+        credits:
+          type: number
+          description: Voting power/credits
+        parent:
+          $ref: '#/components/schemas/LastReference'
+        monthlyReference:
+          type: object
+          properties:
+            expireGlobalEpochProgress:
+              type: integer
+              description: Epoch progress when votes expire
+            monthReference:
+              type: integer
+              description: Reference to the voting month
+        allocations:
+          type: array
+          description: Current allocation votes
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Allocation category ID
+              category:
+                type: string
+                description: Allocation category name
+              percentage:
+                type: number
+                format: double
+                description: Allocation percentage
+                example: 33.33
+
+    VotingWeight:
+      type: object
+      description: Voting weight information
+      properties:
+        total:
+          type: integer
+          description: Total voting weight
+        info:
+          type: array
+          description: Detailed weight information
+          items:
+            type: object
+            properties:
+              weight:
+                type: integer
+                description: Weight amount
+              tokenLock:
+                $ref: '#/components/schemas/TokenLock'
+
+    TokenLock:
+      type: object
+      description: Information about locked tokens
+      required:
+        - source
+        - amount
+        - fee
+        - parent
+      properties:
+        source:
+          type: string
+          description: Address that locked the tokens
+        amount:
+          type: integer
+          description: Amount of tokens locked
+        fee:
+          type: integer
+          description: Optional fee for the lock transaction
+        parent:
+          $ref: '#/components/schemas/LastReference'
+        currencyId:
+          type: string
+          description: Currency ID of locked tokens
+        unlockEpoch:
+          type: integer
+          description: Global epochProgress when tokens unlock
+
+    GovAllocationRewards:
+      type: object
+      description: Governance allocation rewards information
+      properties:
+        monthReference:
+          type: integer
+          description: Reference to reward month
+        epochprogressToReward:
+          type: integer
+          description: Epoch progress for rewards
+        rewardsInfo:
+          type: object
+          description: Reward allocations by category
+          example:
+            DAG/DOR: 12
+            DAG/PACA: 75
+            NodeOperators: 13
+
+    SwapQuoteRequest:
+      type: object
+      description: Request parameters for a swap quote
+      required:
+        - fromTokenId
+        - toTokenId
+        - amount
+        - slippagePercent
+      properties:
+        fromTokenId:
+          type: string
+          description: Currency ID of the token to swap from
+        toTokenId:
+          type: string
+          description: Currency ID of the token to swap to
+        amount:
+          type: integer
+          description: Amount of fromToken to swap
+        slippagePercent:
+          type: number
+          description: Maximum acceptable slippage as a percentage
+          minimum: 0
+          maximum: 100
+
+    SwapQuote:
+      type: object
+      description: Quote information for a potential swap
+      required:
+        - rate
+        - priceImpactPercent
+        - estimatedReceived
+        - minimumReceived
+      properties:
+        fromTokenId:
+          type: string
+          description: Currency ID of the token to swap from
+        toTokenId:
+          type: string
+          description: Currency ID of the token to swap to
+        amount:
+          type: integer
+          description: Amount of fromToken to swap
+        slippagePercent:
+          type: integer
+          description: Maximum acceptable slippage as a percentage
+          minimum: 0
+          maximum: 50
+        rate:
+          type: number
+          description: Exchange rate between the tokens (toToken per fromToken)
+        priceImpactPercent:
+          type: integer
+          description: Estimated price impact of the swap as a percentage
+        estimatedReceived:
+          type: integer
+          description: Estimated amount of toToken to be received
+        minimumReceived:
+          type: integer
+          description: Minimum amount of toToken to be received given slippage
+
+    Pagination:
+      type: object
+      description: Optional pagination keys
+      properties:
+        limit: 
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+        has_more:
+          type: boolean
