@@ -44,7 +44,7 @@ runs:
         
         git clone https://github.com/Constellation-Labs/tessellation.git
         cd tessellation
-        git checkout feature/allow-spends
+        git checkout develop
         
         sbt -Dversion.override=99.99.99 --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
         
