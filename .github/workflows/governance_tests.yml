@@ -66,6 +66,14 @@ jobs:
           CL1_PORT_PREFIX: 81
           DL1_PORT_PREFIX: 82
 
+      - name: Check if node is ready to receive token locks
+        uses: "./.github/templates/actions/metagraph/check_l1_ready_to_consensus"
+        with:
+          METAGRAPH_NAME: amm-metagraph
+          INTERVAL: 5
+          MAX_RETRIES: 60
+          PHRASE: 'No enough last N global snapshots present'
+
       - name: Start token lock tests
         shell: bash
         env:

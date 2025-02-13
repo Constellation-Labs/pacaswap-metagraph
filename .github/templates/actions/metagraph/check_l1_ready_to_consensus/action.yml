@@ -1,0 +1,49 @@
+name: Check if l1 layer ready for consensus
+
+inputs:
+  PHRASE:
+    required: true
+  MAX_RETRIES:
+    required: true
+  INTERVAL:
+    required: true
+  METAGRAPH_NAME:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Running check if node is ready for consensus
+      shell: bash
+      run: |
+        ROOT_DIRECTORY=$(pwd)
+
+        cd $ROOT_DIRECTORY/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/initial-validator
+        
+        LOG_FILE="currency-l1-initial-validator.log"
+        PHRASE="${{inputs.PHRASE}}"
+        MAX_RETRIES=${{inputs.MAX_RETRIES}}
+        INTERVAL=${{inputs.INTERVAL}}
+        
+        if [[ ! -f "$LOG_FILE" ]]; then
+          echo "Error: Log file not found at $LOG_FILE"
+          exit 1
+        fi
+
+        attempt=0
+        echo "Monitoring log file: $LOG_FILE for phrase: \"$PHRASE\""
+
+        while (( attempt < MAX_RETRIES )); do
+          if tail -n 10 "$LOG_FILE" | grep -qE "$PHRASE"; then
+            echo "[$(date)] Attempt $((attempt + 1))/$MAX_RETRIES: Node not ready for consensus yet. Retrying in $INTERVAL seconds..."
+            tail -n 10 "$LOG_FILE"
+            attempt=$(( attempt + 1 ))
+            sleep $INTERVAL
+          else
+            echo "[$(date)] Success: Node is READY for consensus!"
+            exit 0
+          fi
+        done
+
+        echo "[$(date)] Maximum retries reached. Node is still not ready for consensus."
+        exit 1

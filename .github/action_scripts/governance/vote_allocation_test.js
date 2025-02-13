@@ -184,7 +184,7 @@ const main = async () => {
     await sendSignedVoteAllocation(config, signedVoteAllocation);
 
     await validateVoteAllocations(config, address, allocations)
-    await delay(5000)
+    await delay(10000)
   }
 
   log(`Waiting 2 minutes to check if the allocations were clear and the rewards filled`)

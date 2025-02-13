@@ -44,9 +44,9 @@ object globalSnapshots {
     globalSnapshotInfo <- getLastSyncGlobalSnapshotState
     currencyId <- context.getCurrencyId
     activeAllowSpends = globalSnapshotInfo.activeAllowSpends
-      .getOrElse(SortedMap.empty[Address, SortedMap[Address, SortedSet[Signed[AllowSpend]]]])
+      .getOrElse(SortedMap.empty[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]])
 
-    response <- activeAllowSpends.get(currencyId.value) match {
+    response <- activeAllowSpends.get(currencyId.value.some) match {
       case Some(active) =>
         active.values.flatten.toList.traverse(_.toHashed).map { hashedAllowSpends =>
           hashedAllowSpends.find(_.hash === allowSpendHash)

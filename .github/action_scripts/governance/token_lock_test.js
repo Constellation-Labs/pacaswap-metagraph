@@ -192,7 +192,7 @@ const main = async () => {
     await sendSignedTokenLock(config, signedTokenLock);
     await validateTokenLockInGL0(config, address);
     await validateVotingWeight(config, address, lockAmount, multiplier);
-    await delay(1000)
+    await delay(10000)
   }
 
   log("All token locks validated successfully.");

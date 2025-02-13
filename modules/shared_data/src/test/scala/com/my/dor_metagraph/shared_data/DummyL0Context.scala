@@ -44,7 +44,8 @@ object DummyL0Context {
       SortedMap.empty,
       SortedMap.empty,
       SortedMap.empty,
-      SortedMap(metagraphAddress -> activeAllowSpends).some,
+      SortedMap(metagraphAddress.some -> activeAllowSpends).some,
+      none,
       none
     )
 
