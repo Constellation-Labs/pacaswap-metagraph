@@ -11,7 +11,7 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{PoolId, ShareAmount}
+import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.Staking.{StakingOrdinal, StakingReference}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
 
@@ -63,7 +63,6 @@ object DataUpdates {
     minAmount: SwapAmount,
     maxAmount: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
-    poolId: Option[PoolId],
     minPrice: Option[PosLong],
     maxPrice: Option[PosLong]
   ) extends AmmUpdate
