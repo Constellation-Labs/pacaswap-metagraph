@@ -3,10 +3,35 @@ name: Hypergraph jar build
 inputs:
   GITHUB_TOKEN:
     required: true
+  TESSELLATION_COMMIT_HASH:
+    required: false
+    description: 'Specific tessellation commit hash to use. If not provided, latest develop commit will be used'
 
 runs:
   using: "composite"
   steps:
+    - name: Get tessellation develop commit hash
+      shell: bash
+      id: get-commit-hash
+      run: |
+        if [ -n "${{ inputs.TESSELLATION_COMMIT_HASH }}" ]; then
+          COMMIT_HASH="${{ inputs.TESSELLATION_COMMIT_HASH }}"
+        else
+          COMMIT_HASH=$(git ls-remote https://github.com/Constellation-Labs/tessellation.git develop | cut -f1)
+        fi
+        echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+
+    - name: Restore tessellation cache
+      uses: actions/cache/restore@v4
+      id: cache-tessellation
+      with:
+        path: |
+          .github/code/hypergraph/dag-l0.jar
+          .github/code/hypergraph/dag-l1.jar
+          .github/code/shared_jars/cl-keytool.jar
+          .github/code/shared_jars/cl-wallet.jar
+        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}
+
     - name: Create hypergraph directories
       shell: bash
       run: |
@@ -36,15 +61,22 @@ runs:
       run: |  
         cp .github/config/genesis.csv .github/code/hypergraph/dag-l0/genesis-node
 
+    - name: Log cache status
+      shell: bash
+      run: |
+        echo "Cache status:"
+        echo "- DAG L0, L1 and shared JARs: ${{ steps.cache-tessellation.outputs.cache-hit == 'true' && '✅ Restored' || '⚠️ Need to build' }}"
+
     #Possible be removed when we have the dependencies on Maven?
     - name: Generate metagraph dependencies and hypergraph JARs 🔥
       shell: bash
+      if: ${{ steps.cache-tessellation.outputs.cache-hit != 'true' }}
       run: |
         cd .github/code
         
         git clone https://github.com/Constellation-Labs/tessellation.git
         cd tessellation
-        git checkout develop
+        git checkout ${{ steps.get-commit-hash.outputs.commit_hash }}
         
         sbt -Dversion.override=99.99.99 --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
         
@@ -58,3 +90,14 @@ runs:
         rm -r tessellation
       env:
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
+    - name: Save tessellation cache
+      if: ${{ steps.cache-tessellation.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          .github/code/hypergraph/dag-l0.jar
+          .github/code/hypergraph/dag-l1.jar
+          .github/code/shared_jars/cl-keytool.jar
+          .github/code/shared_jars/cl-wallet.jar
+        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}

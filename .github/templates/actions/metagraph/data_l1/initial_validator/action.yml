@@ -58,4 +58,4 @@ runs:
       env:
         CL_PUBLIC_HTTP_PORT: ${{ inputs.CL_PUBLIC_HTTP_PORT }}
       run: |
-        node .github/action_scripts/check_if_node_started.js -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=Data-L1-Initial-Validator
+        npx tsx .github/action_scripts/check_if_node_started.ts -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=Data-L1-Initial-Validator
