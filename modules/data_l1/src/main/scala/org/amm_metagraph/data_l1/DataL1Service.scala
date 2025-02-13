@@ -12,6 +12,7 @@ import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.DataUpdateCodec._
+import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
 import org.amm_metagraph.shared_data.validations.ValidationService
 import org.http4s.circe.CirceEntityCodec.circeEntityDecoder
 import org.http4s.{EntityDecoder, HttpRoutes}
@@ -19,15 +20,18 @@ import org.http4s.{EntityDecoder, HttpRoutes}
 object DataL1Service {
 
   def make[F[+_]: Async: JsonSerializer: Hasher](
-    validationService: ValidationService[F]
+    validationService: ValidationService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): F[BaseDataApplicationL1Service[F]] = Async[F].delay {
     makeBaseDataApplicationL1Service(
-      validationService
+      validationService,
+      dataUpdateCodec
     )
   }
 
   private def makeBaseDataApplicationL1Service[F[+_]: Async: JsonSerializer](
-    validationService: ValidationService[F]
+    validationService: ValidationService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): BaseDataApplicationL1Service[F] = BaseDataApplicationL1Service(
     new DataApplicationL1Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def validateUpdate(
@@ -76,12 +80,12 @@ object DataL1Service {
       override def serializeUpdate(
         update: AmmUpdate
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmUpdate](update)
+        dataUpdateCodec.serialize(update)
 
       override def deserializeUpdate(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmUpdate]] =
-        JsonSerializer[F].deserialize[AmmUpdate](bytes)
+        dataUpdateCodec.deserialize(bytes)
 
       override def serializeCalculatedState(
         state: AmmCalculatedState
