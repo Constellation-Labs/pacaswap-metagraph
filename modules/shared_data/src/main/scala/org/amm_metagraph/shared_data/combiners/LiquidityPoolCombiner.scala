@@ -122,11 +122,11 @@ object LiquidityPoolCombiner {
                 poolId,
                 TokenInformation(
                   liquidityPoolUpdate.tokenAId,
-                  liquidityPoolUpdate.tokenAAmount.value.toTokenAmountFormat.toPosLongUnsafe
+                  liquidityPoolUpdate.tokenAAmount
                 ),
                 TokenInformation(
                   liquidityPoolUpdate.tokenBId,
-                  liquidityPoolUpdate.tokenBAmount.value.toTokenAmountFormat.toPosLongUnsafe
+                  liquidityPoolUpdate.tokenBAmount
                 ),
                 signerAddress,
                 BigInt(amountA) * BigInt(amountB),

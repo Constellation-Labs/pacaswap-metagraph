@@ -1,0 +1,13 @@
+{
+    "name": "action_scripts",
+    "version": "1.0.0",
+    "description": "GitHub Action scripts for AMM tests",
+    "private": true,
+    "dependencies": {
+        "@stardust-collective/dag4": "latest",
+        "js-sha256": "latest",
+        "axios": "latest",
+        "brotli": "latest",
+        "zod": "latest"
+    }
+}

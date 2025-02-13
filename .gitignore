@@ -1,4 +1,9 @@
 .idea/
+.vscode/
+.metals/
+metals.sbt
 .bsp/
+.bloop/
 target/
 project/project/
+node_modules/
