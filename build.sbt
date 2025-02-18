@@ -3,7 +3,7 @@ import sbt.*
 
 ThisBuild / organization := "io.constellationnetwork"
 ThisBuild / organizationName := "amm_metagraph"
-ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / scalaVersion := "2.13.16"
 
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports

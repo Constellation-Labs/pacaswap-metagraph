@@ -40,7 +40,7 @@ object Dependencies {
     )
 
     val semanticDB = compilerPlugin(
-      ("org.scalameta" % "semanticdb-scalac" % "4.9.3").cross(CrossVersion.full)
+      ("org.scalameta" % "semanticdb-scalac" % "4.13.1.1").cross(CrossVersion.full)
     )
   }
 }
