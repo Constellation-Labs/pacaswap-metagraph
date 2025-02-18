@@ -4,15 +4,18 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedSet
+import scala.math.BigDecimal.RoundingMode
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.artifact.SharedArtifact
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
+
 import eu.timepit.refined.types.numeric.NonNegLong
-import io.constellationnetwork.schema.balance.Amount
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -22,8 +25,6 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
-
-import scala.math.BigDecimal.RoundingMode
 
 object SwapCombiner {
   private case class UpdatedTokenInformation(

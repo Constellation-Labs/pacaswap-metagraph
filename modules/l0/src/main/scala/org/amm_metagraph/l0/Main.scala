@@ -16,7 +16,8 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
-import org.amm_metagraph.shared_data.types.codecs.JsonBinaryCodec
+import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
+import org.amm_metagraph.shared_data.types.codecs.{JsonBinaryCodec, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.ValidationService
 
 object Main
@@ -33,11 +34,12 @@ object Main
     implicit0(json2bin: JsonSerializer[IO]) <- JsonBinaryCodec.forSync[IO].asResource
     implicit0(hasher: Hasher[IO]) = Hasher.forJson[IO]
 
+    dataUpdateCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate].asResource
     config <- ApplicationConfigOps.readDefault[IO].asResource
     calculatedStateService <- CalculatedStateService.make[IO].asResource
     validationService <- ValidationService.make[IO](config).asResource
     combinerService <- CombinerService.make[IO](config).asResource
-    l1Service <- MetagraphL0Service.make[IO](calculatedStateService, validationService, combinerService).asResource
+    l1Service <- MetagraphL0Service.make[IO](calculatedStateService, validationService, combinerService, dataUpdateCodec).asResource
   } yield l1Service).some
 
 }

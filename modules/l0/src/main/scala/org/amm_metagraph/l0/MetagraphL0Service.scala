@@ -20,6 +20,7 @@ import org.amm_metagraph.shared_data.combiners.CombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.DataUpdateCodec._
+import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
 import org.amm_metagraph.shared_data.validations.ValidationService
 import org.http4s.circe.CirceEntityCodec.circeEntityDecoder
 import org.http4s.{EntityDecoder, HttpRoutes}
@@ -29,19 +30,22 @@ object MetagraphL0Service {
   def make[F[+_]: Async: JsonSerializer](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
-    combinerService: CombinerService[F]
+    combinerService: CombinerService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): F[BaseDataApplicationL0Service[F]] = Async[F].delay {
     makeBaseDataApplicationL0Service(
       calculatedStateService,
       validationService,
-      combinerService
+      combinerService,
+      dataUpdateCodec
     )
   }
 
   private def makeBaseDataApplicationL0Service[F[+_]: Async: JsonSerializer](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
-    combinerService: CombinerService[F]
+    combinerService: CombinerService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
@@ -97,12 +101,12 @@ object MetagraphL0Service {
       override def serializeUpdate(
         update: AmmUpdate
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmUpdate](update)
+        dataUpdateCodec.serialize(update)
 
       override def deserializeUpdate(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmUpdate]] =
-        JsonSerializer[F].deserialize[AmmUpdate](bytes)
+        dataUpdateCodec.deserialize(bytes)
 
       override def getCalculatedState(implicit context: L0NodeContext[F]): F[(SnapshotOrdinal, AmmCalculatedState)] =
         calculatedStateService.get.map(calculatedState => (calculatedState.ordinal, calculatedState.state))

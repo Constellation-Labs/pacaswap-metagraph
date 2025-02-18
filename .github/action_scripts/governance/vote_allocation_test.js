@@ -85,9 +85,11 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
     },
   };
 
-  const serializedTx = await serialize(body);
-  const messageHash = jsSha256.sha256(Buffer.from(serializedTx, "hex"));
-  const signature = await dag4.keyStore.sign(privateKey, messageHash);
+  const encodedMessage = Buffer.from(JSON.stringify(body)).toString('base64')
+  const signature = await dag4.keyStore.dataSign(
+      privateKey,
+      encodedMessage
+  );
 
   log(`Signed vote allocation generated for wallet: ${address}`);
 
