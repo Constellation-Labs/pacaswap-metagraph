@@ -17,6 +17,7 @@ import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.States._
 
@@ -92,4 +93,20 @@ object LiquidityPool {
       case pendingUpdate @ Signed(liquidityPoolUpdate: LiquidityPoolUpdate, _) =>
         Signed(liquidityPoolUpdate, pendingUpdate.proofs)
     }
+
+  def getLiquidityPoolPrices(liquidityPool: LiquidityPool): (Long, Long) = {
+    val priceTokenA = (BigDecimal(liquidityPool.tokenB.amount.value) /
+      BigDecimal(liquidityPool.tokenA.amount.value))
+      .setScale(0, BigDecimal.RoundingMode.HALF_UP)
+      .toLong
+      .toTokenAmountFormat
+
+    val priceTokenB = (BigDecimal(liquidityPool.tokenA.amount.value) /
+      BigDecimal(liquidityPool.tokenB.amount.value))
+      .setScale(0, BigDecimal.RoundingMode.HALF_UP)
+      .toLong
+      .toTokenAmountFormat
+
+    (priceTokenA, priceTokenB)
+  }
 }
