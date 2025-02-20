@@ -150,10 +150,16 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
     case GET -> Root / "governance" / "allocations" / "rewards"                           => getAllocationsRewards
   }
 
-  val public: HttpRoutes[F] =
+  val public: HttpRoutes[F] = {
+    val liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService)
+
     CORS.policy
       .withAllowCredentials(false)
-      .httpRoutes(routes)
+      .httpRoutes(
+        routes <+>
+          liquidityPoolRoutes.routes
+      )
+  }
 
   override protected def prefixPath: InternalUrlPrefix = "/"
 }
