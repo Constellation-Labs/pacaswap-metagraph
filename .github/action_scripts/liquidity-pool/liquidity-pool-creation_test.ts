@@ -19,6 +19,7 @@ const LPCreationSchema = z
 
 const CliArgsSchema = z.object({
   gl0Url: z.string().url("GL0 URL must be a valid URL"),
+  dagCl1Url: z.string().url("DAG CL1 URL must be a valid URL"),
   ammMl0Url: z.string().url("AMM ML0 URL must be a valid URL"),
   ammCl1Url: z.string().url("AMM CL1 URL must be a valid URL"),
   ammDl1Url: z.string().url("AMM DL1 URL must be a valid URL"),
@@ -37,6 +38,7 @@ const createConfig = () => {
 
   const [
     gl0Url,
+    dagCl1Url,
     ammMl0Url,
     ammCl1Url,
     ammDl1Url,
@@ -51,12 +53,13 @@ const createConfig = () => {
 
   if (args.length < 11) {
     throw new Error(
-      "Usage: npx tsx liquidity-pool/liquidity-pool-creation_test.ts <gl0-url> <aml0-url> <acl1-url> <adl1-url> <tacl1-url> <tbcl1-url> <taml0-url> <tbml0-url> <amm-metagraph-id> <tokenAId> <tokenBId>"
+      "Usage: npx tsx liquidity-pool/liquidity-pool-creation_test.ts <gl0-url> <dagcl1-url> <aml0-url> <acl1-url> <adl1-url> <tacl1-url> <tbcl1-url> <taml0-url> <tbml0-url> <amm-metagraph-id> <tokenAId> <tokenBId>"
     );
   }
 
   const argsObj = {
     gl0Url,
+    dagCl1Url,
     ammMl0Url,
     ammCl1Url,
     ammDl1Url,
@@ -93,6 +96,7 @@ const getBalance = async (account: ReturnType<typeof createAccount>, l0Url: stri
     log(`Balance for account: ${account.address} is ${balance}`, "INFO", context);
     return balance;
   } catch (error) {
+    console.log(error)
     log(`Error getting balance for account: ${account.address}: ${error}`, "ERROR", context);
     throw error;
   }
@@ -153,8 +157,8 @@ const sendSignedAllowSpend = async (l1Url: string, signedAllowSpend, context: st
 const createLiquidityPoolUpdate = async (
   tokenAAllowSpendHash: string,
   tokenBAllowSpendHash: string,
-  tokenAId: string,
-  tokenBId: string,
+  tokenAId: string | null,
+  tokenBId: string | null,
   tokenAAllowSpendAmount: number,
   tokenBAllowSpendAmount: number,
   privateKey: string,
@@ -205,8 +209,8 @@ const sendLiquidityPoolUpdate = async (
 
 const validateLiquidityPoolCreated = async (
   ammL0Url: string,
-  tokenAId: string,
-  tokenBId: string,
+  tokenAId: string | null,
+  tokenBId: string | null,
   logger: (message: string, type?: string, context?: string) => void = log
 ) => {
   const { data } = await axios.get(
@@ -217,10 +221,10 @@ const validateLiquidityPoolCreated = async (
 
   type LiquidityPool = {
     tokenA: {
-      identifier?: string
+      identifier?: string | null
     }
     tokenB: {
-      identifier?: string
+      identifier?: string | null
     }
   }
 
@@ -304,7 +308,7 @@ const validateIfAllowSpendAcceptedOnGL0 = async (
   gL0Url: string,
   address: string,
   tokenAllowSpendHash: string,
-  tokenId: string,
+  tokenId: string | null,
   context: string,
   logger: (message: string, type?: string, context?: string) => void = log
 ) => {
@@ -323,7 +327,7 @@ const validateIfAllowSpendAcceptedOnML0 = async (
   mL0Url: string,
   address: string,
   tokenAllowSpendHash: string,
-  tokenId: string,
+  tokenId: string | null,
   context: string,
   logger: (message: string, type?: string, context?: string) => void = log
 ) => {
@@ -342,7 +346,7 @@ const validateIfAllowSpendAcceptedinSnapshot = async (
   address: string,
   hash: string,
   snapshot,
-  tokenId: string,
+  tokenId: string | null,
   isCurrencySnapshot: boolean,
   context: string,
   logger: (message: string, type?: string, context?: string) => void = log
@@ -362,7 +366,7 @@ const validateIfAllowSpendAcceptedinSnapshot = async (
 
   const activeAllowSpendsForAddress = isCurrencySnapshot
     ? activeAllowSpends?.[address]
-    : activeAllowSpends?.[tokenId]?.[address]
+    : activeAllowSpends?.[tokenId || '']?.[address]
 
   if (!activeAllowSpends || Object.keys(activeAllowSpends).length === 0) {
     throwInContext(context)(`No active allow spends found in snapshot`);
@@ -391,90 +395,181 @@ const validateIfAllowSpendAcceptedinSnapshot = async (
   }
 }
 
-const main = async () => {
-  log("Starting liquidity pool creation test...")
-  const config = createConfig();
-  log("Created config")
+interface TokenConfig {
+  account: ReturnType<typeof createAccount>;
+  l1Url: string;
+  l0Url: string;
+  initialBalance: number;
+  context: string;
+  tokenId: string | null;
+  allowSpendAmount: number;
+  isCurrency: boolean;
+}
 
+const createTokenConfig = async (
+  privateKey: string,
+  l0Url: string,
+  l1Url: string,
+  context: string,
+  tokenId: string | null,
+  isCurrency: boolean,
+  allowSpendAmount: number
+): Promise<TokenConfig> => {
+  const account = createAccount(privateKey, l0Url, l1Url);
+  log(`Created token account`, "INFO", context);
+
+  const initialBalance = await getBalance(account, l0Url, isCurrency, context);
+  log(`Initial balance: ${initialBalance}`, "INFO", context);
+
+  return {
+    account,
+    l1Url,
+    l0Url,
+    initialBalance,
+    context,
+    tokenId,
+    allowSpendAmount,
+    isCurrency
+  };
+}
+
+const processLiquidityPoolCreation = async (
+  config: ReturnType<typeof createConfig>,
+  tokenA: TokenConfig,
+  tokenB: TokenConfig,
+) => {
   const privateKey = config.lpCreation.privateKey;
   const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
-  log("Created token account", "INFO", 'AMM')
-  const tokenAAccount = createAccount(privateKey, config.tokenAMl0Url, config.tokenACl1Url);
-  log("Created token account", "INFO", 'A')
-  const tokenBAccount = createAccount(privateKey, config.tokenBMl0Url, config.tokenBCl1Url);
-  log("Created token account", "INFO", 'B')
-
-  const tokenAInitialBalance = await getBalance(tokenAAccount, config.tokenAMl0Url, true, 'A');
-  log(`Initial balance: ${tokenAInitialBalance}`, "INFO", 'A')
-  const tokenBInitialBalance = await getBalance(tokenBAccount, config.tokenAMl0Url, true, 'B');
-  log(`Initial balance: ${tokenBInitialBalance}`, "INFO", 'B')
-
+  log("Created LP provider account", "INFO", 'AMM');
   const signedAllowSpendA = await createSignedAllowSpend(
     privateKey,
-    tokenAAccount,
-    config.tokenACl1Url,
+    tokenA.account,
+    tokenA.l1Url,
     config.ammMetagraphId,
-    config.lpCreation.tokenAAllowSpendAmount,
-    'A'
+    tokenA.allowSpendAmount,
+    tokenA.context
   );
 
   const signedAllowSpendB = await createSignedAllowSpend(
     privateKey,
-    tokenBAccount,
-    config.tokenBCl1Url,
+    tokenB.account,
+    tokenB.l1Url,
     config.ammMetagraphId,
-    config.lpCreation.tokenBAllowSpendAmount,
-    'B'
+    tokenB.allowSpendAmount,
+    tokenB.context
   );
 
   const { hash: tokenAAllowSpendHash } = await sendSignedAllowSpend(
-    config.tokenACl1Url,
+    tokenA.l1Url,
     signedAllowSpendA,
-    'A'
+    tokenA.context
   );
+
   const { hash: tokenBAllowSpendHash } = await sendSignedAllowSpend(
-    config.tokenBCl1Url,
+    tokenB.l1Url,
     signedAllowSpendB,
-    'B'
+    tokenB.context
   );
 
   const update = await createLiquidityPoolUpdate(
     tokenAAllowSpendHash,
     tokenBAllowSpendHash,
-    config.tokenAId,
-    config.tokenBId,
-    config.lpCreation.tokenAAllowSpendAmount,
-    config.lpCreation.tokenBAllowSpendAmount,
+    tokenA.tokenId,
+    tokenB.tokenId,
+    tokenA.allowSpendAmount,
+    tokenB.allowSpendAmount,
     privateKey,
     lpProviderAccount,
   );
 
-  await sendLiquidityPoolUpdate(
-    config.ammDl1Url,
-    update,
-  );
+  await sendLiquidityPoolUpdate(config.ammDl1Url, update);
 
   await retry('Validate if allow spends accepted on CL1')(async (logger) => {
-    await validateIfAllowSpendAcceptedOnCL1(config.tokenACl1Url, tokenAAllowSpendHash, 'A', logger)
-    await validateIfAllowSpendAcceptedOnCL1(config.tokenBCl1Url, tokenBAllowSpendHash, 'B', logger)
-  })
-  delay(5000)
+    await validateIfAllowSpendAcceptedOnCL1(tokenA.l1Url, tokenAAllowSpendHash, tokenA.context, logger);
+    await validateIfAllowSpendAcceptedOnCL1(tokenB.l1Url, tokenBAllowSpendHash, tokenB.context, logger);
+  });
+
+  delay(5000);
+
   await retry('Validate if allow spends accepted on ML0')(async (logger) => {
-    await validateIfAllowSpendAcceptedOnML0(config.tokenAMl0Url, tokenAAccount.address, tokenAAllowSpendHash, config.tokenAId, 'A', logger)
-    await validateIfAllowSpendAcceptedOnML0(config.tokenBMl0Url, tokenBAccount.address, tokenBAllowSpendHash, config.tokenBId, 'B', logger)
-  })
+    if (tokenA.tokenId !== null) {
+      await validateIfAllowSpendAcceptedOnML0(tokenA.l0Url, tokenA.account.address, tokenAAllowSpendHash, tokenA.tokenId, tokenA.context, logger);
+    }
+    await validateIfAllowSpendAcceptedOnML0(tokenB.l0Url, tokenB.account.address, tokenBAllowSpendHash, tokenB.tokenId, tokenB.context, logger);
+  });
+
   await retry('Validate if allow spends accepted on GL0')(async (logger) => {
-    await validateIfAllowSpendAcceptedOnGL0(config.gl0Url, tokenAAccount.address, tokenAAllowSpendHash, config.tokenAId, 'A', logger)
-    await validateIfAllowSpendAcceptedOnGL0(config.gl0Url, tokenBAccount.address, tokenBAllowSpendHash, config.tokenBId, 'B', logger)
-  })
-  delay(5000)
+    await validateIfAllowSpendAcceptedOnGL0(config.gl0Url, tokenA.account.address, tokenAAllowSpendHash, tokenA.tokenId, tokenA.context, logger);
+    await validateIfAllowSpendAcceptedOnGL0(config.gl0Url, tokenB.account.address, tokenBAllowSpendHash, tokenB.tokenId, tokenB.context, logger);
+  });
+
+  delay(5000);
+
   await retry('Validate if liquidity pool created')(async (logger) => {
-    await validateLiquidityPoolCreated(config.ammMl0Url, config.tokenAId, config.tokenBId, logger)
-  })
+    await validateLiquidityPoolCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, logger);
+  });
+
   await retry('Validate if balance changed')(async (logger) => {
-    await validateIfBalanceChanged(tokenAInitialBalance, signedAllowSpendA, tokenAAccount, config.tokenAMl0Url, true, 'A', logger)
-    await validateIfBalanceChanged(tokenBInitialBalance, signedAllowSpendB, tokenBAccount, config.tokenBMl0Url, true, 'B', logger)
-  })
+    await validateIfBalanceChanged(tokenA.initialBalance, signedAllowSpendA, tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context, logger);
+    await validateIfBalanceChanged(tokenB.initialBalance, signedAllowSpendB, tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context, logger);
+  });
+}
+
+const currencyToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
+  log("Starting liquidity pool creation test (Currency to Currency)");
+
+  const tokenA = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.tokenAMl0Url,
+    config.tokenACl1Url,
+    'A',
+    config.tokenAId,
+    true,
+    config.lpCreation.tokenAAllowSpendAmount
+  );
+
+  const tokenB = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.tokenBMl0Url,
+    config.tokenBCl1Url,
+    'B',
+    config.tokenBId,
+    true,
+    config.lpCreation.tokenBAllowSpendAmount
+  );
+
+  await processLiquidityPoolCreation(config, tokenA, tokenB);
+}
+
+const dagToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
+  log("Starting liquidity pool creation test (DAG to Currency)");
+
+  const tokenA = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.gl0Url,
+    config.dagCl1Url,
+    'DAG',
+    null,
+    false,
+    config.lpCreation.tokenAAllowSpendAmount
+  );
+
+  const tokenB = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.tokenBMl0Url,
+    config.tokenBCl1Url,
+    'B',
+    config.tokenBId,
+    true,
+    config.lpCreation.tokenBAllowSpendAmount
+  );
+
+  await processLiquidityPoolCreation(config, tokenA, tokenB);
+}
+
+const main = async () => {
+  await dagToCurrencyTest(createConfig())
+  await currencyToCurrencyTest(createConfig())
   log("Liquidity pool creation test passed!", "INFO", 'AMM')
 };
 
@@ -482,3 +577,4 @@ main().catch((error) => {
   log(`Error: ${error.message}`, "ERROR");
   process.exit(1);
 });
+
