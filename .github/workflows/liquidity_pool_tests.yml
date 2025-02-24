@@ -109,6 +109,7 @@ jobs:
         shell: bash
         env:
           GL0_URL: ${{ secrets.GL0_URL || 'http://localhost:9000' }}
+          DAG_CL1_URL: ${{ secrets.DAG_CL1_URL || 'http://localhost:9100' }}
           AMM_ML0_URL: ${{ secrets.AMM_ML0_URL || 'http://localhost:8000' }}
           AMM_CL1_URL: ${{ secrets.AMM_CL1_URL || 'http://localhost:8100' }}
           AMM_DL1_URL: ${{ secrets.AMM_DL1_URL || 'http://localhost:8200' }}
@@ -126,6 +127,7 @@ jobs:
           cd .github/action_scripts
           npx tsx liquidity-pool/liquidity-pool-creation_test.ts \
             $GL0_URL \
+            $DAG_CL1_URL \
             $AMM_ML0_URL \
             $AMM_CL1_URL \
             $AMM_DL1_URL \
