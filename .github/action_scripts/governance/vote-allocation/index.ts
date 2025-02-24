@@ -146,7 +146,7 @@ const voteAllocationTests = async (argsObject: object) => {
     log("Vote allocation information built successfully.");
 
     for (const voteAllocationInfo of voteAllocationsInfo) {
-        const { address, _ } = voteAllocationInfo;
+        const { address } = voteAllocationInfo;
 
         const signedVoteAllocation = await getSignedVoteAllocation(config, voteAllocationInfo);
         await sendSignedVoteAllocation(config, signedVoteAllocation);

@@ -30,8 +30,7 @@ object Staking {
     tokenBAllowSpend: Hash,
     tokenA: TokenInformation,
     tokenB: TokenInformation,
-    parent: StakingReference,
-    ordinal: StakingOrdinal
+    parent: StakingReference
   )
 
   @derive(decoder, encoder, order, ordering)

@@ -244,8 +244,7 @@ object StakingCombiner {
                     stakingUpdate.tokenBAllowSpend,
                     updatedTokenInformation.primaryTokenInformation,
                     updatedTokenInformation.pairTokenInformation,
-                    stakingReference,
-                    StakingOrdinal(currentSnapshotOrdinal.value)
+                    stakingReference
                   )
 
                 updatedPendingCalculatedState = removePendingSpendAction(stakingCalculatedState, signedStakingUpdate)

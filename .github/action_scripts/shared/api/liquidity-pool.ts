@@ -1,14 +1,22 @@
 import axios from "axios";
-import { log, throwInContext } from "../log";
+import { log, logObject, throwInContext } from "../log";
 import { createAccount, getPublicKey } from "./account";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
 import { z } from "zod";
-import { Signed, TokenInformation } from "./data-update";
+import { Signed } from "./data-update";
+import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
 
 type LiquidityPool = {
+    poolId: string
     tokenA: TokenInformation
     tokenB: TokenInformation
+    owner: string
+    k: number
+    poolShares: {
+        totalShares: number
+        addressShares: Record<string, number>
+    }
 }
 
 type LiquidityPoolUpdate = {
@@ -25,6 +33,10 @@ type LiquidityUpdateBody = {
     LiquidityPoolUpdate: LiquidityPoolUpdate
 }
 
+type ConfirmedLiquidityPoolCalculatedState = {
+    value: Record<string, LiquidityPool>
+}
+
 const createLiquidityPoolUpdate = async (
     tokenAAllowSpendHash: string,
     tokenBAllowSpendHash: string,
@@ -34,10 +46,11 @@ const createLiquidityPoolUpdate = async (
     tokenBAllowSpendAmount: number,
     privateKey: string,
     account: ReturnType<typeof createAccount>,
+    ammMl0Url: string,
 ): Promise<Signed<LiquidityUpdateBody>> => {
     const body: LiquidityUpdateBody = {
         LiquidityPoolUpdate: {
-            maxValidGsEpochProgress: 50,
+            maxValidGsEpochProgress: 1000,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount: tokenAAllowSpendAmount,
             tokenAId,
@@ -85,7 +98,7 @@ const getLiquidityPool = async (
             `${ammL0Url}/v1/liquidity-pools/${poolId}`
         );
         logger(`Liquidity pool data received for ${poolId}`, "INFO", 'AMM');
-        console.log(JSON.stringify(data, null, 2));
+        logObject(data, "AMM");
 
         const TokenInfoResponseSchema = z.object({
             id: z.string().nullable(),
@@ -107,26 +120,53 @@ const getLiquidityPool = async (
         return LiquidityPoolResponseSchema.parse(data);
     } catch (error) {
         logger(`Error getting liquidity pool data for ${poolId}: ${error}`, "ERROR", 'AMM');
-        throwInContext('AMM')("Error getting liquidity pool data.");
+        throwInContext('AMM')(`Error getting liquidity pool data for ${poolId}`);
     }
 }
 
 const validateLiquidityPoolCreated = async (
     ammL0Url: string,
-    poolId: string,
-    logger: (message: string, type?: string, context?: string) => void = log
+    account: ReturnType<typeof createAccount>,
+    tokenAId: string | null,
+    tokenBId: string | null,
+    logger: (message: string, type?: string, context?: string) => void
 ) => {
-    try {
-        const liquidityPool = await getLiquidityPool(ammL0Url, poolId, logger)
-        if (liquidityPool) {
-            logger(`Liquidity pool found with id ${liquidityPool.data.poolId}`, "INFO", 'AMM')
-            return liquidityPool
-        } else {
-            logger(`Liquidity pool not found with id ${poolId}`, "INFO", 'AMM')
-            throwInContext('AMM')("Liquidity pool not found.");
+
+    const calculatedState = await getCalculatedState(ammL0Url);
+    logger("Pulled calculated state", "INFO", 'AMM')
+
+    const liquidityPoolCalculatedState = calculatedState?.operations.LiquidityPool?.LiquidityPoolCalculatedState
+    const confirmedLiquidityPool = liquidityPoolCalculatedState?.confirmed.value ?? {}
+    const pendingLiquidityPool = liquidityPoolCalculatedState?.pending ?? []
+    const failedLiquidityPool = liquidityPoolCalculatedState?.failed ?? []
+
+    const isConfirmedLiquidityPool = Object.values(confirmedLiquidityPool).some(
+        (liquidityPool) => liquidityPool.tokenA.identifier === tokenAId && liquidityPool.tokenB.identifier === tokenBId
+    );
+
+    const isPendingLiquidityPool = pendingLiquidityPool.some(
+        (pendingAction) => {
+            const updateValue = isPendingAllowSpend(pendingAction)
+                ? pendingAction.PendingAllowSpend.update.value
+                : pendingAction.PendingSpendAction.update.value;
+
+            return updateValue.tokenAId === tokenAId && updateValue.tokenBId === tokenBId
         }
-    } catch (error) {
-        logger(`Liquidity pool not found with id ${poolId}`, "INFO", 'AMM')
+    );
+
+    const isFailedLiquidityPool = failedLiquidityPool.some(
+        (failed) => {
+            failed.update.value.tokenAId === tokenAId && failed.update.value.tokenBId === tokenBId
+        }
+    );
+
+    if (isFailedLiquidityPool) {
+        throwInContext('AMM')("Liquidity pool creation failed.");
+    } else if (isPendingLiquidityPool) {
+        throwInContext('AMM')("Liquidity pool creation is pending.");
+    } else if (isConfirmedLiquidityPool) {
+        logger("Liquidity pool creation validated!", "INFO", 'AMM')
+    } else {
         throwInContext('AMM')("Liquidity pool not found.");
     }
 }
@@ -136,21 +176,23 @@ const validateLiquidityPoolAmountChanged = async (
     poolId: string,
     initialTokenABalance: number,
     initialTokenBBalance: number,
+    expectedTokenABalance: number,
+    expectedTokenBBalance: number,
     logger: (message: string, level: string, context: string) => void
 ) => {
-    const liquidityPoolAfterStaking = await getLiquidityPool(ammMl0Url, poolId, logger);
-    if (!liquidityPoolAfterStaking) {
+    const liquidityPool = await getLiquidityPool(ammMl0Url, poolId, logger);
+    if (!liquidityPool) {
         throwInContext('AMM')("Liquidity pool not found.");
         return
     }
-    const tokenAPoolBalanceAfterStaking = liquidityPoolAfterStaking.data.tokenA.amount;
-    const tokenBPoolBalanceAfterStaking = liquidityPoolAfterStaking.data.tokenB.amount;
+    const tokenAPoolBalance = liquidityPool.data.tokenA.amount;
+    const tokenBPoolBalance = liquidityPool.data.tokenB.amount;
 
-    if (tokenAPoolBalanceAfterStaking !== initialTokenABalance && tokenBPoolBalanceAfterStaking !== initialTokenBBalance) {
-        logger(`Liquidity pool token A amount changed from ${initialTokenABalance} to ${tokenAPoolBalanceAfterStaking}`, "INFO", 'AMM');
-        logger(`Liquidity pool token B amount changed from ${initialTokenBBalance} to ${tokenBPoolBalanceAfterStaking}`, "INFO", 'AMM');
+    if (tokenAPoolBalance === expectedTokenABalance && tokenBPoolBalance === expectedTokenBBalance) {
+        logger(`Liquidity pool token A amount changed from ${initialTokenABalance} to ${tokenAPoolBalance}`, "INFO", 'AMM');
+        logger(`Liquidity pool token B amount changed from ${initialTokenBBalance} to ${tokenBPoolBalance}`, "INFO", 'AMM');
     } else {
-        throwInContext('AMM')(`Liquidity pool token amount did not change. Expected ${initialTokenABalance} vs ${tokenAPoolBalanceAfterStaking} and ${initialTokenBBalance} vs ${tokenBPoolBalanceAfterStaking}.`);
+        throwInContext('AMM')(`Liquidity pool token amount did not change.`);
     }
 }
 
@@ -158,8 +200,9 @@ export {
     createLiquidityPoolUpdate,
     validateLiquidityPoolCreated,
     type LiquidityPool,
-    type TokenInformation,
+    type LiquidityPoolUpdate,
     getLiquidityPool,
     validateLiquidityPoolAmountChanged,
     buildLiquidityPoolUniqueIdentifier,
+    type ConfirmedLiquidityPoolCalculatedState
 }

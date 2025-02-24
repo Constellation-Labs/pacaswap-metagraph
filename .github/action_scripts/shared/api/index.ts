@@ -4,4 +4,6 @@ export * from "./allow-spends";
 export * from "./token";
 export * from "./liquidity-pool";
 export * from "./data-update";
+export * from "./staking";
 export * from "./calculated-state";
+export * from "./snapshot";

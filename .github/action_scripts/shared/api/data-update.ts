@@ -1,21 +1,10 @@
 import axios from "axios"
 import { log, throwInContext } from "../log"
+import { Signed } from "./signed";
 
-type Signed<T> = {
-    proofs: {
-        id: string
-        signature: string
-    }[]
-    value: T
-}
-
-type FailedCalculatedState<T> = {
-    update: Signed<T>
-}
-
-type TokenInformation = {
-    identifier?: string | null
-    amount: number
+type LastRef = {
+    ordinal: number
+    hash: string
 }
 
 const sendDataUpdate = async <T>(
@@ -32,4 +21,4 @@ const sendDataUpdate = async <T>(
     }
 }
 
-export { sendDataUpdate, type Signed, type FailedCalculatedState, type TokenInformation }
+export { sendDataUpdate, type Signed, type LastRef }

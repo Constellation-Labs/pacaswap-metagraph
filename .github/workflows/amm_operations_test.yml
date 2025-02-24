@@ -22,11 +22,13 @@ jobs:
         shell: bash
         run: |
           cd .github/action_scripts
-          npm i @stardust-collective/dag4
-          npm i js-sha256
-          npm i axios
-          npm i brotli
-          npm i zod
+          npm ci
+
+      - name: Check TypeScript
+        shell: bash
+        run: |
+          cd .github/action_scripts
+          npm run check-ts
 
       - name: Download shared_jars artifacts
         uses: actions/download-artifact@v4

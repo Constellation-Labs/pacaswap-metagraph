@@ -290,8 +290,7 @@ object StakingValidationTest extends MutableIOSuite {
                   Hash.empty,
                   primaryToken,
                   pairToken,
-                  StakingReference.empty,
-                  StakingOrdinal.first
+                  StakingReference.empty
                 )
               )
             )
