@@ -125,7 +125,7 @@ jobs:
           TOKEN_B_ID=$(cat .github/code/metagraphs/currency-metagraph-2/metagraph-l0/genesis-node/genesis.address)
           echo "TOKEN_B_ID: $TOKEN_B_ID"
           cd .github/action_scripts
-          npx tsx liquidity-pool/liquidity-pool-creation_test.ts \
+          npx tsx amm-operations/main.ts \
             $GL0_URL \
             $DAG_CL1_URL \
             $AMM_ML0_URL \
