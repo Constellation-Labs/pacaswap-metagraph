@@ -567,10 +567,80 @@ const dagToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
   await processLiquidityPoolCreation(config, tokenA, tokenB);
 }
 
+const dagToDagTest = async (config: ReturnType<typeof createConfig>) => {
+  log("Starting liquidity pool creation test (DAG to DAG - should fail)");
+
+  const tokenA = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.gl0Url,
+    config.dagCl1Url,
+    'DAG',
+    null,
+    false,
+    config.lpCreation.tokenAAllowSpendAmount
+  );
+
+  const tokenB = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.gl0Url,
+    config.dagCl1Url,
+    'DAG',
+    null,
+    false,
+    config.lpCreation.tokenBAllowSpendAmount
+  );
+
+  try {
+    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    throw new Error("Expected DAG to DAG liquidity pool creation to fail, but it succeeded");
+  } catch (error) {
+    log("DAG to DAG liquidity pool creation failed as expected", "INFO", 'AMM');
+  }
+}
+
+const sameCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
+  log("Starting liquidity pool creation test (Same Currency to Same Currency - should fail)");
+
+  const tokenA = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.tokenAMl0Url,
+    config.tokenACl1Url,
+    'A',
+    config.tokenAId,
+    true,
+    config.lpCreation.tokenAAllowSpendAmount
+  );
+
+  const tokenB = await createTokenConfig(
+    config.lpCreation.privateKey,
+    config.tokenAMl0Url,
+    config.tokenACl1Url,
+    'A',
+    config.tokenAId,
+    true,
+    config.lpCreation.tokenBAllowSpendAmount
+  );
+
+  try {
+    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    throw new Error("Expected same currency liquidity pool creation to fail, but it succeeded");
+  } catch (error) {
+    log("Same currency liquidity pool creation failed as expected", "INFO", 'AMM');
+  }
+}
+
 const main = async () => {
-  await dagToCurrencyTest(createConfig())
-  await currencyToCurrencyTest(createConfig())
-  log("Liquidity pool creation test passed!", "INFO", 'AMM')
+  const config = createConfig();
+
+  // Test valid cases
+  await dagToCurrencyTest(config);
+  await currencyToCurrencyTest(config);
+
+  // Test invalid cases
+  await dagToDagTest(config);
+  await sameCurrencyTest(config);
+
+  log("All liquidity pool creation tests passed!", "INFO", 'AMM');
 };
 
 main().catch((error) => {
