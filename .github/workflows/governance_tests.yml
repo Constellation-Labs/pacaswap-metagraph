@@ -74,7 +74,7 @@ jobs:
           MAX_RETRIES: 60
           PHRASE: "No enough last N global snapshots present"
 
-      - name: Start token lock tests
+      - name: Start governance tests
         shell: bash
         env:
           GL0_URL: ${{ secrets.GL0_URL }}
@@ -87,31 +87,9 @@ jobs:
           echo "METAGRAPH_ID: $METAGRAPH_ID"
 
           cd .github/action_scripts
-          npx tsx governance/token_lock_test.ts \
+          npx tsx governance/main.ts \
             $GL0_URL \
             $AMM_ML0_URL \
             $AMM_CL1_URL \
             $AMM_DL1_URL \
-            $METAGRAPH_ID \
-            "$TOKEN_LOCKS"
-
-      - name: Start vote allocation tests
-        shell: bash
-        env:
-          GL0_URL: ${{ secrets.GL0_URL }}
-          AMM_ML0_URL: ${{ secrets.AMM_ML0_URL }}
-          AMM_CL1_URL: ${{ secrets.AMM_CL1_URL }}
-          AMM_DL1_URL: ${{ secrets.AMM_DL1_URL }}
-          VOTE_ALLOCATIONS: ${{ secrets.VOTE_ALLOCATIONS }}
-        run: |
-          METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
-          echo "METAGRAPH_ID: $METAGRAPH_ID"
-
-          cd .github/action_scripts
-          npx tsx governance/vote_allocation_test.ts \
-            $GL0_URL \
-            $AMM_ML0_URL \
-            $AMM_CL1_URL \
-            $AMM_DL1_URL \
-            $METAGRAPH_ID \
-            "$VOTE_ALLOCATIONS"
+            $METAGRAPH_ID
