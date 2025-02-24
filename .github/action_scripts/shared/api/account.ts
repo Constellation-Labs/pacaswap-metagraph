@@ -1,5 +1,6 @@
 import { dag4 } from "@stardust-collective/dag4";
-import { log } from "./log";
+import { log, throwInContext } from "../log";
+import axios from "axios";
 
 const createAccount = (privateKey: string, l0Url: string, l1Url: string) => {
     const account = dag4.createAccount(privateKey);
