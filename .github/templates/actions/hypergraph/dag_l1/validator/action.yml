@@ -59,7 +59,7 @@ runs:
         cd $ROOT_DIRECTORY/.github/code/hypergraph/dag-l1/initial-validator
         DAG_L1_INITIAL_VALIDATOR_NODE_ID=$(java -jar $ROOT_DIRECTORY/.github/code/shared_jars/cl-wallet.jar show-id)
 
-        if node $ROOT_DIRECTORY/.github/action_scripts/check_if_node_started.js -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=DAG-L1-Validator-${{ inputs.NODE_NUMBER }}; then
+        if npx tsx $ROOT_DIRECTORY/.github/action_scripts/check_if_node_started.ts -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=DAG-L1-Validator-${{ inputs.NODE_NUMBER }}; then
             sleep 5
             echo "Joining DAG L1 validator node ${{ inputs.NODE_NUMBER }} ..."
             curl -X POST http://127.0.0.1:${CL_CLI_HTTP_PORT}/cluster/join -H "Content-type: application/json" -d "{ \"id\":\"$DAG_L1_INITIAL_VALIDATOR_NODE_ID\", \"ip\": \"127.0.0.1\", \"p2pPort\": ${CL_L1_INITIAL_VALIDATOR_P2P_PORT} }"

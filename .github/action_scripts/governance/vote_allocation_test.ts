@@ -1,8 +1,7 @@
-const { dag4 } = require("@stardust-collective/dag4");
-const jsSha256 = require("js-sha256");
-const axios = require("axios");
-const { log, delay, getPublicKey, parseSharedArgs } = require("../shared");
-const { z } = require('zod');
+import { dag4 } from "@stardust-collective/dag4";
+import axios from "axios";
+import { log, delay, getPublicKey, parseSharedArgs } from "../shared";
+import { z } from 'zod';
 
 const AllocationsSchema = z.object({
   key: z.string()
@@ -47,7 +46,7 @@ const createConfig = () => {
 
   if (args.length < 6) {
     throw new Error(
-      "Usage: node vote-allocation-test.js <gl0-url> <aml0-url> <acl1-url> <adl1-url> <metagraph-id> <vote-allocations-json>"
+      "Usage: npx tsx governance/vote_allocation_test.ts <gl0-url> <aml0-url> <acl1-url> <adl1-url> <metagraph-id> <vote-allocations-json>"
     );
   }
 
@@ -57,12 +56,6 @@ const createConfig = () => {
   const specificArgs = CliArgsSchema.parse({ voteAllocations });
 
   return { ...sharedArgs, ...specificArgs };
-};
-
-const serialize = async (content) => {
-  log("Serializing data with Json...");
-  const jsonString = JSON.stringify(content);
-  return Buffer.from(jsonString, 'utf8').toString('hex');
 };
 
 const getSignedVoteAllocation = async (config, { privateKey, publicKey, address, allocations }) => {
@@ -87,8 +80,8 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
 
   const encodedMessage = Buffer.from(JSON.stringify(body)).toString('base64')
   const signature = await dag4.keyStore.dataSign(
-      privateKey,
-      encodedMessage
+    privateKey,
+    encodedMessage
   );
 
   log(`Signed vote allocation generated for wallet: ${address}`);
@@ -146,7 +139,7 @@ const validateAllocationsRewards = async (config) => {
 
       if (someRewardFilled) {
         const nodeValidatorsReward = someRewardFilled.rewardsInfo.NodeValidators
-        if( nodeValidatorsReward === 250 ){
+        if (nodeValidatorsReward === 250) {
           log(`Rewards filled correctly`);
           return
         }

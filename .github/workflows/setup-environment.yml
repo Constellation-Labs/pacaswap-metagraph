@@ -2,6 +2,16 @@ name: Setup environment
 
 on:
   workflow_call:
+    inputs:
+      tessellation_commit_hash:
+        required: false
+        description: "Specific tessellation commit hash to use. If not provided, latest develop commit will be used"
+        type: string
+      use_merge_commit:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to use the PR merge commit SHA instead of the head SHA"
 
 jobs:
   setup-hypergraph:
@@ -20,6 +30,7 @@ jobs:
       - name: Setup Hypergraph
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESSELLATION_COMMIT_HASH: ${{ inputs.tessellation_commit_hash }}
         uses: "./.github/templates/actions/hypergraph/setup"
 
       - name: Cache SBT and Coursier (~/.ivy2, ~/.sbt, ~/.cache/coursier)
@@ -50,6 +61,8 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
 
       - name: Setup Java and scala
         env:
@@ -86,6 +99,8 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
 
       - name: Setup Java and scala
         env:
@@ -123,6 +138,8 @@ jobs:
     needs: setup-hypergraph
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
 
       - name: Setup Java and scala
         env:

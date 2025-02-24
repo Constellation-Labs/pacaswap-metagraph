@@ -6,9 +6,17 @@ on:
 jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
+    with:
+      # tessellation_commit_hash: "4c30b86a1870fa03226b6cf5e2d2b182f8ede761"
+      use_merge_commit: true
     secrets: inherit
 
   call-governance-tests:
     needs: call-workflow-setup-environment
     uses: ./.github/workflows/governance_tests.yml
+    secrets: inherit
+
+  call-liquidity-pool-tests:
+    needs: call-workflow-setup-environment
+    uses: ./.github/workflows/liquidity_pool_tests.yml
     secrets: inherit

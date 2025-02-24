@@ -30,7 +30,6 @@ runs:
       CL_GLOBAL_L0_PEER_HTTP_PORT: ${{ inputs.CL_GLOBAL_L0_PEER_HTTP_PORT }}
     run: |
       ROOT_DIRECTORY=$(pwd)
-      
       cd $ROOT_DIRECTORY/.github/code/hypergraph/dag-l0/genesis-node
       GLOBAL_L0_NODE_ID=$(java -jar $ROOT_DIRECTORY/.github/code/shared_jars/cl-wallet.jar show-id)
       export CL_GLOBAL_L0_PEER_ID=$GLOBAL_L0_NODE_ID
@@ -83,4 +82,4 @@ runs:
   - name: Check if node started
     shell: bash
     run: |
-      node .github/action_scripts/check_if_node_started.js -url=http://127.0.0.1:${{ inputs.CL_PUBLIC_HTTP_PORT }}/node/info -cluster_name=${{inputs.METAGRAPH_NAME}}-Metagraph-L0-Genesis
+      npx tsx .github/action_scripts/check_if_node_started.ts -url=http://127.0.0.1:${{ inputs.CL_PUBLIC_HTTP_PORT }}/node/info -cluster_name=${{inputs.METAGRAPH_NAME}}-Metagraph-L0-Genesis

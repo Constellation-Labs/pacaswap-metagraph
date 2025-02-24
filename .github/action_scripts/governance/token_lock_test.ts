@@ -1,9 +1,9 @@
-const { dag4 } = require("@stardust-collective/dag4");
-const jsSha256 = require("js-sha256");
-const axios = require("axios");
-const { compress } = require("brotli");
-const { log, delay, getPublicKey, parseSharedArgs } = require("../shared");
-const { z } = require('zod');
+import { dag4 } from "@stardust-collective/dag4";
+import jsSha256 from "js-sha256";
+import axios from "axios";
+import { compress } from "brotli";
+import { log, delay, getPublicKey, parseSharedArgs } from "../shared";
+import { z } from 'zod';
 
 const TokenLockSchema = z.object({
   privateKey: z.string()
@@ -60,7 +60,7 @@ const createConfig = () => {
 
   if (args.length < 6) {
     throw new Error(
-      "Usage: node script.js <gl0-url> <aml0-url> <acl1-url> <adl1-url> <metagraph-id> <token-locks-json>"
+      "Usage: npx tsx governance/token_lock_test.ts <gl0-url> <aml0-url> <acl1-url> <adl1-url> <metagraph-id> <token-locks-json>"
     );
   }
 

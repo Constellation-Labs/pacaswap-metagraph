@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: .github/action_scripts/package-lock.json
 
       - name: Installing node dependencies
@@ -72,7 +72,7 @@ jobs:
           METAGRAPH_NAME: amm-metagraph
           INTERVAL: 5
           MAX_RETRIES: 60
-          PHRASE: 'No enough last N global snapshots present'
+          PHRASE: "No enough last N global snapshots present"
 
       - name: Start token lock tests
         shell: bash
@@ -85,9 +85,9 @@ jobs:
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
           echo "METAGRAPH_ID: $METAGRAPH_ID"
-          
+
           cd .github/action_scripts
-          node governance/token_lock_test.js \
+          npx tsx governance/token_lock_test.ts \
             $GL0_URL \
             $AMM_ML0_URL \
             $AMM_CL1_URL \
@@ -106,9 +106,9 @@ jobs:
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
           echo "METAGRAPH_ID: $METAGRAPH_ID"
-          
+
           cd .github/action_scripts
-          node governance/vote_allocation_test.js \
+          npx tsx governance/vote_allocation_test.ts \
             $GL0_URL \
             $AMM_ML0_URL \
             $AMM_CL1_URL \
