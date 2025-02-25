@@ -2,7 +2,7 @@ import { dag4 } from '@stardust-collective/dag4';
 import axios from 'axios';
 import { z } from 'zod';
 import {
-    BaseCliArgsSchema,
+    BaseWithCurrencyMetagraphsCliArgsSchema,
     createAccount,
     createSignedAllowSpend,
     createTokenConfig,
@@ -40,7 +40,7 @@ const createConfig = (argsObject: object) => {
         lpCreation
     }
 
-    const CliArgsSchema = BaseCliArgsSchema.extend({
+    const CliArgsSchema = BaseWithCurrencyMetagraphsCliArgsSchema.extend({
         lpCreation: LPCreationSchema
     });
 

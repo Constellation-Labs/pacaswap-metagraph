@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const BaseCliArgsSchema = z.object({
+const BaseWithCurrencyMetagraphsCliArgsSchema = z.object({
     gl0Url: z.string().url("GL0 URL must be a valid URL"),
     dagCl1Url: z.string().url("DAG CL1 URL must be a valid URL"),
     ammMl0Url: z.string().url("AMM ML0 URL must be a valid URL"),
@@ -15,7 +15,7 @@ const BaseCliArgsSchema = z.object({
     tokenBId: z.string().min(1, "tokenBId cannot be empty"),
 });
 
-const CliArgsSchema = z.object({
+const BaseAmmMetagraphCliArgsSchema = z.object({
     gl0Url: z.string().url("GL0 URL must be a valid URL"),
     ammMl0Url: z.string().url("AMM ML0 URL must be a valid URL"),
     ammCl1Url: z.string().url("AMM CL1 URL must be a valid URL"),
@@ -23,15 +23,4 @@ const CliArgsSchema = z.object({
     metagraphId: z.string().min(1, "Metagraph ID cannot be empty"),
 });
 
-const parseSharedArgs = (args) => {
-    const [gl0Url, ammMl0Url, ammCl1Url, ammDl1Url, metagraphId] = args;
-    return CliArgsSchema.parse({
-        gl0Url,
-        ammMl0Url,
-        ammCl1Url,
-        ammDl1Url,
-        metagraphId,
-    });
-};
-
-export { parseSharedArgs, CliArgsSchema, BaseCliArgsSchema };
+export { BaseAmmMetagraphCliArgsSchema, BaseWithCurrencyMetagraphsCliArgsSchema };
