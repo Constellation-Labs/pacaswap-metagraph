@@ -2,14 +2,12 @@ package org.amm_metagraph.shared_data.types
 
 import java.time._
 
-import cats.Order
+import cats.Order._
 import cats.effect.kernel.Async
-import cats.syntax.functor._
-import cats.syntax.semigroup._
+import cats.syntax.all._
 
 import io.constellationnetwork.ext.crypto._
 import io.constellationnetwork.ext.derevo.ordering
-import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.tokenLock.TokenLock
@@ -21,7 +19,7 @@ import derevo.cats.order
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
-import eu.timepit.refined.auto.autoRefineV
+import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric.{NonNegDouble, NonNegInt, NonNegLong}
 import io.circe.refined._
@@ -36,18 +34,14 @@ import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdat
 object Governance {
   val maxCredits = 50.0
 
+  @derive(decoder, encoder, order, ordering)
   @newtype
-  @derive(order, encoder, decoder)
   case class RewardAllocationVoteOrdinal(value: NonNegLong) {
     def next: RewardAllocationVoteOrdinal = RewardAllocationVoteOrdinal(value |+| 1L)
   }
 
   object RewardAllocationVoteOrdinal {
     val first: RewardAllocationVoteOrdinal = RewardAllocationVoteOrdinal(0L)
-
-    implicit val decoder: Decoder[RewardAllocationVoteOrdinal] = deriving
-    implicit val encoder: Encoder[RewardAllocationVoteOrdinal] = deriving
-    implicit val orderInstance: Order[RewardAllocationVoteOrdinal] = Order.by(_.value)
   }
 
   @derive(decoder, encoder, order, ordering)

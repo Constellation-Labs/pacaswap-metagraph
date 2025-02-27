@@ -33,9 +33,10 @@ import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object SwapCombinerTest extends MutableIOSuite {
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -56,7 +57,8 @@ object SwapCombinerTest extends MutableIOSuite {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = HasherSelector.forSync(h, h)
+  } yield (h, hs, sp)
 
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
@@ -111,7 +113,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
   test("Test swap successfully when liquidity pool exists - providing min and max price") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -201,7 +203,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap successfully when liquidity pool exists - not providing min and max price") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -291,7 +293,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap failure when liquidity pool exists - minPrice too high") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -371,7 +373,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap failure when liquidity pool exists - maxPrice too low") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -451,7 +453,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap failure when liquidity pool exists - minAmount too high") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -531,7 +533,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap - pending swap without allow spend") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken =
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
@@ -601,7 +603,7 @@ object SwapCombinerTest extends MutableIOSuite {
   }
 
   test("Test swap - ignore swap that exceed limit epoch progress") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken =
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)

@@ -8,7 +8,7 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.l0.CurrencyL0App
 import io.constellationnetwork.ext.cats.effect.ResourceIO
-import io.constellationnetwork.json.JsonSerializer
+import io.constellationnetwork.json.{JsonSerializer => JsonBrotliBinaryCodec}
 import io.constellationnetwork.schema.cluster.ClusterId
 import io.constellationnetwork.schema.semver.{MetagraphVersion, TessellationVersion}
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
@@ -17,7 +17,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
-import org.amm_metagraph.shared_data.types.codecs.{JsonBinaryCodec, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonBinaryCodec, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.ValidationService
 
 object Main
@@ -31,15 +31,27 @@ object Main
 
   override def dataApplication: Option[Resource[IO, BaseDataApplicationL0Service[IO]]] = (for {
     implicit0(sp: SecurityProvider[IO]) <- SecurityProvider.forAsync[IO]
-    implicit0(json2bin: JsonSerializer[IO]) <- JsonBinaryCodec.forSync[IO].asResource
-    implicit0(hasher: Hasher[IO]) = Hasher.forJson[IO]
-
-    dataUpdateCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate].asResource
+    jsonBrotliBinaryCodec <- JsonBrotliBinaryCodec.forSync[IO].asResource
+    jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate].asResource
+    jsonBinaryCodec <- JsonBinaryCodec.forSync[IO].asResource
+    hasherBrotli = {
+      implicit val serializer: JsonBrotliBinaryCodec[IO] = jsonBrotliBinaryCodec
+      Hasher.forJson[IO]
+    }
+    hasherCurrent = {
+      implicit val serializer: JsonBrotliBinaryCodec[IO] = jsonBinaryCodec
+      Hasher.forJson[IO]
+    }
+    implicit0(hasherSelector: HasherSelector[IO]) = HasherSelector.forSync(hasherBrotli, hasherCurrent)
     config <- ApplicationConfigOps.readDefault[IO].asResource
     calculatedStateService <- CalculatedStateService.make[IO].asResource
-    validationService <- ValidationService.make[IO](config).asResource
+    validationService <- hasherSelector.withCurrent { implicit hasher =>
+      ValidationService.make[IO](config).asResource
+    }
     combinerService <- CombinerService.make[IO](config).asResource
-    l1Service <- MetagraphL0Service.make[IO](calculatedStateService, validationService, combinerService, dataUpdateCodec).asResource
+    l1Service <- MetagraphL0Service
+      .make[IO](calculatedStateService, validationService, combinerService, jsonBase64BinaryCodec, jsonBinaryCodec)
+      .asResource
   } yield l1Service).some
 
 }

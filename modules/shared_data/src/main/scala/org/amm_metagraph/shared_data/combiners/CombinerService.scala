@@ -24,6 +24,7 @@ import org.amm_metagraph.shared_data.combiners.SwapCombiner.combineSwap
 import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineWithdrawal
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -35,7 +36,7 @@ trait CombinerService[F[_]] {
 }
 
 object CombinerService {
-  def make[F[_]: Async: Hasher: SecurityProvider](
+  def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig
   ): F[CombinerService[F]] = Async[F].delay {
     new CombinerService[F] {

@@ -10,7 +10,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import eu.timepit.refined.auto._
-import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendLastSyncGlobalSnapshotState
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsLastSyncGlobalSnapshotState
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
@@ -95,22 +95,19 @@ object StakingValidations {
 
   private def validateStakingAllowSpends[F[_]: Async: Hasher](
     stakingUpdate: StakingUpdate
-  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    tokenAAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
-      stakingUpdate.tokenAAllowSpend
-    )
-    tokenBAllowSpend <- getAllowSpendLastSyncGlobalSnapshotState(
-      stakingUpdate.tokenBAllowSpend
-    )
-  } yield
-    if (tokenAAllowSpend.isEmpty || tokenBAllowSpend.isEmpty) {
-      StakingMissingAllowSpend.invalid
-    } else if (tokenAAllowSpend.get.source != tokenBAllowSpend.get.source) {
-      StakingDifferentAllowSpendSource.invalid
-    } else if (tokenAAllowSpend.get.destination != tokenBAllowSpend.get.destination) {
-      StakingDifferentAllowSpendDestination.invalid
-    } else {
-      valid
+  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] =
+    getAllowSpendsLastSyncGlobalSnapshotState(
+      stakingUpdate.tokenAAllowSpend,
+      stakingUpdate.tokenAId,
+      stakingUpdate.tokenBAllowSpend,
+      stakingUpdate.tokenBId
+    ).map {
+      case (None, _) | (_, None) => StakingMissingAllowSpend.invalid
+      case (Some(allowSpendA), Some(allowSpendB)) if allowSpendA.source != allowSpendB.source =>
+        StakingDifferentAllowSpendSource.invalid
+      case (Some(allowSpendA), Some(allowSpendB)) if allowSpendA.destination != allowSpendB.destination =>
+        StakingDifferentAllowSpendDestination.invalid
+      case _ => valid
     }
 
   private def lastRefValidation(

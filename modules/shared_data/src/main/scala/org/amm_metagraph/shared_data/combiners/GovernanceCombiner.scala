@@ -22,6 +22,7 @@ import org.amm_metagraph.shared_data.types.Governance.MonthlyReference.getMonthl
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -95,7 +96,7 @@ object GovernanceCombiner {
     }
   }
 
-  def combineRewardAllocationVoteUpdate[F[_]: Async: Hasher](
+  def combineRewardAllocationVoteUpdate[F[_]: Async: HasherSelector](
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedRewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
     globalEpochProgress: EpochProgress
@@ -104,7 +105,9 @@ object GovernanceCombiner {
 
     val liquidityPools = getLiquidityPoolCalculatedState(acc.calculated).confirmed.value
 
-    RewardAllocationVoteReference.of(signedRewardAllocationVoteUpdate).flatMap { reference =>
+    HasherSelector[F].withCurrent { implicit hs =>
+      RewardAllocationVoteReference.of(signedRewardAllocationVoteUpdate)
+    }.flatMap { reference =>
       val allocationsSum = signedRewardAllocationVoteUpdate.allocations.map { case (_, weight) => weight.value }.sum
 
       val allocationsUpdate = signedRewardAllocationVoteUpdate.allocations.map {

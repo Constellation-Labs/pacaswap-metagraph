@@ -36,10 +36,11 @@ import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
+import org.amm_metagraph.shared_data.types.codecs
 
 object StakingCombinerTest extends MutableIOSuite {
 
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
   private val config = ApplicationConfig(
@@ -59,7 +60,8 @@ object StakingCombinerTest extends MutableIOSuite {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = codecs.HasherSelector.forSync(h, h)
+  } yield (h, hs, sp)
 
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
@@ -114,7 +116,7 @@ object StakingCombinerTest extends MutableIOSuite {
     )
 
   test("Test successful staking - single provider") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     // 100.0 tokens = 10000000000 in fixed-point
     val primaryToken = TokenInformation(
@@ -223,7 +225,7 @@ object StakingCombinerTest extends MutableIOSuite {
   }
 
   test("Test successful staking - multiple providers") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -326,7 +328,7 @@ object StakingCombinerTest extends MutableIOSuite {
   }
 
   test("Throws error if liquidity pool does not exists") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
@@ -402,7 +404,7 @@ object StakingCombinerTest extends MutableIOSuite {
   }
 
   test("Return failed due staking more than allowSpend") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -494,7 +496,7 @@ object StakingCombinerTest extends MutableIOSuite {
   }
 
   test("Return expired epoch progress when update exceeds allowSpend limit") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,

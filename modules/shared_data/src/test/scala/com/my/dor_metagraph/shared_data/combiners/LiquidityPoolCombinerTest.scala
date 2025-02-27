@@ -33,10 +33,11 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.{TokenInformation, buil
 import org.amm_metagraph.shared_data.types.States.OperationType.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object LiquidityPoolCombinerTest extends MutableIOSuite {
 
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
   private val config = ApplicationConfig(
@@ -56,7 +57,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = HasherSelector.forSync(h, h)
+  } yield (h, hs, sp)
 
   def getFakeSignedUpdate(
     update: LiquidityPoolUpdate
@@ -80,7 +82,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     )
 
   test("Successfully create a liquidity pool") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
     val tokenAAmount = PosLong(100L)
@@ -165,7 +167,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
   }
 
   test("Successfully create a liquidity pool - L0Token - DAG") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
     val tokenAAmount = PosLong(100L)
@@ -251,7 +253,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
   }
 
   test("Return failed due staking more than allowSpend") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -341,7 +343,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
   }
 
   test("Return expired epoch progress when update exceeds allowSpend limit") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,

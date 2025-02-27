@@ -12,8 +12,8 @@ import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
@@ -25,6 +25,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object SwapCombiner {
   private case class UpdatedTokenInformation(
@@ -70,7 +71,7 @@ object SwapCombiner {
     )
   }
 
-  def combineSwap[F[_]: Async: Hasher](
+  def combineSwap[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedSwapUpdate: Signed[SwapUpdate],
@@ -81,8 +82,12 @@ object SwapCombiner {
     val swapCalculatedState = getSwapCalculatedState(acc.calculated)
 
     val updates = swapUpdate :: acc.onChain.updates
-
-    getAllowSpendLastSyncGlobalSnapshotState(swapUpdate.allowSpendReference).flatMap {
+    HasherSelector[F].withBrotli { implicit hs =>
+      getAllowSpendLastSyncGlobalSnapshotState(
+        swapUpdate.allowSpendReference,
+        swapUpdate.swapFromPair
+      )
+    }.flatMap {
       case None =>
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
