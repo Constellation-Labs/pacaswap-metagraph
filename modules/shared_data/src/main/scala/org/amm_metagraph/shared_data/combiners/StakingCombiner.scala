@@ -12,19 +12,20 @@ import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object StakingCombiner {
 
@@ -103,7 +104,7 @@ object StakingCombiner {
     )
   }
 
-  def combineStaking[F[_]: Async: Hasher](
+  def combineStaking[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedStakingUpdate: Signed[StakingUpdate],
@@ -115,10 +116,14 @@ object StakingCombiner {
     val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
     val updates = stakingUpdate :: acc.onChain.updates
 
-    (
-      getAllowSpendLastSyncGlobalSnapshotState(stakingUpdate.tokenAAllowSpend),
-      getAllowSpendLastSyncGlobalSnapshotState(stakingUpdate.tokenBAllowSpend)
-    ).flatMapN {
+    HasherSelector[F].withBrotli { implicit hs =>
+      getAllowSpendsLastSyncGlobalSnapshotState(
+        stakingUpdate.tokenAAllowSpend,
+        stakingUpdate.tokenAId,
+        stakingUpdate.tokenBAllowSpend,
+        stakingUpdate.tokenBId
+      )
+    }.flatMap {
       case (None, _) | (_, None) =>
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
@@ -146,18 +151,10 @@ object StakingCombiner {
             updatedCalculatedState
           )
 
-      case (Some(_), Some(_)) =>
+      case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
         for {
-          allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
-            stakingUpdate.tokenAAllowSpend
-          )
-
-          allowSpendTokenB <- getAllowSpendLastSyncGlobalSnapshotState(
-            stakingUpdate.tokenBAllowSpend
-          )
-
           poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
 
@@ -167,12 +164,14 @@ object StakingCombiner {
             applicationConfig,
             signedStakingUpdate,
             updatedTokenInformation,
-            allowSpendTokenA.get,
-            allowSpendTokenB.get,
+            allowSpendTokenA,
+            allowSpendTokenB,
             lastSyncGlobalEpochProgress
           )
 
-          stakingReference <- StakingReference.of(signedStakingUpdate)
+          stakingReference <- HasherSelector[F].withCurrent { implicit hs =>
+            StakingReference.of(signedStakingUpdate)
+          }
 
           response = maybeFailedUpdate match {
             case Some(failedCalculatedState) =>
@@ -224,7 +223,7 @@ object StakingCombiner {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
 
-              val spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
+              val spendTransactions = generateSpendTransactions(allowSpendTokenA, allowSpendTokenB)
 
               DataState(
                 AmmOnChainState(updates),

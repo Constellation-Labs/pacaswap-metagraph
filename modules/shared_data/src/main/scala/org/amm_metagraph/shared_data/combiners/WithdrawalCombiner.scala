@@ -24,6 +24,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object WithdrawalCombiner {
   private case class WithdrawalTokenAmounts(
@@ -108,7 +109,7 @@ object WithdrawalCombiner {
     )
   }
 
-  def combineWithdrawal[F[_]: Async: Hasher](
+  def combineWithdrawal[F[_]: Async](
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     signerAddress: Address,

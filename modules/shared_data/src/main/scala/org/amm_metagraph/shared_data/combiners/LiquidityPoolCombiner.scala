@@ -11,8 +11,8 @@ import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
@@ -20,13 +20,16 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object LiquidityPoolCombiner {
+
   private def generateSpendTransactions(
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
@@ -39,7 +42,7 @@ object LiquidityPoolCombiner {
     )
   }
 
-  def combineLiquidityPool[F[_]: Async: Hasher](
+  def combineLiquidityPool[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate],
@@ -50,14 +53,19 @@ object LiquidityPoolCombiner {
     val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
 
     val updates = liquidityPoolUpdate :: acc.onChain.updates
-    (
-      getAllowSpendLastSyncGlobalSnapshotState(liquidityPoolUpdate.tokenAAllowSpend),
-      getAllowSpendLastSyncGlobalSnapshotState(liquidityPoolUpdate.tokenBAllowSpend)
-    ).flatMapN {
+    HasherSelector[F].withBrotli { implicit hs =>
+      getAllowSpendsLastSyncGlobalSnapshotState(
+        liquidityPoolUpdate.tokenAAllowSpend,
+        liquidityPoolUpdate.tokenAId,
+        liquidityPoolUpdate.tokenBAllowSpend,
+        liquidityPoolUpdate.tokenBId
+      )
+    }.flatMap {
       case (None, _) | (_, None) =>
         for {
           lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
           gsEpochProgress = lastSyncHashedGIS.epochProgress
+
           updatedLiquidityPoolPending =
             if (liquidityPoolUpdate.maxValidGsEpochProgress < gsEpochProgress) {
               liquidityPoolCalculatedState.pending - signedLiquidityPoolUpdate
@@ -81,22 +89,15 @@ object LiquidityPoolCombiner {
             updatedCalculatedState
           )
 
-      case (Some(_), Some(_)) =>
+      case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
         for {
           poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
-          allowSpendTokenA <- getAllowSpendLastSyncGlobalSnapshotState(
-            liquidityPoolUpdate.tokenAAllowSpend
-          )
-
-          allowSpendTokenB <- getAllowSpendLastSyncGlobalSnapshotState(
-            liquidityPoolUpdate.tokenBAllowSpend
-          )
 
           maybeFailedUpdate = validateUpdate(
             applicationConfig,
             signedLiquidityPoolUpdate,
-            allowSpendTokenA.get,
-            allowSpendTokenB.get,
+            allowSpendTokenA,
+            allowSpendTokenB,
             lastSyncGlobalEpochProgress
           )
 
@@ -146,7 +147,7 @@ object LiquidityPoolCombiner {
               val updatedCalculatedState = acc.calculated
                 .focus(_.operations)
                 .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
-              val spendTransactions = generateSpendTransactions(allowSpendTokenA.get, allowSpendTokenB.get)
+              val spendTransactions = generateSpendTransactions(allowSpendTokenA, allowSpendTokenB)
 
               DataState(
                 AmmOnChainState(updates),

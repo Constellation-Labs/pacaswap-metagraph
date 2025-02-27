@@ -27,25 +27,28 @@ import org.http4s.{EntityDecoder, HttpRoutes}
 
 object MetagraphL0Service {
 
-  def make[F[+_]: Async: JsonSerializer](
+  def make[F[+_]: Async](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
     combinerService: CombinerService[F],
-    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+    jsonSerializer: JsonSerializer[F]
   ): F[BaseDataApplicationL0Service[F]] = Async[F].delay {
     makeBaseDataApplicationL0Service(
       calculatedStateService,
       validationService,
       combinerService,
-      dataUpdateCodec
+      dataUpdateCodec,
+      jsonSerializer
     )
   }
 
-  private def makeBaseDataApplicationL0Service[F[+_]: Async: JsonSerializer](
+  private def makeBaseDataApplicationL0Service[F[+_]: Async](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
     combinerService: CombinerService[F],
-    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+    jsonSerializer: JsonSerializer[F]
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
@@ -81,22 +84,22 @@ object MetagraphL0Service {
       override def serializeBlock(
         block: Signed[DataApplicationBlock]
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[Signed[DataApplicationBlock]](block)
+        jsonSerializer.serialize[Signed[DataApplicationBlock]](block)
 
       override def deserializeBlock(
         bytes: Array[Byte]
       ): F[Either[Throwable, Signed[DataApplicationBlock]]] =
-        JsonSerializer[F].deserialize[Signed[DataApplicationBlock]](bytes)
+        jsonSerializer.deserialize[Signed[DataApplicationBlock]](bytes)
 
       override def serializeState(
         state: AmmOnChainState
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmOnChainState](state)
+        jsonSerializer.serialize[AmmOnChainState](state)
 
       override def deserializeState(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmOnChainState]] =
-        JsonSerializer[F].deserialize[AmmOnChainState](bytes)
+        jsonSerializer.deserialize[AmmOnChainState](bytes)
 
       override def serializeUpdate(
         update: AmmUpdate
@@ -128,12 +131,12 @@ object MetagraphL0Service {
       override def serializeCalculatedState(
         state: AmmCalculatedState
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmCalculatedState](state)
+        jsonSerializer.serialize[AmmCalculatedState](state)
 
       override def deserializeCalculatedState(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmCalculatedState]] =
-        JsonSerializer[F].deserialize[AmmCalculatedState](bytes)
+        jsonSerializer.deserialize[AmmCalculatedState](bytes)
 
       override def routesPrefix: ExternalUrlPrefix = "v1"
     })
