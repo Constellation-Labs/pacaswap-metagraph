@@ -164,6 +164,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
       Hash.empty,
       Hash.empty,
@@ -179,7 +181,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -192,6 +194,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
       Hash.empty,
       Hash.empty,
@@ -207,7 +211,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -220,6 +224,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
       Hash.empty,
       Hash.empty,
@@ -235,7 +241,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
@@ -276,7 +282,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {

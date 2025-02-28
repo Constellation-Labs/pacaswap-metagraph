@@ -35,8 +35,8 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
-import weaver.MutableIOSuite
 import org.amm_metagraph.shared_data.types.codecs
+import weaver.MutableIOSuite
 
 object StakingCombinerTest extends MutableIOSuite {
 
@@ -144,8 +144,8 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
-        SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
+        primaryToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -154,7 +154,7 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -184,8 +184,17 @@ object StakingCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       stakeResponse <- combineStaking[IO](
@@ -296,8 +305,17 @@ object StakingCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       stakeResponse <- combineStaking[IO](
@@ -381,8 +399,17 @@ object StakingCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       result <- combineStaking[IO](
@@ -472,8 +499,17 @@ object StakingCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       stakeResponse <- combineStaking[IO](
@@ -564,8 +600,17 @@ object StakingCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       stakeResponse <- combineStaking[IO](

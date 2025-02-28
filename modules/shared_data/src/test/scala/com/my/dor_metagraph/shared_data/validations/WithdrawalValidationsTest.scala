@@ -105,6 +105,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -134,7 +135,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -148,6 +149,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
     implicit val (h, sp) = res
 
     val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -162,7 +164,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -203,7 +205,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -224,6 +226,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     val withdrawalUpdate = getFakeSignedUpdate(
       WithdrawalUpdate(
@@ -253,7 +256,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,

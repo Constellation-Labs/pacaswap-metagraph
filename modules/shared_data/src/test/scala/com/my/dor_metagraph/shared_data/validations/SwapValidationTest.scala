@@ -177,8 +177,13 @@ object SwapValidationTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          ownerAddress.some ->
+            SortedMap(
+              ownerAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       validationService <- ValidationService.make[IO](config)
@@ -213,7 +218,7 @@ object SwapValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
@@ -258,7 +263,7 @@ object SwapValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {

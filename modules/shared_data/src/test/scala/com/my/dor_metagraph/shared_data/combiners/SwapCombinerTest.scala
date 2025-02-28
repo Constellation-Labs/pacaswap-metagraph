@@ -32,8 +32,8 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import weaver.MutableIOSuite
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import weaver.MutableIOSuite
 
 object SwapCombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
@@ -125,6 +125,7 @@ object SwapCombinerTest extends MutableIOSuite {
       PosLong.unsafeFrom(toFixedPoint(500.0))
     )
 
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
@@ -136,7 +137,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        sourceAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
@@ -167,8 +168,13 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              sourceAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -216,6 +222,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -226,7 +233,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        sourceAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
@@ -257,8 +264,13 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              sourceAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -306,6 +318,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -317,7 +330,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        sourceAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
@@ -348,8 +361,13 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              sourceAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -386,6 +404,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -397,7 +416,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        sourceAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
@@ -428,8 +447,13 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              sourceAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -466,6 +490,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -477,7 +502,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        sourceAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
@@ -508,8 +533,13 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress -> SortedSet(signedAllowSpend.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              sourceAddress -> SortedSet(signedAllowSpend.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -580,7 +610,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
-        SortedMap.empty
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       swapResponse <- combineSwap[IO](
@@ -651,7 +683,8 @@ object SwapCombinerTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap.empty,
-        EpochProgress.MaxValue
+        EpochProgress.MaxValue,
+        ownerAddress
       )
 
       stakeResponse <- combineSwap[IO](
