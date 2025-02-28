@@ -19,8 +19,6 @@ import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 import eu.timepit.refined.auto._
 
 object DummyL0Context {
-  val metagraphAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
-
   def buildGlobalIncrementalSnapshot[F[_]: Async: SecurityProvider](
     keyPair: KeyPair,
     gsEpochProgress: EpochProgress
@@ -37,14 +35,16 @@ object DummyL0Context {
           .flatMap(_.toHashed[F])
       }
 
-  def buildGlobalSnapshotInfo(activeAllowSpends: SortedMap[Address, SortedSet[Signed[AllowSpend]]]): GlobalSnapshotInfo =
+  def buildGlobalSnapshotInfo(
+    activeAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+  ): GlobalSnapshotInfo =
     GlobalSnapshotInfo(
       SortedMap.empty,
       SortedMap.empty,
       SortedMap.empty,
       SortedMap.empty,
       SortedMap.empty,
-      SortedMap(metagraphAddress.some -> activeAllowSpends).some,
+      activeAllowSpends.some,
       none,
       none,
       none
@@ -52,15 +52,16 @@ object DummyL0Context {
 
   def buildL0NodeContext[F[_]: Async: Hasher: SecurityProvider](
     keyPair: KeyPair,
-    allowSpends: SortedMap[Address, SortedSet[Signed[AllowSpend]]],
-    gsEpochProgress: EpochProgress = EpochProgress.MinValue
+    allowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    gsEpochProgress: EpochProgress = EpochProgress.MinValue,
+    ammMetagraphAddress: Address
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
       def getLastCurrencySnapshot: F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
       def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
       def getLastCurrencySnapshotCombined: F[Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]] = ???
       def securityProvider: SecurityProvider[F] = ???
-      def getCurrencyId: F[CurrencyId] = CurrencyId(metagraphAddress).pure[F]
+      def getCurrencyId: F[CurrencyId] = CurrencyId(ammMetagraphAddress).pure[F]
       def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = for {
         globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
       } yield Some(globalIncrementalSnapshot)

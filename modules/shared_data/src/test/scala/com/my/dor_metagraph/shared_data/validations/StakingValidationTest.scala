@@ -149,7 +149,7 @@ object StakingValidationTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
+        primaryToken.identifier,
         SwapAmount(PosLong.MinValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -159,7 +159,7 @@ object StakingValidationTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -188,8 +188,17 @@ object StakingValidationTest extends MutableIOSuite {
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed, signedAllowSpendB.signed)
-        )
+          primaryToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            )
+        ),
+        EpochProgress.MinValue,
+        ownerAddress
       )
 
       validationService <- ValidationService.make[IO](config)
@@ -206,6 +215,7 @@ object StakingValidationTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty) // No pools initialized
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     val stakingUpdate = StakingUpdate(
       Hash.empty,
@@ -221,7 +231,7 @@ object StakingValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
@@ -282,7 +292,7 @@ object StakingValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {

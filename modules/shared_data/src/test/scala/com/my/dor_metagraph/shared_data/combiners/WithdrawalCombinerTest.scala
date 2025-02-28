@@ -132,7 +132,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       withdrawalResponse <- combineWithdrawal[IO](
         state,
@@ -206,7 +206,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       withdrawalResponse <- combineWithdrawal[IO](
         state,
@@ -280,6 +280,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -294,7 +295,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- combineWithdrawal[IO](
         state,
@@ -346,7 +347,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       withdrawalResponse <- combineWithdrawal[IO](
         state,
@@ -402,7 +403,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- combineWithdrawal[IO](
         state,
@@ -453,7 +454,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
 
       result <- combineWithdrawal[IO](
         state,
