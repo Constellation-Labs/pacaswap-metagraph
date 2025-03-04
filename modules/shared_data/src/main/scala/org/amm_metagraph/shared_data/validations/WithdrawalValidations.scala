@@ -3,7 +3,6 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
-import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.signature.Signed
@@ -14,18 +13,19 @@ import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.Errors._
 
 object WithdrawalValidations {
-  def withdrawalValidationsL1[F[_]: Async: Hasher](
+  def withdrawalValidationsL1[F[_]: Async](
     withdrawalUpdate: WithdrawalUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] =
     valid.pure
 
-  def withdrawalValidationsL0[F[_]: Async: Hasher](
+  def withdrawalValidationsL0[F[_]: Async: HasherSelector](
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     state: AmmCalculatedState
-  )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
+  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
     address <- signedWithdrawalUpdate.proofs.head.id.toAddress
     withdrawalUpdate = signedWithdrawalUpdate.value
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
@@ -43,10 +43,12 @@ object WithdrawalValidations {
       address
     )
 
-    withdrawalNotPending <- validateIfWithdrawalNotPending(
-      signedWithdrawalUpdate,
-      withdrawalCalculatedState.pending
-    )
+    withdrawalNotPending <- HasherSelector[F].withCurrent { implicit hs =>
+      validateIfWithdrawalNotPending(
+        signedWithdrawalUpdate,
+        withdrawalCalculatedState.pending
+      )
+    }
 
     lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, address)
 

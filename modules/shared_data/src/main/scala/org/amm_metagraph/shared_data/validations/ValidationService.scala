@@ -6,12 +6,13 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.GovernanceValidations.{rewardAllocationValidationsL0, rewardAllocationValidationsL1}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations.{liquidityPoolValidationsL0, liquidityPoolValidationsL1}
 import org.amm_metagraph.shared_data.validations.StakingValidations.{stakingValidationsL0, stakingValidationsL1}
@@ -30,7 +31,7 @@ trait ValidationService[F[_]] {
 }
 
 object ValidationService {
-  def make[F[_]: Async: SecurityProvider: Hasher](
+  def make[F[_]: Async: SecurityProvider: HasherSelector](
     applicationConfig: ApplicationConfig
   ): F[ValidationService[F]] = Async[F].delay {
     new ValidationService[F] {

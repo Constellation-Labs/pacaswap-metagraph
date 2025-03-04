@@ -5,7 +5,6 @@ import cats.effect.Async
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
 import io.constellationnetwork.json.JsonSerializer
-import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
 import io.circe.{Decoder, Encoder}
@@ -19,19 +18,22 @@ import org.http4s.{EntityDecoder, HttpRoutes}
 
 object DataL1Service {
 
-  def make[F[+_]: Async: JsonSerializer: Hasher](
+  def make[F[+_]: Async](
     validationService: ValidationService[F],
-    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+    jsonSerializer: JsonSerializer[F]
   ): F[BaseDataApplicationL1Service[F]] = Async[F].delay {
     makeBaseDataApplicationL1Service(
       validationService,
-      dataUpdateCodec
+      dataUpdateCodec,
+      jsonSerializer
     )
   }
 
-  private def makeBaseDataApplicationL1Service[F[+_]: Async: JsonSerializer](
+  private def makeBaseDataApplicationL1Service[F[+_]: Async](
     validationService: ValidationService[F],
-    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+    jsonSerializer: JsonSerializer[F]
   ): BaseDataApplicationL1Service[F] = BaseDataApplicationL1Service(
     new DataApplicationL1Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def validateUpdate(
@@ -60,22 +62,22 @@ object DataL1Service {
       override def serializeBlock(
         block: Signed[DataApplicationBlock]
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[Signed[DataApplicationBlock]](block)
+        jsonSerializer.serialize[Signed[DataApplicationBlock]](block)
 
       override def deserializeBlock(
         bytes: Array[Byte]
       ): F[Either[Throwable, Signed[DataApplicationBlock]]] =
-        JsonSerializer[F].deserialize[Signed[DataApplicationBlock]](bytes)
+        jsonSerializer.deserialize[Signed[DataApplicationBlock]](bytes)
 
       override def serializeState(
         state: AmmOnChainState
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmOnChainState](state)
+        jsonSerializer.serialize[AmmOnChainState](state)
 
       override def deserializeState(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmOnChainState]] =
-        JsonSerializer[F].deserialize[AmmOnChainState](bytes)
+        jsonSerializer.deserialize[AmmOnChainState](bytes)
 
       override def serializeUpdate(
         update: AmmUpdate
@@ -90,12 +92,12 @@ object DataL1Service {
       override def serializeCalculatedState(
         state: AmmCalculatedState
       ): F[Array[Byte]] =
-        JsonSerializer[F].serialize[AmmCalculatedState](state)
+        jsonSerializer.serialize[AmmCalculatedState](state)
 
       override def deserializeCalculatedState(
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmCalculatedState]] =
-        JsonSerializer[F].deserialize[AmmCalculatedState](bytes)
+        jsonSerializer.deserialize[AmmCalculatedState](bytes)
     }
   )
 }
