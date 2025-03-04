@@ -1,42 +1,41 @@
 import axios from "axios";
-import { createAccount, getPublicKey } from "./account";
+import { getPublicKey } from "./account";
 import { log, throwInContext } from "../log";
 import { getHash, serializeBrotli } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
+import { TokenConfig } from "./token";
 
 const createSignedAllowSpend = async (
     privateKey: string,
-    account: ReturnType<typeof createAccount>,
-    l1Url: string,
+    tokenConf: TokenConfig,
     ammMetagraphId: string,
-    amount: number,
     context: string
 ) => {
-    log(`Fetching last allow spend reference for wallet: ${account.address}`, "INFO", context);
+    log(`Fetching last allow spend reference for wallet: ${tokenConf.account.address}`, "INFO", context);
 
     const { data: lastRef } = await axios.get(
-        `${l1Url}/allow-spends/last-reference/${account.address}`
+        `${tokenConf.l1Url}/allow-spends/last-reference/${tokenConf.account.address}`
     );
 
-    log(`Last allow spend reference for wallet: ${account.address}: ${JSON.stringify(lastRef, null, 2)}`, "INFO", context);
+    log(`Last allow spend reference for wallet: ${tokenConf.account.address}: ${JSON.stringify(lastRef, null, 2)}`, "INFO", context);
 
     const body = {
-        amount,
+        amount: tokenConf.allowSpendAmount,
         approvers: [ammMetagraphId],
-        // currency: tokenId, // NOTE: Not supported yet, handle DAG and Currency case
+        currency: tokenConf.tokenId,
         destination: ammMetagraphId,
         fee: 1,
         lastValidEpochProgress: 50,
         parent: lastRef,
-        source: account.address,
+        source: tokenConf.account.address,
     };
 
     const serializedAllowSpend = await serializeBrotli(body);
     const hash = getHash(serializedAllowSpend);
     const signature = await dag4.keyStore.sign(privateKey, hash);
-    const publicKey = getPublicKey(account)
+    const publicKey = getPublicKey(tokenConf.account)
 
-    log(`Signed allow spend generated for wallet: ${account.address}: ${JSON.stringify(body, null, 2)}`, "INFO", context);
+    log(`Signed allow spend generated for wallet: ${tokenConf.account.address}: ${JSON.stringify(body, null, 2)}`, "INFO", context);
 
     return {
         value: body,
@@ -69,7 +68,8 @@ const validateIfAllowSpendAcceptedOnGL0 = async (
         const { data: snapshot } = await axios.get(
             `${gL0Url}/global-snapshots/latest/combined`
         );
-        await validateIfAllowSpendAcceptedinSnapshot(address, tokenAllowSpendHash, snapshot, tokenId, false, context, logger);
+
+        return await validateIfAllowSpendAcceptedinSnapshot(address, tokenAllowSpendHash, snapshot, tokenId, false, context, logger);
     } catch (error) {
         throwInContext(context)(`Error validating allow spend with hash ${tokenAllowSpendHash} in GL0: ${error.message}`);
     }
@@ -98,7 +98,7 @@ const validateIfAllowSpendAcceptedOnML0 = async (
 const validateIfAllowSpendAcceptedinSnapshot = async (
     address: string,
     hash: string,
-    snapshot,
+    combinedSnapshot,
     tokenId: string | null,
     isCurrencySnapshot: boolean,
     context: string,
@@ -115,7 +115,9 @@ const validateIfAllowSpendAcceptedinSnapshot = async (
         }, Promise.resolve(false));
     };
 
-    const activeAllowSpends = snapshot[1]?.activeAllowSpends;
+    const [snapshot, info] = combinedSnapshot
+    const ordinal = snapshot.value.ordinal
+    const activeAllowSpends = info?.activeAllowSpends;
 
     const activeAllowSpendsForAddress = isCurrencySnapshot
         ? activeAllowSpends?.[address]
@@ -127,25 +129,27 @@ const validateIfAllowSpendAcceptedinSnapshot = async (
 
     if (!activeAllowSpendsForAddress) {
         if (isCurrencySnapshot) {
-            throwInContext(context)(`No active allow spends for address ${address} in ML0 snapshot, but there are active allow spends for different addresses...`);
+            throwInContext(context)(`No active allow spends for address ${address} in ML0 snapshot ${ordinal}, but there are active allow spends for different addresses...`);
         } else {
-            throwInContext(context)(`No active allow spends for address ${address} in GL0 snapshot, but there are active allow spends for different addresses...`);
+            throwInContext(context)(`No active allow spends for address ${address} in GL0 snapshot ${ordinal}, but there are active allow spends for different addresses...`);
         }
     }
 
     const hasMatchingHash = await findMatchingHash(activeAllowSpendsForAddress, hash);
     if (!hasMatchingHash) {
         if (isCurrencySnapshot) {
-            throwInContext(context)(`Found active allow spends for ${address} in ML0 snapshot but count not find hash ${hash}, but there are active allow spends for that address: ${JSON.stringify(activeAllowSpendsForAddress, null, 2)}`);
+            throwInContext(context)(`Found active allow spends for ${address} in ML0 snapshot ${ordinal} but count not find hash ${hash}, but there are active allow spends for that address: ${JSON.stringify(activeAllowSpendsForAddress, null, 2)}`);
         } else {
-            throwInContext(context)(`Found active allow spends for ${address} in GL0 snapshot but count not find hash ${hash}, but there are active allow spends for that address: ${JSON.stringify(activeAllowSpendsForAddress, null, 2)}`);
+            throwInContext(context)(`Found active allow spends for ${address} in GL0 snapshot ${ordinal} but count not find hash ${hash}, but there are active allow spends for that address: ${JSON.stringify(activeAllowSpendsForAddress, null, 2)}`);
         }
     }
     if (isCurrencySnapshot) {
-        logger(`Allow spend with hash ${hash} found in ML0 snapshot`, "INFO", context);
+        logger(`Allow spend with hash ${hash} found in ML0 snapshot ${ordinal}`, "INFO", context);
     } else {
-        logger(`Allow spend with hash ${hash} for ${tokenId} found in GL0 snapshot!`, "INFO", context);
+        logger(`Allow spend with hash ${hash} for ${tokenId} found in GL0 snapshot ${ordinal}!`, "INFO", context);
     }
+
+    return ordinal
 }
 
 const validateIfAllowSpendAcceptedOnCL1 = async (
