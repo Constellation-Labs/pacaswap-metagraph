@@ -10,13 +10,14 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
@@ -49,7 +50,8 @@ trait SwapCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     spendActions: List[SpendAction],
-    currentSnapshotOrdinal: SnapshotOrdinal
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
@@ -63,15 +65,36 @@ object SwapCombinerService {
       private def updateLiquidityPool(
         liquidityPool: LiquidityPool,
         fromTokenInfo: TokenInformation,
-        toTokenInfo: TokenInformation
+        toTokenInfo: TokenInformation,
+        grossAmount: SwapAmount,
+        metagraphId: CurrencyId
       ): LiquidityPool = {
+        def distributeFees: PoolShares = {
+          val fees = FeeDistributor.calculateFeeAmounts(
+            BigInt(grossAmount.value.value),
+            liquidityPool.poolFees
+          )
+
+          val updateFeeShares = FeeDistributor.distributeProviderFees(
+            fees.providers,
+            fees.operators,
+            liquidityPool.poolShares,
+            metagraphId
+          )
+
+          liquidityPool.poolShares.copy(feeShares = updateFeeShares)
+        }
+
         val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
         val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
 
-        liquidityPool.copy(
-          tokenA = tokenA,
-          tokenB = tokenB
-        )
+        liquidityPool
+          .focus(_.tokenA)
+          .replace(tokenA)
+          .focus(_.tokenB)
+          .replace(tokenB)
+          .focus(_.poolShares)
+          .replace(distributeFees)
       }
 
       private def validateUpdate(
@@ -96,7 +119,7 @@ object SwapCombinerService {
                 .getOrElse(NonNegLong.MinValue)
             )
 
-            if (updatedTokenInformation.receivedAmount < signedUpdate.amountOutMinimum) {
+            if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {
               FailedCalculatedState(
                 SwapLessThanMinAmount(),
                 expireEpochProgress,
@@ -248,7 +271,7 @@ object SwapCombinerService {
                             allowSpendToken,
                             swapUpdate.amountIn,
                             updatedTokenInformation.pairTokenInformation.identifier,
-                            updatedTokenInformation.receivedAmount,
+                            updatedTokenInformation.netReceived,
                             currencyId.value
                           )
 
@@ -290,7 +313,8 @@ object SwapCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         spendActions: List[SpendAction],
-        currentSnapshotOrdinal: SnapshotOrdinal
+        currentSnapshotOrdinal: SnapshotOrdinal,
+        currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
@@ -325,7 +349,9 @@ object SwapCombinerService {
                         val liquidityPoolUpdated = updateLiquidityPool(
                           liquidityPool,
                           updatedTokenInformation.primaryTokenInformation,
-                          updatedTokenInformation.pairTokenInformation
+                          updatedTokenInformation.pairTokenInformation,
+                          updatedTokenInformation.grossReceived,
+                          currencyId
                         )
 
                         val swapCalculatedStateAddress = SwapCalculatedStateAddress(

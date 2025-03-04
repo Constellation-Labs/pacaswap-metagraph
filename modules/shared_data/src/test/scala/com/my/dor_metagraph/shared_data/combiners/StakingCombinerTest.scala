@@ -26,6 +26,7 @@ import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
@@ -46,6 +47,7 @@ object StakingCombinerTest extends MutableIOSuite {
   val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
     "NodeValidators",
@@ -96,7 +98,8 @@ object StakingCombinerTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares)
+      PoolShares(totalShares, shares, Map.empty),
+      FeeDistributor.empty
     )
     (
       poolId.value,

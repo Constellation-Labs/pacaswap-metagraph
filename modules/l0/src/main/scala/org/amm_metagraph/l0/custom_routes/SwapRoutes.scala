@@ -27,7 +27,7 @@ import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.States.{OperationType, LiquidityPoolCalculatedState, SwapCalculatedState}
+import org.amm_metagraph.shared_data.types.States.{LiquidityPoolCalculatedState, OperationType, SwapCalculatedState}
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.http4s.circe.CirceEntityCodec._

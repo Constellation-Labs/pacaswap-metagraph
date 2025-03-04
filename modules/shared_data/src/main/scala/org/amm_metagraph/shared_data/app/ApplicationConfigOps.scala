@@ -48,9 +48,11 @@ object ConfigReaders {
   }
 
   implicit val configReader: ConfigReader[Environment] = ConfigReader.fromString[Environment] {
-    case "dev"  => Right(Dev)
-    case "prod" => Right(Prod)
-    case other  => Left(CannotConvert(other, "Environment", "Must be 'dev' or 'prod'"))
+    case "dev"            => Right(Dev)
+    case "testnet"        => Right(Testnet)
+    case "integrationnet" => Right(Integrationnet)
+    case "mainnet"        => Right(Mainnet)
+    case other            => Left(CannotConvert(other, "Environment", "Must be 'dev', 'testnet', 'integrationnet', or 'mainnet'"))
   }
 
   implicit val applicationConfigReader: ConfigReader[ApplicationConfig] = deriveReader

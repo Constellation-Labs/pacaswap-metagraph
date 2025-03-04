@@ -117,7 +117,7 @@ object Governance {
             EpochProgress(NonNegLong.unsafeFrom(globalEpochProgress.value.value + 3L)),
             YearMonth.now(ZoneId.of("UTC")).getMonth.getValue.toNonNegIntUnsafe
           )
-        case ApplicationConfig.Prod =>
+        case _ =>
           def getSecondsUntilMonthEnd: Long = {
             val now = LocalDateTime.now(ZoneId.of("UTC"))
             val lastDayOfMonth = YearMonth.now(ZoneId.of("UTC")).atEndOfMonth()

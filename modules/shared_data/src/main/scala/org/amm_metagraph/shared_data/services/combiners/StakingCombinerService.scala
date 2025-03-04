@@ -87,7 +87,8 @@ object StakingCombinerService {
           k = BigInt(updatedTokenAAmount.value) * BigInt(updatedTokenBAmount.value),
           poolShares = PoolShares(
             (liquidityPool.poolShares.totalShares.value + newlyIssuedShares).toPosLongUnsafe,
-            updatedAddressShares
+            updatedAddressShares,
+            liquidityPool.poolShares.feeShares
           )
         )
       }

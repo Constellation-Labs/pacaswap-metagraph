@@ -17,8 +17,11 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
 import com.my.dor_metagraph.shared_data.combiners.SwapCombinerTest.{getFakeSignedUpdate, toFixedPoint}
+import com.my.dor_metagraph.shared_data.combiners.WithdrawalCombinerTest.toFixedPoint
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
+import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -46,16 +49,18 @@ object PricingTest extends SimpleIOSuite {
 
     val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
-
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
-
+    val rewards = additionalProvider.foldLeft(Map(owner -> 0L.toNonNegLongUnsafe)) {
+      case (acc, (addr, _)) => acc + (addr -> 0L.toNonNegLongUnsafe)
+    }
     val liquidityPool = LiquidityPool(
       poolId,
       tokenA,
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares)
+      PoolShares(totalShares, shares, rewards),
+      FeeDistributor.empty
     )
     (
       poolId.value,
@@ -333,7 +338,7 @@ object PricingTest extends SimpleIOSuite {
     } yield
       expect.all(
         swapTokenInfo.isRight,
-        swapTokenInfo.toOption.get.receivedAmount.value.value === 4761904762L
+        swapTokenInfo.toOption.get.netReceived.value.value === 4761904762L
       )
   }
 

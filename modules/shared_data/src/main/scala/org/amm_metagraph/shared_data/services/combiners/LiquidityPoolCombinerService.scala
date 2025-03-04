@@ -19,6 +19,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
@@ -309,6 +310,7 @@ object LiquidityPoolCombinerService {
               sourceAddress = liquidityPoolUpdate.source
               globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
               allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
+              fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
               updatedState <-
                 if (!allSpendActionsAccepted) {
                   oldState.pure
@@ -318,6 +320,7 @@ object LiquidityPoolCombinerService {
                     amountA = liquidityPoolUpdate.tokenAAmount.value
                     amountB = liquidityPoolUpdate.tokenBAmount.value
                     poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
+                    initialFeeShares: NonNegLong = 0L.toNonNegLongUnsafe
 
                     liquidityPool = LiquidityPool(
                       poolId,
@@ -333,8 +336,10 @@ object LiquidityPoolCombinerService {
                       BigInt(amountA) * BigInt(amountB),
                       PoolShares(
                         poolTotalShares,
-                        Map(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
-                      )
+                        Map(sourceAddress -> ShareAmount(Amount(poolTotalShares))),
+                        Map(sourceAddress -> initialFeeShares)
+                      ),
+                      fees
                     )
 
                     updatedPendingCalculatedState = removePendingSpendAction(liquidityPoolsCalculatedState, signedLiquidityPoolUpdate)

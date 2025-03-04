@@ -146,7 +146,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           tokenBId,
           tokenAAmount,
           tokenBAmount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -260,7 +261,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           tokenBId,
           tokenAAmount,
           tokenBAmount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -385,7 +387,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           pairToken.identifier,
           primaryToken.amount,
           pairToken.amount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -494,7 +497,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           pairToken.identifier,
           primaryToken.amount,
           pairToken.amount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 

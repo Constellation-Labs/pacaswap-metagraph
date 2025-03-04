@@ -38,7 +38,7 @@ object ValidationService {
       private def validateL1(update: AmmUpdate): F[DataApplicationValidationErrorOr[Unit]] = update match {
         case stakingUpdate: StakingUpdate                           => stakingValidationsL1(stakingUpdate)
         case withdrawalUpdate: WithdrawalUpdate                     => withdrawalValidationsL1(withdrawalUpdate)
-        case liquidityPoolUpdate: LiquidityPoolUpdate               => liquidityPoolValidationsL1(liquidityPoolUpdate)
+        case liquidityPoolUpdate: LiquidityPoolUpdate               => liquidityPoolValidationsL1(applicationConfig, liquidityPoolUpdate)
         case swapUpdate: SwapUpdate                                 => swapValidationsL1(swapUpdate)
         case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate => rewardAllocationValidationsL1(rewardAllocationVoteUpdate)
       }
@@ -55,7 +55,7 @@ object ValidationService {
             case stakingUpdate: StakingUpdate       => stakingValidationsL0(Signed(stakingUpdate, signedUpdate.proofs), state)
             case withdrawalUpdate: WithdrawalUpdate => withdrawalValidationsL0(Signed(withdrawalUpdate, signedUpdate.proofs), state)
             case liquidityPoolUpdate: LiquidityPoolUpdate =>
-              liquidityPoolValidationsL0(Signed(liquidityPoolUpdate, signedUpdate.proofs), state)
+              liquidityPoolValidationsL0(applicationConfig, Signed(liquidityPoolUpdate, signedUpdate.proofs), state)
             case swapUpdate: SwapUpdate => swapValidationsL0(Signed(swapUpdate, signedUpdate.proofs), state)
             case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
               rewardAllocationValidationsL0(

@@ -199,7 +199,8 @@ object L0CombinerService {
         pendingSpendActionStaking: Set[PendingSpendAction[StakingUpdate]],
         pendingSpendActionWithdrawals: Set[PendingSpendAction[WithdrawalUpdate]],
         pendingSpendActionSwap: Set[PendingSpendAction[SwapUpdate]],
-        stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState]
+        stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState],
+        currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
         if (globalSnapshotSyncSpendActions.isEmpty) {
           stateCombinedByPendingAllowSpends.pure
@@ -246,7 +247,8 @@ object L0CombinerService {
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
-                    currencySnapshotOrdinal
+                    currencySnapshotOrdinal,
+                    currencyId
                   )
               }
           } yield stateUpdatedBySwap
@@ -336,7 +338,8 @@ object L0CombinerService {
               pendingSpendActionStaking,
               pendingSpendActionWithdrawals,
               pendingSpendActionSwap,
-              stateCombinedByPendingAllowSpendUpdates
+              stateCombinedByPendingAllowSpendUpdates,
+              currencyId
             )
 
           stateCombinedGovernanceRewards = governanceCombinerService.handleMonthlyGovernanceRewards(

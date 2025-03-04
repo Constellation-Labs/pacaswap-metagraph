@@ -11,7 +11,11 @@ import io.constellationnetwork.security.hash.Hash
 import derevo.cats.eqv
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.PosLong
+import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
+import org.amm_metagraph.shared_data.refined.Percentage
+import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.Staking.{StakingOrdinal, StakingReference}
@@ -33,7 +37,8 @@ object DataUpdates {
     tokenBId: Option[CurrencyId],
     tokenAAmount: PosLong,
     tokenBAmount: PosLong,
-    maxValidGsEpochProgress: EpochProgress
+    maxValidGsEpochProgress: EpochProgress,
+    poolFees: Option[FeePercentages]
   ) extends AmmUpdate
 
   @derive(eqv, decoder, encoder)

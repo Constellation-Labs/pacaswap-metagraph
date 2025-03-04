@@ -61,7 +61,8 @@ object Swap {
   case class SwapTokenInfo(
     primaryTokenInformation: TokenInformation,
     pairTokenInformation: TokenInformation,
-    receivedAmount: SwapAmount
+    grossReceived: SwapAmount,
+    netReceived: SwapAmount
   )
 
   @derive(decoder, encoder, order, ordering)
