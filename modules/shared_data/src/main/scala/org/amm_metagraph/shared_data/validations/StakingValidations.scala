@@ -24,7 +24,7 @@ object StakingValidations {
   ): F[DataApplicationValidationErrorOr[Unit]] =
     valid.pure
 
-  def stakingValidationsL0[F[_]: Async: Hasher](
+  def stakingValidationsL0[F[_]: Async](
     signedStakingUpdate: Signed[StakingUpdate],
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
@@ -36,9 +36,6 @@ object StakingValidations {
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
 
-    validAllowSpends <- validateStakingAllowSpends(
-      stakingUpdate
-    )
     confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
       stakingUpdate,
       stakingCalculatedState.confirmed.value.get(address)
@@ -65,8 +62,7 @@ object StakingValidations {
     lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, address)
 
   } yield
-    validAllowSpends
-      .productR(confirmedTransactionAlreadyExists)
+    confirmedTransactionAlreadyExists
       .productR(pendingTransactionAlreadyExists)
       .productR(liquidityPoolExists)
       .productR(tokenAAllowSpendIsDuplicated)
@@ -92,23 +88,6 @@ object StakingValidations {
     poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
     result = StakingLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId.value))
   } yield result
-
-  private def validateStakingAllowSpends[F[_]: Async: Hasher](
-    stakingUpdate: StakingUpdate
-  )(implicit context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] =
-    getAllowSpendsLastSyncGlobalSnapshotState(
-      stakingUpdate.tokenAAllowSpend,
-      stakingUpdate.tokenAId,
-      stakingUpdate.tokenBAllowSpend,
-      stakingUpdate.tokenBId
-    ).map {
-      case (None, _) | (_, None) => StakingMissingAllowSpend.invalid
-      case (Some(allowSpendA), Some(allowSpendB)) if allowSpendA.source != allowSpendB.source =>
-        StakingDifferentAllowSpendSource.invalid
-      case (Some(allowSpendA), Some(allowSpendB)) if allowSpendA.destination != allowSpendB.destination =>
-        StakingDifferentAllowSpendDestination.invalid
-      case _ => valid
-    }
 
   private def lastRefValidation(
     stakingCalculatedState: StakingCalculatedState,
