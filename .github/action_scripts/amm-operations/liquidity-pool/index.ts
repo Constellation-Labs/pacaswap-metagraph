@@ -1,23 +1,23 @@
-import { dag4 } from '@stardust-collective/dag4';
-import axios from 'axios';
 import { z } from 'zod';
 import {
     BaseWithCurrencyMetagraphsCliArgsSchema,
     createAccount,
+    createLiquidityPoolUpdate,
     createSignedAllowSpend,
     createTokenConfig,
     delay,
-    getPublicKey,
     log,
     retry,
+    sendDataUpdate,
     sendSignedAllowSpend,
-    serializeBase64,
-    throwInContext,
     TokenConfig,
     validateIfAllowSpendAcceptedOnCL1,
     validateIfAllowSpendAcceptedOnGL0,
     validateIfAllowSpendAcceptedOnML0,
-    validateIfBalanceChanged
+    validateIfBalanceChanged,
+    validateLiquidityPoolCreated,
+    buildLiquidityPoolUniqueIdentifier,
+    getCalculatedState
 } from '../../shared';
 
 const lpCreation: z.infer<typeof LPCreationSchema> = {
@@ -47,118 +47,6 @@ const createConfig = (argsObject: object) => {
     return CliArgsSchema.parse(argsObj);
 };
 
-const createLiquidityPoolUpdate = async (
-    tokenAAllowSpendHash: string,
-    tokenBAllowSpendHash: string,
-    tokenAId: string | null,
-    tokenBId: string | null,
-    tokenAAllowSpendAmount: number,
-    tokenBAllowSpendAmount: number,
-    privateKey: string,
-    account: ReturnType<typeof createAccount>,
-) => {
-    const body = {
-        LiquidityPoolUpdate: {
-            maxValidGsEpochProgress: 50,
-            tokenAAllowSpend: tokenAAllowSpendHash,
-            tokenAAmount: tokenAAllowSpendAmount,
-            tokenAId,
-            tokenBAllowSpend: tokenBAllowSpendHash,
-            tokenBAmount: tokenBAllowSpendAmount,
-            tokenBId,
-        }
-    };
-    const serialized = await serializeBase64(body)
-    const signature = await dag4.keyStore.dataSign(
-        privateKey,
-        serialized
-    );
-
-    const publicKey = getPublicKey(account)
-
-    const liquidityPoolUpdate = {
-        value: body,
-        proofs: [{ id: publicKey, signature }]
-
-    };
-    log(`Signed liquidity pool update generated for wallet: ${account.address}: ${JSON.stringify(liquidityPoolUpdate, null, 2)}`, "INFO", 'AMM');
-
-    return liquidityPoolUpdate;
-};
-
-const sendLiquidityPoolUpdate = async (
-    dataL1Url: string,
-    update: Awaited<ReturnType<typeof createLiquidityPoolUpdate>>,
-) => {
-    try {
-        log(`Sending liquidity pool update...`, "INFO", 'AMM');
-        await axios.post(`${dataL1Url}/data`, update);
-        log(`Liquidity pool update sent successfully`, "INFO", 'AMM');
-        return;
-    } catch (error) {
-        throwInContext('AMM')(`Failed to send liquidity pool update: ${error.message}`);
-    }
-}
-
-const validateLiquidityPoolCreated = async (
-    ammL0Url: string,
-    tokenAId: string | null,
-    tokenBId: string | null,
-    logger: (message: string, type?: string, context?: string) => void = log
-) => {
-    const { data } = await axios.get(
-        `${ammL0Url}/v1/calculated-state/latest`
-    );
-    logger("Validating liquidity pool creation...", "INFO", 'AMM')
-    const lpCalculatedState = data.calculatedState.operations.LiquidityPool?.LiquidityPoolCalculatedState
-
-    type LiquidityPool = {
-        tokenA: {
-            identifier?: string | null
-        }
-        tokenB: {
-            identifier?: string | null
-        }
-    }
-
-    type LiquidityPoolUpdate = {
-        tokenAAllowSpend: string
-        tokenBAllowSpend: string
-        tokenAId?: string | null
-        tokenBId?: string | null
-        tokenAAmount: number
-        tokenBAmount: number
-        maxValidGsEpochProgress: number
-    }
-
-    type FailedCalculatedState = {
-        value: LiquidityPoolUpdate
-    }
-
-    const confirmedLiquidityPools: Record<string, LiquidityPool> = lpCalculatedState?.confirmed.value || {}
-    const pendingLiquidityPools: LiquidityPoolUpdate[] = lpCalculatedState?.pending || []
-    const failedLiquidityPools: FailedCalculatedState[] = lpCalculatedState?.failed || []
-
-    const isConfirmedLiquidityPool = Object.values(confirmedLiquidityPools).some(
-        (lp) =>
-            lp.tokenA.identifier === tokenAId && lp.tokenB.identifier === tokenBId
-    );
-
-    const isPendingLiquidityPool = pendingLiquidityPools.some(
-        (lp) =>
-            lp.tokenAId === tokenAId && lp.tokenBId === tokenBId
-    );
-
-    if (!isConfirmedLiquidityPool && !isPendingLiquidityPool && failedLiquidityPools.length > 0) {
-        throwInContext('AMM')("Liquidity pool not found but there are failed liquidity pools.");
-    }
-
-    if (!isConfirmedLiquidityPool && isPendingLiquidityPool) {
-        throwInContext('AMM')("Liquidity pool is pending.");
-    }
-    logger("Liquidity pool creation validated!", "INFO", 'AMM')
-}
-
 const processLiquidityPoolCreation = async (
     config: ReturnType<typeof createConfig>,
     tokenA: TokenConfig,
@@ -169,20 +57,16 @@ const processLiquidityPoolCreation = async (
     log("Created LP provider account", "INFO", 'AMM');
     const signedAllowSpendA = await createSignedAllowSpend(
         privateKey,
-        tokenA.account,
-        tokenA.l1Url,
+        tokenA,
         config.ammMetagraphId,
-        tokenA.allowSpendAmount,
-        tokenA.context
+        'A'
     );
 
     const signedAllowSpendB = await createSignedAllowSpend(
         privateKey,
-        tokenB.account,
-        tokenB.l1Url,
+        tokenB,
         config.ammMetagraphId,
-        tokenB.allowSpendAmount,
-        tokenB.context
+        'B'
     );
 
     const { hash: tokenAAllowSpendHash } = await sendSignedAllowSpend(
@@ -208,7 +92,7 @@ const processLiquidityPoolCreation = async (
         lpProviderAccount,
     );
 
-    await sendLiquidityPoolUpdate(config.ammDl1Url, update);
+    await sendDataUpdate(config.ammDl1Url, update);
 
     await retry('Validate if allow spends accepted on CL1')(async (logger) => {
         await validateIfAllowSpendAcceptedOnCL1(tokenA.l1Url, tokenAAllowSpendHash, tokenA.context, logger);
@@ -229,10 +113,13 @@ const processLiquidityPoolCreation = async (
         await validateIfAllowSpendAcceptedOnGL0(config.gl0Url, tokenB.account.address, tokenBAllowSpendHash, tokenB.tokenId, tokenB.context, logger);
     });
 
-    delay(5000);
+    delay(1000 * 60);
 
-    await retry('Validate if liquidity pool created')(async (logger) => {
-        await validateLiquidityPoolCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, logger);
+    await retry('Validate if liquidity pool created', 60, 5000)(async (logger) => {
+        const poolId = await buildLiquidityPoolUniqueIdentifier(tokenA.tokenId, tokenB.tokenId);
+        await validateLiquidityPoolCreated(config.ammMl0Url, poolId, logger);
+        const calculatedState = await getCalculatedState(config.ammMl0Url);
+        console.log(JSON.stringify(calculatedState, null, 2));
     });
 
     await retry('Validate if balance changed')(async (logger) => {
@@ -359,15 +246,14 @@ const liquidityPoolTests = async (argsObject: object) => {
     const config = createConfig(argsObject);
 
     // Test valid cases
-    await dagToCurrencyTest(config);
     await currencyToCurrencyTest(config);
+    await dagToCurrencyTest(config);
 
     // Test invalid cases
-    await dagToDagTest(config);
     await sameCurrencyTest(config);
+    await dagToDagTest(config);
 
     log("All liquidity pool creation tests passed!", "INFO", 'AMM');
 };
 
 export { liquidityPoolTests }
-

@@ -14,7 +14,7 @@ const createIndentedLogger = (logger: Logger, indent: number): Logger =>
 
 type RetryFunction = (logger: Logger) => Promise<void>;
 
-const retry = (context: string) => async (fn: RetryFunction, maxAttempts: number = 60, delayMs: number = 1000): Promise<void> => {
+const retry = (context: string, maxAttempts: number = 60, delayMs: number = 1000) => async (fn: RetryFunction): Promise<void> => {
     log(`\n`, "EMPTY");
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
