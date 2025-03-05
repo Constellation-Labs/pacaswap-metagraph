@@ -1,9 +1,13 @@
 package org.amm_metagraph.shared_data.app
 
 import cats.effect.kernel.Sync
+import cats.syntax.all._
 
+import io.constellationnetwork.node.shared.ext.pureconfig._
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.pureconfig._
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
@@ -25,6 +29,24 @@ object ConfigReaders {
 
   implicit val votingWeightMultipliersConfigReader: ConfigReader[ApplicationConfig.VotingWeightMultipliers] = deriveReader
   implicit val governanceConfigReader: ConfigReader[ApplicationConfig.Governance] = deriveReader
+  implicit val rewardsConfigReader: ConfigReader[ApplicationConfig.Rewards] = deriveReader[ApplicationConfig.Rewards].emap { _cfg =>
+    val cfg = Rewards(
+      totalAnnualTokens = Amount(65000000_00000000L),
+      governancePool = Amount(20000000_00000000L),
+      validatorWeight = NonNegLong(5L),
+      daoWeight = NonNegLong(20L),
+      votingWeight = NonNegLong(75L),
+      initialEpoch = _cfg.initialEpoch,
+      daoAddress = _cfg.daoAddress
+    )
+
+    Either.cond(
+      cfg.validatorWeight.value + cfg.daoWeight.value + cfg.votingWeight.value === 100L,
+      cfg,
+      CannotConvert(cfg.toString, "Rewards", "Voting weights must sum up to 100")
+    )
+  }
+
   implicit val configReader: ConfigReader[Environment] = ConfigReader.fromString[Environment] {
     case "dev"  => Right(Dev)
     case "prod" => Right(Prod)

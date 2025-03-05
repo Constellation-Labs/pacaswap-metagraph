@@ -60,7 +60,8 @@ object Governance {
   @derive(encoder, decoder)
   case class VotingWeightInfo(
     weight: NonNegLong,
-    tokenLock: TokenLock
+    tokenLock: TokenLock,
+    votedAtEpochProgress: EpochProgress
   )
 
   @derive(encoder, decoder)
@@ -75,7 +76,7 @@ object Governance {
 
   sealed abstract class AllocationCategory(val value: String) extends StringEnumEntry
   object AllocationCategory extends StringEnum[AllocationCategory] with StringCirceEnum[AllocationCategory] {
-    val values = findValues
+    val values: IndexedSeq[AllocationCategory] = findValues
 
     case object NodeOperator extends AllocationCategory("NodeOperator")
     case object LiquidityPool extends AllocationCategory("LiquidityPool")

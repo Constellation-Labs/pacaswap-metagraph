@@ -73,7 +73,7 @@ object GovernanceCombiner {
 
     val newInfo = addedTokenLocks.toList.map { lock =>
       val weight = calculateWeight(applicationConfig, lock, lastSyncGlobalSnapshotEpochProgress)
-      VotingWeightInfo(weight.toLong.toNonNegLongUnsafe, lock)
+      VotingWeightInfo(weight.toLong.toNonNegLongUnsafe, lock, lastSyncGlobalSnapshotEpochProgress)
     }
 
     filteredInfo ++ newInfo

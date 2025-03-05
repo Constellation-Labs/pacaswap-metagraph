@@ -27,7 +27,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers}
+import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.combiners.StakingCombiner.combineStaking
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
@@ -53,6 +53,15 @@ object StakingCombinerTest extends MutableIOSuite {
         PosDouble.MinValue,
         PosDouble.MinValue
       )
+    ),
+    Rewards(
+      Amount.empty,
+      Amount.empty,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      EpochProgress.MinValue,
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     )
   )
 
