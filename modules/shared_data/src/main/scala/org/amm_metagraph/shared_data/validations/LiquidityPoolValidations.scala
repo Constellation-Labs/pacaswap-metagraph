@@ -7,9 +7,9 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.DataAppl
 
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
+import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolAlreadyExists, LiquidityPoolNotEnoughInformation}
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
 
 object LiquidityPoolValidations {
   def liquidityPoolValidationsL1[F[_]: Async](
@@ -30,15 +30,13 @@ object LiquidityPoolValidations {
         liquidityPoolUpdate,
         calculatedState
       ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
-      tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+      tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         liquidityPoolUpdate.tokenAAllowSpend,
-        liquidityPoolCalculatedState.pending,
-        state.spendTransactions
+        liquidityPoolCalculatedState.getPendingUpdates
       )
-      tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+      tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         liquidityPoolUpdate.tokenBAllowSpend,
-        liquidityPoolCalculatedState.pending,
-        state.spendTransactions
+        liquidityPoolCalculatedState.getPendingUpdates
       )
     } yield
       liquidityPoolValidationsL1

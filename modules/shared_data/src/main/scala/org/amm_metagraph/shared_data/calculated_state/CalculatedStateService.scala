@@ -42,14 +42,11 @@ object CalculatedStateService {
                 acc.updated(address, value)
             }
 
-            val updatedSpendTransactions = currentCalculatedState.spendTransactions ++ state.spendTransactions
-
             (
               CalculatedState(
                 snapshotOrdinal,
                 AmmCalculatedState(
                   updatedOperations,
-                  updatedSpendTransactions,
                   state.votingWeights,
                   state.allocations
                 )

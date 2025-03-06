@@ -3,8 +3,9 @@ package org.amm_metagraph.shared_data.types
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.SpendTransaction
+import io.constellationnetwork.schema.artifact.{SpendAction, SpendTransaction}
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed
@@ -73,17 +74,26 @@ object States {
 
   @derive(encoder, decoder)
   sealed trait AmmOffChainState {
+    type UpdateType <: AmmUpdate
     val confirmed: ConfirmedCalculatedState
-    val pending: Set[_ <: Signed[AmmUpdate]]
+    val pending: Set[PendingAction[UpdateType]]
     val failed: Set[FailedCalculatedState]
+
+    def getPendingUpdates: Set[Signed[UpdateType]] =
+      pending.collect {
+        case PendingAllowSpend(update)     => update
+        case PendingSpendAction(update, _) => update
+      }
   }
 
   @derive(encoder, decoder)
   case class LiquidityPoolCalculatedState(
     confirmed: ConfirmedLiquidityPoolCalculatedState,
-    pending: Set[Signed[LiquidityPoolUpdate]],
+    pending: Set[PendingAction[LiquidityPoolUpdate]],
     failed: Set[FailedCalculatedState]
-  ) extends AmmOffChainState
+  ) extends AmmOffChainState {
+    type UpdateType = LiquidityPoolUpdate
+  }
 
   object LiquidityPoolCalculatedState {
     def empty: LiquidityPoolCalculatedState = LiquidityPoolCalculatedState(
@@ -96,9 +106,11 @@ object States {
   @derive(encoder, decoder)
   case class StakingCalculatedState(
     confirmed: ConfirmedStakingCalculatedState,
-    pending: Set[Signed[StakingUpdate]],
+    pending: Set[PendingAction[StakingUpdate]],
     failed: Set[FailedCalculatedState]
-  ) extends AmmOffChainState
+  ) extends AmmOffChainState {
+    type UpdateType = StakingUpdate
+  }
 
   object StakingCalculatedState {
     def empty: StakingCalculatedState = StakingCalculatedState(
@@ -111,9 +123,11 @@ object States {
   @derive(encoder, decoder)
   case class WithdrawalCalculatedState(
     confirmed: ConfirmedWithdrawalCalculatedState,
-    pending: Set[Signed[WithdrawalUpdate]],
+    pending: Set[PendingAction[WithdrawalUpdate]],
     failed: Set[FailedCalculatedState]
-  ) extends AmmOffChainState
+  ) extends AmmOffChainState {
+    type UpdateType = WithdrawalUpdate
+  }
 
   object WithdrawalCalculatedState {
     def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(
@@ -126,9 +140,11 @@ object States {
   @derive(encoder, decoder)
   case class SwapCalculatedState(
     confirmed: ConfirmedSwapCalculatedState,
-    pending: Set[Signed[SwapUpdate]],
+    pending: Set[PendingAction[SwapUpdate]],
     failed: Set[FailedCalculatedState]
-  ) extends AmmOffChainState
+  ) extends AmmOffChainState {
+    type UpdateType = SwapUpdate
+  }
 
   object SwapCalculatedState {
     def empty: SwapCalculatedState = SwapCalculatedState(
@@ -137,6 +153,22 @@ object States {
       Set.empty
     )
   }
+
+  @derive(encoder, decoder)
+  sealed trait PendingAction[A <: AmmUpdate] {
+    val update: Signed[A]
+  }
+
+  @derive(encoder, decoder)
+  case class PendingAllowSpend[A <: AmmUpdate](
+    update: Signed[A]
+  ) extends PendingAction[A]
+
+  @derive(encoder, decoder)
+  case class PendingSpendAction[A <: AmmUpdate](
+    update: Signed[A],
+    generatedSpendActions: List[SpendAction]
+  ) extends PendingAction[A]
 
   @derive(encoder, decoder)
   sealed abstract class OperationType(val value: String) extends StringEnumEntry
@@ -156,14 +188,15 @@ object States {
   @derive(encoder, decoder)
   case class AmmCalculatedState(
     operations: Map[OperationType, AmmOffChainState] = Map.empty,
-    spendTransactions: SortedSet[SpendTransaction] = SortedSet.empty[SpendTransaction],
     votingWeights: Map[Address, VotingWeight] = Map.empty,
-    allocations: Allocations = Allocations.empty
+    allocations: Allocations = Allocations.empty,
+    lastSyncGlobalSnapshotOrdinal: Option[SnapshotOrdinal] = None
   ) extends DataCalculatedState
 
   @derive(encoder, decoder)
   sealed trait FailedCalculatedStateReason
 
+  case class OperationExpired(update: AmmUpdate) extends FailedCalculatedStateReason
   case class AllowSpendExpired(allowSpend: AllowSpend) extends FailedCalculatedStateReason
   case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailedCalculatedStateReason
   case class SwapLessThanMinAmount() extends FailedCalculatedStateReason

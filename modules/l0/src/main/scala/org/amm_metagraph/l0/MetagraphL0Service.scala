@@ -1,14 +1,18 @@
 package org.amm_metagraph.l0
 
+import cats.Applicative
 import cats.data.NonEmptyList
 import cats.effect.Async
+import cats.effect.std.Queue
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.routes.internal.ExternalUrlPrefix
-import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.artifact.SpendAction
+import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo, SnapshotOrdinal}
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
@@ -17,6 +21,7 @@ import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.l0.custom_routes.CustomRoutes
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
+import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.DataUpdateCodec._
@@ -32,14 +37,16 @@ object MetagraphL0Service {
     validationService: ValidationService[F],
     combinerService: CombinerService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
-    jsonSerializer: JsonSerializer[F]
+    jsonSerializer: JsonSerializer[F],
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
   ): F[BaseDataApplicationL0Service[F]] = Async[F].delay {
     makeBaseDataApplicationL0Service(
       calculatedStateService,
       validationService,
       combinerService,
       dataUpdateCodec,
-      jsonSerializer
+      jsonSerializer,
+      globalSnapshotsStorage
     )
   }
 
@@ -48,7 +55,8 @@ object MetagraphL0Service {
     validationService: ValidationService[F],
     combinerService: CombinerService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
-    jsonSerializer: JsonSerializer[F]
+    jsonSerializer: JsonSerializer[F],
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
@@ -137,6 +145,12 @@ object MetagraphL0Service {
         bytes: Array[Byte]
       ): F[Either[Throwable, AmmCalculatedState]] =
         jsonSerializer.deserialize[AmmCalculatedState](bytes)
+
+      override def onGlobalSnapshotPull(
+        snapshot: Hashed[GlobalIncrementalSnapshot],
+        context: GlobalSnapshotInfo
+      )(implicit A: Applicative[F]): F[Unit] =
+        globalSnapshotsStorage.set(snapshot)
 
       override def routesPrefix: ExternalUrlPrefix = "v1"
     })

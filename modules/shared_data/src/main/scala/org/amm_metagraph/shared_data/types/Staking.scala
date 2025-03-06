@@ -20,7 +20,7 @@ import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, StakingCalculatedState}
+import org.amm_metagraph.shared_data.types.States._
 
 object Staking {
 
@@ -65,11 +65,17 @@ object Staking {
       .collect { case t: StakingCalculatedState => t }
       .getOrElse(StakingCalculatedState.empty)
 
-  def getPendingStakeUpdates(
+  def getPendingAllowSpendsStakingUpdates(
     state: AmmCalculatedState
   ): Set[Signed[StakingUpdate]] =
     getStakingCalculatedState(state).pending.collect {
-      case pendingUpdate @ Signed(stakingUpdate: StakingUpdate, _) =>
-        Signed(stakingUpdate, pendingUpdate.proofs)
+      case PendingAllowSpend(signedUpdate: Signed[StakingUpdate]) => signedUpdate
+    }
+
+  def getPendingSpendActionStakingUpdates(
+    state: AmmCalculatedState
+  ): Set[PendingSpendAction[StakingUpdate]] =
+    getStakingCalculatedState(state).pending.collect {
+      case pendingSpend: PendingSpendAction[StakingUpdate] => pendingSpend
     }
 }

@@ -3,25 +3,25 @@ package org.amm_metagraph.shared_data.combiners
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedMap, SortedSet}
 
-import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
-import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
+import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionsAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsLastSyncGlobalSnapshotState, getLastSyncGlobalIncrementalSnapshot}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
@@ -92,197 +92,311 @@ object StakingCombiner {
     )
   }
 
-  private def generateSpendTransactions(
-    allowSpendTokenA: Hashed[AllowSpend],
-    allowSpendTokenB: Hashed[AllowSpend]
-  ): SortedSet[SharedArtifact] = {
-    val spendTransactionTokenA = generateSpendAction(allowSpendTokenA)
-    val spendTransactionTokenB = generateSpendAction(allowSpendTokenB)
-    SortedSet[SharedArtifact](
-      spendTransactionTokenA,
-      spendTransactionTokenB
-    )
-  }
-
-  def combineStaking[F[_]: Async: HasherSelector](
+  private def validateUpdate(
     applicationConfig: ApplicationConfig,
-    acc: DataState[AmmOnChainState, AmmCalculatedState],
-    signedStakingUpdate: Signed[StakingUpdate],
-    signerAddress: Address,
-    currentSnapshotOrdinal: SnapshotOrdinal,
+    signedUpdate: Signed[StakingUpdate],
+    maybeTokenInformation: Option[UpdatedTokenInformation],
+    maybeAllowSpendTokenA: Option[Hashed[AllowSpend]],
+    maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
     lastSyncGlobalEpochProgress: EpochProgress
-  )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-    val stakingUpdate = signedStakingUpdate.value
-    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
-    val updates = stakingUpdate :: acc.onChain.updates
+  ): Option[FailedCalculatedState] =
+    if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+      FailedCalculatedState(
+        OperationExpired(signedUpdate),
+        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+        signedUpdate
+      ).some
+    } else {
+      (maybeTokenInformation, maybeAllowSpendTokenA, maybeAllowSpendTokenB).mapN { (tokenInformation, allowSpendTokenA, allowSpendTokenB) =>
+        val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currency) {
+          (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
+        } else {
+          (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
+        }
+        if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
+          FailedCalculatedState(
+            AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
+            EpochProgress(
+              NonNegLong.unsafeFrom(
+                lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+              )
+            ),
+            signedUpdate
+          ).some
+        } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
+          FailedCalculatedState(
+            AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
+            EpochProgress(
+              NonNegLong.unsafeFrom(
+                lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+              )
+            ),
+            signedUpdate
+          ).some
+        } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+          FailedCalculatedState(
+            AllowSpendExpired(allowSpendTokenA.signed.value),
+            EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+            signedUpdate
+          ).some
+        } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+          FailedCalculatedState(
+            AllowSpendExpired(allowSpendTokenB.signed.value),
+            EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+            signedUpdate
+          ).some
+        } else {
+          None
+        }
+      }.flatten
+    }
 
+  private def getUpdateAllowSpends[F[_]: Async: HasherSelector](
+    stakingUpdate: StakingUpdate,
+    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+  ) =
     HasherSelector[F].withBrotli { implicit hs =>
-      getAllowSpendsLastSyncGlobalSnapshotState(
+      getAllowSpendsGlobalSnapshotsState(
         stakingUpdate.tokenAAllowSpend,
         stakingUpdate.tokenAId,
         stakingUpdate.tokenBAllowSpend,
-        stakingUpdate.tokenBId
+        stakingUpdate.tokenBId,
+        lastGlobalSnapshotsAllowSpends
       )
-    }.flatMap {
-      case (None, _) | (_, None) =>
+    }
+
+  private def handleFailedUpdate(
+    updates: List[AmmUpdate],
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    failedCalculatedState: FailedCalculatedState,
+    stakingCalculatedState: StakingCalculatedState
+  ) = {
+    val updatedStakingCalculatedState = stakingCalculatedState
+      .focus(_.failed)
+      .modify(_ + failedCalculatedState)
+
+    val updatedCalculatedState = acc.calculated
+      .focus(_.operations)
+      .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+
+    DataState(
+      AmmOnChainState(updates),
+      updatedCalculatedState
+    )
+  }
+
+  private def removePendingAllowSpend(
+    stakingCalculatedState: StakingCalculatedState,
+    signedStakingUpdate: Signed[StakingUpdate]
+  ) =
+    stakingCalculatedState.pending.filterNot {
+      case PendingAllowSpend(update) if update == signedStakingUpdate => true
+      case _                                                          => false
+    }
+
+  private def removePendingSpendAction(
+    stakingCalculatedState: StakingCalculatedState,
+    signedStakingUpdate: Signed[StakingUpdate]
+  ) =
+    stakingCalculatedState.pending.filterNot {
+      case PendingSpendAction(update, _) if update == signedStakingUpdate => true
+      case _                                                              => false
+    }
+
+  def combinePendingSpendActionStaking[F[_]: Async: Hasher: SecurityProvider](
+    applicationConfig: ApplicationConfig,
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    pendingStakingUpdate: PendingSpendAction[StakingUpdate],
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    lastSyncGlobalEpochProgress: EpochProgress,
+    spendActions: List[SpendAction]
+  ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+    val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
+    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
+
+    val signedStakingUpdate = pendingStakingUpdate.update
+    val stakingUpdate = pendingStakingUpdate.update.value
+    val updates = stakingUpdate :: acc.onChain.updates
+    validateUpdate(applicationConfig, signedStakingUpdate, none, none, none, lastSyncGlobalEpochProgress) match {
+      case Some(value) => handleFailedUpdate(updates, acc, value, stakingCalculatedState).pure
+      case None =>
         for {
-          lastSyncHashedGIS <- getLastSyncGlobalIncrementalSnapshot
-          gsEpochProgress = lastSyncHashedGIS.epochProgress
-          updatedPendingCalculatedState =
-            if (stakingUpdate.maxValidGsEpochProgress < gsEpochProgress) {
-              stakingCalculatedState.pending - signedStakingUpdate
-            } else if (!stakingCalculatedState.pending.contains(signedStakingUpdate)) {
-              stakingCalculatedState.pending + signedStakingUpdate
+          metagraphGeneratedHashes <- pendingStakingUpdate.generatedSpendActions.traverse(action => Hasher[F].hash(action))
+          globalSnapshotsHashes <- spendActions.traverse(action => Hasher[F].hash(action))
+          allSpendActionsAccepted = checkIfSpendActionsAcceptedInGl0(metagraphGeneratedHashes, globalSnapshotsHashes)
+          updatedState <-
+            if (!allSpendActionsAccepted) {
+              acc.pure
             } else {
-              stakingCalculatedState.pending
-            }
+              for {
+                signerAddress <- signedStakingUpdate.proofs.head.id.toAddress
+                poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+                liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
 
-          newStakingState = stakingCalculatedState
-            .focus(_.pending)
-            .replace(updatedPendingCalculatedState)
+                updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
 
-          updatedCalculatedState = acc.calculated
-            .focus(_.operations)
-            .modify(_.updated(OperationType.Staking, newStakingState))
+                stakingReference <- StakingReference.of(signedStakingUpdate)
 
-        } yield
-          DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState
-          )
+                liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
+                stakingCalculatedStateAddress =
+                  StakingCalculatedStateAddress(
+                    stakingUpdate.tokenAAllowSpend,
+                    stakingUpdate.tokenBAllowSpend,
+                    updatedTokenInformation.primaryTokenInformation,
+                    updatedTokenInformation.pairTokenInformation,
+                    stakingReference,
+                    StakingOrdinal(currentSnapshotOrdinal.value)
+                  )
 
-      case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
-        val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
+                updatedPendingCalculatedState = removePendingSpendAction(stakingCalculatedState, signedStakingUpdate)
+                updatedStakingCalculatedState =
+                  stakingCalculatedState
+                    .focus(_.confirmed.value)
+                    .modify(current =>
+                      current.updatedWith(signerAddress) {
+                        case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
+                        case None                 => Some(Set(stakingCalculatedStateAddress))
+                      }
+                    )
+                    .focus(_.pending)
+                    .replace(updatedPendingCalculatedState)
 
-        for {
-          poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
-          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+                updatedLiquidityPool = liquidityPoolsCalculatedState
+                  .focus(_.confirmed.value)
+                  .modify(_.updated(poolId.value, liquidityPoolUpdated))
 
-          updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
+                updatedCalculatedState = acc.calculated
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
 
-          maybeFailedUpdate = validateUpdate(
-            applicationConfig,
-            signedStakingUpdate,
-            updatedTokenInformation,
-            allowSpendTokenA,
-            allowSpendTokenB,
-            lastSyncGlobalEpochProgress
-          )
-
-          stakingReference <- HasherSelector[F].withCurrent { implicit hs =>
-            StakingReference.of(signedStakingUpdate)
-          }
-
-          response = maybeFailedUpdate match {
-            case Some(failedCalculatedState) =>
-              val updatedStakingCalculatedState = stakingCalculatedState
-                .focus(_.failed)
-                .modify(_ + failedCalculatedState)
-              val updatedCalculatedState = acc.calculated
-                .focus(_.operations)
-                .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
-
-              DataState(
-                AmmOnChainState(updates),
-                updatedCalculatedState
-              )
-
-            case None =>
-              val liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
-              val stakingCalculatedStateAddress =
-                StakingCalculatedStateAddress(
-                  stakingUpdate.tokenAAllowSpend,
-                  stakingUpdate.tokenBAllowSpend,
-                  updatedTokenInformation.primaryTokenInformation,
-                  updatedTokenInformation.pairTokenInformation,
-                  stakingReference,
-                  StakingOrdinal(currentSnapshotOrdinal.value)
+                response = DataState(
+                  AmmOnChainState(updates),
+                  updatedCalculatedState
                 )
 
-              val updatedPendingCalculatedState = stakingCalculatedState.pending - signedStakingUpdate
+              } yield response
+            }
+        } yield updatedState
 
-              val updatedStakingCalculatedState =
-                stakingCalculatedState
-                  .focus(_.confirmed.value)
-                  .modify(current =>
-                    current.updatedWith(signerAddress) {
-                      case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
-                      case None                 => Some(Set(stakingCalculatedStateAddress))
-                    }
-                  )
-                  .focus(_.pending)
-                  .replace(updatedPendingCalculatedState)
-
-              val updatedLiquidityPool = liquidityPoolsCalculatedState
-                .focus(_.confirmed.value)
-                .modify(_.updated(poolId.value, liquidityPoolUpdated))
-
-              val updatedCalculatedState = acc.calculated
-                .focus(_.operations)
-                .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
-                .focus(_.operations)
-                .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
-
-              val spendTransactions = generateSpendTransactions(allowSpendTokenA, allowSpendTokenB)
-
-              DataState(
-                AmmOnChainState(updates),
-                updatedCalculatedState,
-                spendTransactions
-              )
-          }
-        } yield response
     }
   }
 
-  def validateUpdate(
+  def combinePendingAllowSpendStaking[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
-    signedUpdate: Signed[StakingUpdate],
-    tokenInformation: UpdatedTokenInformation,
-    allowSpendTokenA: Hashed[AllowSpend],
-    allowSpendTokenB: Hashed[AllowSpend],
-    lastSyncGlobalEpochProgress: EpochProgress
-  ): Option[FailedCalculatedState] = {
-    val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currency) {
-      (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
-    } else {
-      (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
-    }
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    signedStakingUpdate: Signed[StakingUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress,
+    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+  ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+    val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
+    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
 
-    if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
-      FailedCalculatedState(
-        AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
-        EpochProgress(
-          NonNegLong.unsafeFrom(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-        ),
-        signedUpdate
-      ).some
-    } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
-      FailedCalculatedState(
-        AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
-        EpochProgress(
-          NonNegLong.unsafeFrom(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-        ),
-        signedUpdate
-      ).some
-    } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-      FailedCalculatedState(
-        AllowSpendExpired(allowSpendTokenA.signed.value),
-        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
-        signedUpdate
-      ).some
-    } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-      FailedCalculatedState(
-        AllowSpendExpired(allowSpendTokenB.signed.value),
-        EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
-        signedUpdate
-      ).some
-    } else {
-      None
+    val stakingUpdate = signedStakingUpdate.value
+    val updates = stakingUpdate :: acc.onChain.updates
+
+    validateUpdate(applicationConfig, signedStakingUpdate, none, none, none, lastSyncGlobalEpochProgress) match {
+      case Some(failedCalculatedState) => handleFailedUpdate(updates, acc, failedCalculatedState, stakingCalculatedState).pure
+      case None =>
+        getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
+          case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
+            for {
+              poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+              liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+
+              updatedTokenInformation = getUpdatedTokenInformation(stakingUpdate, liquidityPool)
+
+              maybeFailedUpdate = validateUpdate(
+                applicationConfig,
+                signedStakingUpdate,
+                updatedTokenInformation.some,
+                allowSpendTokenA.some,
+                allowSpendTokenB.some,
+                lastSyncGlobalEpochProgress
+              )
+
+              response = maybeFailedUpdate match {
+                case Some(failedCalculatedState) => handleFailedUpdate(updates, acc, failedCalculatedState, stakingCalculatedState)
+                case None =>
+                  val spendActionTokenA = generateSpendAction(allowSpendTokenA)
+                  val spendActionTokenB = generateSpendAction(allowSpendTokenB)
+
+                  val updatedPendingAllowSpendCalculatedState =
+                    removePendingAllowSpend(stakingCalculatedState, signedStakingUpdate)
+                  val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
+                    signedStakingUpdate,
+                    List(spendActionTokenA, spendActionTokenB)
+                  )
+
+                  val updatedPendingStakingCalculatedState =
+                    stakingCalculatedState
+                      .focus(_.pending)
+                      .replace(updatedPendingSpendActionCalculatedState)
+
+                  val updatedCalculatedState = acc.calculated
+                    .focus(_.operations)
+                    .modify(_.updated(OperationType.Staking, updatedPendingStakingCalculatedState))
+
+                  DataState(
+                    AmmOnChainState(updates),
+                    updatedCalculatedState,
+                    SortedSet[SharedArtifact](
+                      spendActionTokenA,
+                      spendActionTokenB
+                    )
+                  )
+              }
+            } yield response
+          case _ => acc.pure
+        }
+    }
+  }
+
+  def combineNewStaking[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
+    acc: DataState[AmmOnChainState, AmmCalculatedState],
+    signedStakingUpdate: Signed[StakingUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress,
+    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+  ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+    val stakingUpdate = signedStakingUpdate.value
+    val stakingCalculatedState = getStakingCalculatedState(acc.calculated)
+    val pendingAllowSpendsCalculatedState = stakingCalculatedState.pending
+
+    val updates = stakingUpdate :: acc.onChain.updates
+    getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
+      case (None, _) | (_, None) =>
+        val updatedPendingCalculatedState =
+          if (stakingUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            removePendingAllowSpend(stakingCalculatedState, signedStakingUpdate)
+          } else if (!pendingAllowSpendsCalculatedState.exists(_.update == signedStakingUpdate)) {
+            pendingAllowSpendsCalculatedState + PendingAllowSpend(signedStakingUpdate)
+          } else {
+            pendingAllowSpendsCalculatedState
+          }
+
+        val newStakingState = stakingCalculatedState
+          .focus(_.pending)
+          .replace(updatedPendingCalculatedState)
+
+        val updatedCalculatedState = acc.calculated
+          .focus(_.operations)
+          .modify(_.updated(OperationType.Staking, newStakingState))
+
+        DataState(
+          AmmOnChainState(updates),
+          updatedCalculatedState
+        ).pure
+
+      case (Some(_), Some(_)) =>
+        combinePendingAllowSpendStaking(
+          applicationConfig,
+          acc,
+          signedStakingUpdate,
+          lastSyncGlobalEpochProgress,
+          lastGlobalSnapshotsAllowSpends
+        )
     }
   }
 }

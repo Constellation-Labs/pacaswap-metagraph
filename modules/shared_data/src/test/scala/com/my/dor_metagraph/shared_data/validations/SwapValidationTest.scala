@@ -13,6 +13,7 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -33,11 +34,12 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
 
 object SwapValidationTest extends MutableIOSuite {
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -65,7 +67,8 @@ object SwapValidationTest extends MutableIOSuite {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = codecs.HasherSelector.forSync(h, h)
+  } yield (h, hs, sp)
 
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
@@ -116,7 +119,7 @@ object SwapValidationTest extends MutableIOSuite {
     Eq.fromUniversalEquals
 
   test("Validate update successfully") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
@@ -140,12 +143,12 @@ object SwapValidationTest extends MutableIOSuite {
   }
 
   test("Validate data successfully") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
     val primaryToken =
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
     val pairToken =
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -192,6 +195,10 @@ object SwapValidationTest extends MutableIOSuite {
             )
         ),
         EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
@@ -201,7 +208,7 @@ object SwapValidationTest extends MutableIOSuite {
   }
 
   test("Validate data fail - Liquidity pool does not exists") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
     val primaryToken =
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
     val pairToken =
@@ -227,7 +234,16 @@ object SwapValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
@@ -243,12 +259,12 @@ object SwapValidationTest extends MutableIOSuite {
   }
 
   test("Validate data fail - Not enough tokens") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
     val primaryToken =
       TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1L.toTokenAmountFormat.toPosLongUnsafe)
     val pairToken =
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2L.toTokenAmountFormat.toPosLongUnsafe)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -272,7 +288,16 @@ object SwapValidationTest extends MutableIOSuite {
     for {
       validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {

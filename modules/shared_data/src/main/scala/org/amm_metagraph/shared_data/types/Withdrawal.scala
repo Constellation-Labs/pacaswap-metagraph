@@ -21,7 +21,7 @@ import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, WithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.States._
 
 object Withdrawal {
   @derive(encoder, decoder)
@@ -64,11 +64,17 @@ object Withdrawal {
       .collect { case t: WithdrawalCalculatedState => t }
       .getOrElse(WithdrawalCalculatedState.empty)
 
-  def getPendingWithdrawalUpdates(
+  def getPendingAllowSpendsWithdrawalUpdates(
     state: AmmCalculatedState
   ): Set[Signed[WithdrawalUpdate]] =
     getWithdrawalCalculatedState(state).pending.collect {
-      case pendingUpdate @ Signed(withdrawalUpdate: WithdrawalUpdate, _) =>
-        Signed(withdrawalUpdate, pendingUpdate.proofs)
+      case PendingAllowSpend(signedUpdate: Signed[WithdrawalUpdate]) => signedUpdate
+    }
+
+  def getPendingSpendActionWithdrawalUpdates(
+    state: AmmCalculatedState
+  ): Set[PendingSpendAction[WithdrawalUpdate]] =
+    getWithdrawalCalculatedState(state).pending.collect {
+      case pendingSpend: PendingSpendAction[WithdrawalUpdate] => pendingSpend
     }
 }

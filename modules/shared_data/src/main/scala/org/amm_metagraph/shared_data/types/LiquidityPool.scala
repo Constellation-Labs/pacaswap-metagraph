@@ -86,12 +86,18 @@ object LiquidityPool {
         Async[F].raiseError[LiquidityPool](new IllegalStateException("Liquidity Pool does not exist"))
       )(Async[F].pure)
 
-  def getPendingLiquidityPoolUpdates(
+  def getPendingAllowSpendsLiquidityPoolUpdates(
     state: AmmCalculatedState
   ): Set[Signed[LiquidityPoolUpdate]] =
     getLiquidityPoolCalculatedState(state).pending.collect {
-      case pendingUpdate @ Signed(liquidityPoolUpdate: LiquidityPoolUpdate, _) =>
-        Signed(liquidityPoolUpdate, pendingUpdate.proofs)
+      case PendingAllowSpend(signedUpdate: Signed[LiquidityPoolUpdate]) => signedUpdate
+    }
+
+  def getPendingSpendActionLiquidityPoolUpdates(
+    state: AmmCalculatedState
+  ): Set[PendingSpendAction[LiquidityPoolUpdate]] =
+    getLiquidityPoolCalculatedState(state).pending.collect {
+      case pendingSpend: PendingSpendAction[LiquidityPoolUpdate] => pendingSpend
     }
 
   def getLiquidityPoolPrices(liquidityPool: LiquidityPool): (Long, Long) = {

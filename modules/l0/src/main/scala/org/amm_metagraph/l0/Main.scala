@@ -20,6 +20,7 @@ import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.combiners.CombinerService
+import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonBinaryCodec, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.ValidationService
@@ -52,11 +53,21 @@ object Main
     validationService <- hasherSelector.withCurrent { implicit hasher =>
       ValidationService.make[IO](config).asResource
     }
-    combinerService <- CombinerService.make[IO](config).asResource
-    l1Service <- MetagraphL0Service
-      .make[IO](calculatedStateService, validationService, combinerService, jsonBase64BinaryCodec, jsonBinaryCodec)
+    globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
+    combinerService <- CombinerService.make[IO](config, globalSnapshotsStorage).asResource
+
+    l0Service <- MetagraphL0Service
+      .make[IO](
+        calculatedStateService,
+        validationService,
+        combinerService,
+        jsonBase64BinaryCodec,
+        jsonBinaryCodec,
+        globalSnapshotsStorage
+      )
       .asResource
-  } yield l1Service).some
+
+  } yield l0Service).some
 
   override def rewards(
     implicit sp: SecurityProvider[IO]

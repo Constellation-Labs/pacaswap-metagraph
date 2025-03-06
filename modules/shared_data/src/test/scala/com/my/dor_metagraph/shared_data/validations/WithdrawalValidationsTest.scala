@@ -10,6 +10,7 @@ import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -27,18 +28,20 @@ import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
+import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolDoesNotExists, WithdrawalAlreadyPending, WithdrawalInsufficientShares}
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 import weaver.MutableIOSuite
 
 object WithdrawalValidationsTest extends MutableIOSuite {
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = codecs.HasherSelector.forSync(h, h)
+  } yield (h, hs, sp)
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
 
@@ -95,7 +98,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
     )
 
   test("Validation passes for valid withdrawal request") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -105,7 +108,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -135,7 +138,16 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -146,10 +158,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
   }
 
   test("Validation fails when liquidity pool does not exist") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val ammCalculatedState = AmmCalculatedState(Map.empty)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -164,7 +176,16 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -175,7 +196,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
   }
 
   test("Validation fails when trying to withdraw more shares than owned") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -185,7 +206,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
@@ -205,7 +226,16 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,
@@ -216,7 +246,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
   }
 
   test("Validation fails when withdrawal is already pending") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, hs, sp) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -226,7 +256,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val withdrawalUpdate = getFakeSignedUpdate(
       WithdrawalUpdate(
@@ -252,11 +282,20 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       ammCalculatedState = AmmCalculatedState(
         Map(
           OperationType.LiquidityPool -> liquidityPoolCalculatedState,
-          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(withdrawalUpdate))
+          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(PendingAllowSpend(withdrawalUpdate)))
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
       result <- WithdrawalValidations.withdrawalValidationsL0[IO](
         withdrawalUpdate,

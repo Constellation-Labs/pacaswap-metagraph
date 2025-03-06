@@ -10,7 +10,9 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
@@ -27,7 +29,7 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.combineLiquidityPool
+import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.{combineNewLiquidityPool, combinePendingSpendActionLiquidityPool}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{TokenInformation, buildLiquidityPoolUniqueIdentifier}
@@ -91,7 +93,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
     )
 
-  test("Successfully create a liquidity pool") { implicit res =>
+  test("Successfully create a liquidity pool - confirmed") { implicit res =>
     implicit val (h, hs, sp) = res
 
     val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
@@ -99,7 +101,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -146,34 +148,51 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         )
       )
 
+      allowSpends = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
-        SortedMap(
-          tokenAId.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-            ),
-          tokenBId.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-            )
-        ),
+        allowSpends,
         EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
-      liquidityPoolResponse <- combineLiquidityPool[IO](
+      liquidityPoolPendingSpendActionResponse <- combineNewLiquidityPool[IO](
         config,
         state,
         liquidityPoolUpdate,
-        ownerAddress,
-        EpochProgress.MinValue
+        EpochProgress.MinValue,
+        allowSpends
       )
+
+      spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
-      updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
+
+      liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
+        config,
+        liquidityPoolPendingSpendActionResponse,
+        PendingSpendAction(liquidityPoolUpdate, spendActions),
+        EpochProgress.MinValue,
+        spendActions
+      )
+      updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId.value)
+
     } yield
       expect.eql(100L.toTokenAmountFormat, updatedLiquidityPool.tokenA.amount.value) &&
         expect.eql(tokenAId.get, updatedLiquidityPool.tokenA.identifier.get) &&
@@ -182,7 +201,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         expect.eql(BigInt(100L.toTokenAmountFormat) * BigInt(50.toTokenAmountFormat), updatedLiquidityPool.k) &&
         expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
-        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value)
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value) &&
+        expect.eql(1, liquidityPoolPendingSpendActionResponse.calculated.operations(OperationType.LiquidityPool).pending.size)
   }
 
   test("Successfully create a liquidity pool - L0Token - DAG") { implicit res =>
@@ -193,7 +213,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val tokenBId = none
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -240,32 +260,47 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         )
       )
 
+      allowSpends = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
-        SortedMap(
-          tokenAId.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-            ),
-          tokenBId ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-            )
-        ),
+        allowSpends,
         EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
-      liquidityPoolResponse <- combineLiquidityPool[IO](
+      liquidityPoolPendingSpendActionResponse <- combineNewLiquidityPool[IO](
         config,
         state,
         liquidityPoolUpdate,
-        ownerAddress,
-        EpochProgress.MinValue
+        EpochProgress.MinValue,
+        allowSpends
+      )
+      spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
+
+      liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
+        config,
+        liquidityPoolPendingSpendActionResponse,
+        PendingSpendAction(liquidityPoolUpdate, spendActions),
+        EpochProgress.MinValue,
+        spendActions
       )
 
-      poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
-      updatedLiquidityPoolCalculatedState = liquidityPoolResponse.calculated
+      updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
       updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId.value)
@@ -277,7 +312,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         expect.eql(BigInt(100L.toTokenAmountFormat) * BigInt(50.toTokenAmountFormat), updatedLiquidityPool.k) &&
         expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.totalShares.value) &&
         expect.eql(1, updatedLiquidityPool.poolShares.addressShares.size) &&
-        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value)
+        expect.eql(1.toTokenAmountFormat, updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value) &&
+        expect.eql(1, liquidityPoolPendingSpendActionResponse.calculated.operations(OperationType.LiquidityPool).pending.size)
   }
 
   test("Return failed due staking more than allowSpend") { implicit res =>
@@ -293,7 +329,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
 
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -346,28 +382,34 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         )
       )
 
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+          ),
+        pairToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
-        SortedMap(
-          primaryToken.identifier.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-            ),
-          pairToken.identifier.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-            )
-        ),
+        allowSpends,
         EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
-      liquidityPoolResponse <- combineLiquidityPool[IO](
+      liquidityPoolResponse <- combineNewLiquidityPool[IO](
         config,
         state,
         liquidityPoolUpdate,
-        ownerAddress,
-        futureEpoch
+        futureEpoch,
+        allowSpends
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield
@@ -393,7 +435,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
 
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -446,27 +488,34 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         )
       )
 
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+          ),
+        pairToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
-        SortedMap(
-          primaryToken.identifier.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-            ),
-          pairToken.identifier.get.value.some ->
-            SortedMap(
-              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-            )
-        ),
+        allowSpends,
         EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
         ownerAddress
       )
-      liquidityPoolResponse <- combineLiquidityPool[IO](
+
+      liquidityPoolResponse <- combineNewLiquidityPool[IO](
         config,
         state,
         liquidityPoolUpdate,
-        ownerAddress,
-        futureEpoch
+        futureEpoch,
+        allowSpends
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield
