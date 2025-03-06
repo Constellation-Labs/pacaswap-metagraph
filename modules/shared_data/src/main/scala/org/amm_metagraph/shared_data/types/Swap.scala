@@ -13,7 +13,7 @@ import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, SwapCalculatedState}
+import org.amm_metagraph.shared_data.types.States._
 
 object Swap {
   @derive(encoder, decoder)
@@ -39,11 +39,17 @@ object Swap {
       .collect { case t: SwapCalculatedState => t }
       .getOrElse(SwapCalculatedState.empty)
 
-  def getPendingSwapUpdates(
+  def getPendingAllowSpendsSwapUpdates(
     state: AmmCalculatedState
   ): Set[Signed[SwapUpdate]] =
     getSwapCalculatedState(state).pending.collect {
-      case pendingUpdate @ Signed(swapUpdate: SwapUpdate, _) =>
-        Signed(swapUpdate, pendingUpdate.proofs)
+      case PendingAllowSpend(signedUpdate: Signed[SwapUpdate]) => signedUpdate
+    }
+
+  def getPendingSpendActionSwapUpdates(
+    state: AmmCalculatedState
+  ): Set[PendingSpendAction[SwapUpdate]] =
+    getSwapCalculatedState(state).pending.collect {
+      case pendingSpend: PendingSpendAction[SwapUpdate] => pendingSpend
     }
 }

@@ -8,6 +8,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hashed
+import io.constellationnetwork.security.hash.Hash
 
 object SpendTransactions {
 
@@ -57,4 +58,13 @@ object SpendTransactions {
     }
     spendActions.flatMap(spendAction => SortedSet(spendAction.input, spendAction.output))
   }
+
+  def checkIfSpendActionsAcceptedInGl0(
+    metagraphGeneratedSpendActionHashes: List[Hash],
+    globalSyncSpendActionHashes: List[Hash]
+  ) =
+    metagraphGeneratedSpendActionHashes.forall { hash =>
+      globalSyncSpendActionHashes.contains(hash)
+    }
+
 }

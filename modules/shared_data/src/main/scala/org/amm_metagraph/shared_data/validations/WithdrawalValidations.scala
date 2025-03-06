@@ -46,7 +46,7 @@ object WithdrawalValidations {
     withdrawalNotPending <- HasherSelector[F].withCurrent { implicit hs =>
       validateIfWithdrawalNotPending(
         signedWithdrawalUpdate,
-        withdrawalCalculatedState.pending
+        withdrawalCalculatedState.getPendingUpdates
       )
     }
 

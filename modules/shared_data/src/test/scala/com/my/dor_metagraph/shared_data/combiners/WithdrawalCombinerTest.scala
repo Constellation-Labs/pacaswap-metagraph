@@ -24,8 +24,7 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import eu.timepit.refined.types.numeric.NonNegLong
-import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineWithdrawal
+import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineNewWithdraw
 import org.amm_metagraph.shared_data.refined.PosLongOps
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -109,7 +108,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -132,13 +131,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      withdrawalResponse <- combineWithdrawal[IO](
+      withdrawalResponse <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         ownerAddress,
-        SnapshotOrdinal.MinValue
+        EpochProgress.MinValue
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -177,7 +185,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val secondProviderAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Kt")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
@@ -206,13 +214,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      withdrawalResponse <- combineWithdrawal[IO](
+      withdrawalResponse <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         secondProviderAddress,
-        SnapshotOrdinal.MinValue
+        EpochProgress.MinValue
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -240,7 +257,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 //      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
 //      PosLong.unsafeFrom(toFixedPoint(50.0))
 //    )
-//    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+//    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 //
 //    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
 //    val ammOnChainState = AmmOnChainState(List.empty)
@@ -280,7 +297,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -295,13 +312,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      result <- combineWithdrawal[IO](
+      result <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks"),
-        SnapshotOrdinal.MinValue
+        EpochProgress.MinValue
       ).attempt.map {
         case Left(e: IllegalStateException) =>
           expect(e.getMessage == "Liquidity Pool does not exist")
@@ -324,7 +350,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -347,13 +373,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      withdrawalResponse <- combineWithdrawal[IO](
+      withdrawalResponse <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         ownerAddress,
-        SnapshotOrdinal.MinValue
+        EpochProgress.MinValue
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -380,7 +415,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -403,13 +438,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      result <- combineWithdrawal[IO](
+      result <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         ownerAddress,
-        SnapshotOrdinal.MinValue
+        EpochProgress.MinValue
       ).attempt.map {
         case Left(e: IllegalArgumentException) =>
           expect(e.getMessage.contains("Predicate failed"))
@@ -432,7 +476,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -454,13 +498,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty, EpochProgress.MinValue, ownerAddress)
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
 
-      result <- combineWithdrawal[IO](
+      result <- combineNewWithdraw[IO](
         state,
         withdrawalUpdate,
         ownerAddress,
-        SnapshotOrdinal(NonNegLong.MaxValue) // Set to maximum to ensure epoch progress validation fails
+        EpochProgress.MinValue
       )
 
     } yield expect(result.calculated.operations(Withdrawal).pending.isEmpty)

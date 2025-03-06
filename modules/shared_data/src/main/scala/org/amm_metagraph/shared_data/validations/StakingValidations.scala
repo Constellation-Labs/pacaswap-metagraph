@@ -10,13 +10,12 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import eu.timepit.refined.auto._
-import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsLastSyncGlobalSnapshotState
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAndSpendTransactionsAreDuplicated
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
 
 object StakingValidations {
   def stakingValidationsL1[F[_]: Async](
@@ -27,12 +26,12 @@ object StakingValidations {
   def stakingValidationsL0[F[_]: Async](
     signedStakingUpdate: Signed[StakingUpdate],
     state: AmmCalculatedState
-  )(implicit sp: SecurityProvider[F], context: L0NodeContext[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
+  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
     address <- signedStakingUpdate.proofs.head.id.toAddress
     stakingUpdate = signedStakingUpdate.value
 
     stakingCalculatedState = getStakingCalculatedState(state)
-    pendingStaking = getPendingStakeUpdates(state)
+    pendingStaking = getPendingAllowSpendsStakingUpdates(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
 
@@ -48,15 +47,13 @@ object StakingValidations {
       stakingUpdate,
       liquidityPoolsCalculatedState
     )
-    tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+    tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
       stakingUpdate.tokenAAllowSpend,
-      stakingCalculatedState.pending,
-      state.spendTransactions
+      stakingCalculatedState.getPendingUpdates
     )
-    tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+    tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
       stakingUpdate.tokenBAllowSpend,
-      stakingCalculatedState.pending,
-      state.spendTransactions
+      stakingCalculatedState.getPendingUpdates
     )
 
     lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, address)

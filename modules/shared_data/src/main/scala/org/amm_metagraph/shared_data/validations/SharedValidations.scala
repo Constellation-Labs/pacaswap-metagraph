@@ -27,10 +27,9 @@ object SharedValidations {
       }
     }.map(isNotSignedExclusively => NotSignedExclusivelyByAddressOwner.whenA(isNotSignedExclusively))
 
-  def validateIfAllowSpendsAndSpendTransactionsAreDuplicated(
+  def validateIfAllowSpendsAreDuplicated(
     allowSpendRef: Hash,
-    existingPendingUpdates: Set[_ <: Signed[AmmUpdate]],
-    existingSpendTransactions: SortedSet[SpendTransaction]
+    existingPendingUpdates: Set[_ <: Signed[AmmUpdate]]
   ): DataApplicationValidationErrorOr[Unit] = {
     val updateAlreadyExists = existingPendingUpdates.exists(_.value match {
       case lpUpdate: LiquidityPoolUpdate => lpUpdate.tokenAAllowSpend == allowSpendRef || lpUpdate.tokenBAllowSpend == allowSpendRef
@@ -40,8 +39,6 @@ object SharedValidations {
       case _                      => false
     })
 
-    val spendTransactionAlreadyExists = existingSpendTransactions.exists(t => t.allowSpendRef.contains(allowSpendRef))
-
-    DuplicatedOperation.whenA(updateAlreadyExists || spendTransactionAlreadyExists)
+    DuplicatedOperation.whenA(updateAlreadyExists)
   }
 }
