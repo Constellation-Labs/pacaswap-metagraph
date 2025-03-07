@@ -128,6 +128,24 @@ const processLiquidityPoolCreation = async (
     });
 }
 
+const lastGlobalSnapshotIncreasingTest = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting lastGlobalSnapshotIncreasingTest");
+    const calculatedState = await getCalculatedState(config.ammMl0Url)
+    const initialLastSyncGlobalSnapshotOrdinal= calculatedState.lastSyncGlobalSnapshotOrdinal
+
+    log(`Initial lastSyncGlobalSnapshotOrdinal: ${initialLastSyncGlobalSnapshotOrdinal}`)
+
+    await retry('Validate if last sync global snapshot ordinal is increasing')(async (logger) => {
+        const latestCalculatedState = await getCalculatedState(config.ammMl0Url)
+        const lastSyncGlobalSnapshotOrdinal = latestCalculatedState.lastSyncGlobalSnapshotOrdinal
+        if (lastSyncGlobalSnapshotOrdinal > initialLastSyncGlobalSnapshotOrdinal) {
+            logger(`Last sync global snapshot ordinal is increasing`)
+        } else {
+            throw new Error(`Last sync global snapshot ordinal not increased yet`)
+        }
+    })
+}
+
 const currencyToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
     log("Starting liquidity pool creation test (Currency to Currency)");
 
@@ -244,6 +262,9 @@ const sameCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
 
 const liquidityPoolTests = async (argsObject: object) => {
     const config = createConfig(argsObject);
+
+    // Test lastGlobalSnapshot increasing
+    await lastGlobalSnapshotIncreasingTest(config);
 
     // Test valid cases
     await currencyToCurrencyTest(config);

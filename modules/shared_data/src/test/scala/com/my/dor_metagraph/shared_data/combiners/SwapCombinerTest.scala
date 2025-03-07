@@ -206,7 +206,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapConfirmedResponse <- combinePendingSpendActionSwap[IO](
         config,
         state,
-        PendingSpendAction(swapUpdate, spendActions),
+        PendingSpendAction(swapUpdate, spendActions.head),
         SnapshotOrdinal.MinValue,
         EpochProgress.MinValue,
         spendActions
@@ -319,7 +319,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapConfirmedResponse <- combinePendingSpendActionSwap[IO](
         config,
         state,
-        PendingSpendAction(swapUpdate, spendActions),
+        PendingSpendAction(swapUpdate, spendActions.head),
         SnapshotOrdinal.MinValue,
         EpochProgress.MinValue,
         spendActions

@@ -48,7 +48,8 @@ object CalculatedStateService {
                 AmmCalculatedState(
                   updatedOperations,
                   state.votingWeights,
-                  state.allocations
+                  state.allocations,
+                  state.lastSyncGlobalSnapshotOrdinal
                 )
               ),
               true

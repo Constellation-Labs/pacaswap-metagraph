@@ -167,7 +167,7 @@ object States {
   @derive(encoder, decoder)
   case class PendingSpendAction[A <: AmmUpdate](
     update: Signed[A],
-    generatedSpendActions: List[SpendAction]
+    generatedSpendAction: SpendAction
   ) extends PendingAction[A]
 
   @derive(encoder, decoder)
@@ -190,7 +190,7 @@ object States {
     operations: Map[OperationType, AmmOffChainState] = Map.empty,
     votingWeights: Map[Address, VotingWeight] = Map.empty,
     allocations: Allocations = Allocations.empty,
-    lastSyncGlobalSnapshotOrdinal: Option[SnapshotOrdinal] = None
+    lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue
   ) extends DataCalculatedState
 
   @derive(encoder, decoder)

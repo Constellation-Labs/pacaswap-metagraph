@@ -171,7 +171,7 @@ const tokenLockTests = async (argsObject: object) => {
             await validateVotingWeight(config, address, lockAmount, multiplier, logger);
         })
 
-        await delay(10000)
+        await delay(30 * 1000)
     }
 
     log("All token locks validated successfully.");

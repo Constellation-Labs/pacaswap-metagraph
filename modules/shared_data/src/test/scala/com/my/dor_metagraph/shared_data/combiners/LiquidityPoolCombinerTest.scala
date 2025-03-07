@@ -184,7 +184,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
         config,
         liquidityPoolPendingSpendActionResponse,
-        PendingSpendAction(liquidityPoolUpdate, spendActions),
+        PendingSpendAction(liquidityPoolUpdate, spendActions.head),
         EpochProgress.MinValue,
         spendActions
       )
@@ -295,7 +295,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
         config,
         liquidityPoolPendingSpendActionResponse,
-        PendingSpendAction(liquidityPoolUpdate, spendActions),
+        PendingSpendAction(liquidityPoolUpdate, spendActions.head),
         EpochProgress.MinValue,
         spendActions
       )

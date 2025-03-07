@@ -12,13 +12,13 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.schema.swap.{AllowSpend, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionsAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
@@ -197,9 +197,9 @@ object SwapCombiner {
       case Some(value) => handleFailedUpdate(updates, acc, value, swapCalculatedState).pure
       case None =>
         for {
-          metagraphGeneratedHashes <- pendingSwapUpdate.generatedSpendActions.traverse(action => Hasher[F].hash(action))
+          metagraphGeneratedSpendActionHash <- Hasher[F].hash(pendingSwapUpdate.generatedSpendAction)
           globalSnapshotsHashes <- spendActions.traverse(action => Hasher[F].hash(action))
-          allSpendActionsAccepted = checkIfSpendActionsAcceptedInGl0(metagraphGeneratedHashes, globalSnapshotsHashes)
+          allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
           updatedState <-
             if (!allSpendActionsAccepted) {
               acc.pure
@@ -296,30 +296,36 @@ object SwapCombiner {
               response = maybeFailedUpdate match {
                 case Some(failedCalculatedState) => handleFailedUpdate(updates, acc, failedCalculatedState, swapCalculatedState)
                 case None =>
-                  val spendActionToken = generateSpendAction(allowSpendToken)
+                  val spendActionToken = generateSpendAction(
+                    allowSpendToken,
+                    updatedTokenInformation.pairTokenInformation.identifier,
+                    updatedTokenInformation.receivedAmount
+                  )
 
                   val updatedPendingAllowSpendCalculatedState =
                     removePendingAllowSpend(swapCalculatedState, signedSwapUpdate)
                   val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
                     signedSwapUpdate,
-                    List(spendActionToken)
+                    spendActionToken
                   )
 
                   val updatedPendingStakingCalculatedState =
                     swapCalculatedState
                       .focus(_.pending)
-                      .replace(updatedPendingAllowSpendCalculatedState)
+                      .replace(updatedPendingSpendActionCalculatedState)
 
                   val updatedCalculatedState = acc.calculated
                     .focus(_.operations)
                     .modify(_.updated(OperationType.Staking, updatedPendingStakingCalculatedState))
 
+                  val updatedSharedArtifacts = acc.sharedArtifacts ++ SortedSet[SharedArtifact](
+                    spendActionToken
+                  )
+
                   DataState(
                     AmmOnChainState(updates),
                     updatedCalculatedState,
-                    SortedSet[SharedArtifact](
-                      spendActionToken
-                    )
+                    updatedSharedArtifacts
                   )
               }
             } yield response
