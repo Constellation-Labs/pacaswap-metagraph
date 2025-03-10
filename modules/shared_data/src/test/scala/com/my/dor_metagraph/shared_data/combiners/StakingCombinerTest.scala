@@ -225,7 +225,7 @@ object StakingCombinerTest extends MutableIOSuite {
       stakeResponseConfirmedResponse <- combinePendingSpendActionStaking[IO](
         config,
         state,
-        PendingSpendAction(stakingUpdate, spendActions),
+        PendingSpendAction(stakingUpdate, spendActions.head),
         SnapshotOrdinal.MinValue,
         EpochProgress.MinValue,
         spendActions
@@ -237,10 +237,8 @@ object StakingCombinerTest extends MutableIOSuite {
         .confirmed
         .value(poolId)
 
-      stakingSpendTransactions = stakeResponsePendingSpendActionResponse.sharedArtifacts.collect {
-        case action: artifact.SpendAction => action.output
-      }.collect {
-        case transaction: SpendTransaction => transaction
+      stakingSpendAction = stakeResponsePendingSpendActionResponse.sharedArtifacts.toList.collect {
+        case action: artifact.SpendAction => action
       }
 
     } yield
@@ -253,7 +251,7 @@ object StakingCombinerTest extends MutableIOSuite {
         updatedLiquidityPool.tokenB.amount.value === toFixedPoint(100.0),
         updatedLiquidityPool.poolShares.totalShares.value === toFixedPoint(1.5),
         updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.5),
-        stakingSpendTransactions.size === 2
+        stakingSpendAction.size === 1
       )
   }
 
@@ -360,7 +358,7 @@ object StakingCombinerTest extends MutableIOSuite {
       stakeResponseConfirmedResponse <- combinePendingSpendActionStaking[IO](
         config,
         state,
-        PendingSpendAction(stakingUpdate, spendActions),
+        PendingSpendAction(stakingUpdate, spendActions.head),
         SnapshotOrdinal.MinValue,
         EpochProgress.MinValue,
         spendActions

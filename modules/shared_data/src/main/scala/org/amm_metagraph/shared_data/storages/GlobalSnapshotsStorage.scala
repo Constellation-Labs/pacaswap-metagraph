@@ -29,7 +29,7 @@ object GlobalSnapshotsStorage {
   ): GlobalSnapshotsStorage[F] =
     new GlobalSnapshotsStorage[F] {
       def set(snapshot: Hashed[GlobalIncrementalSnapshot]): F[Unit] =
-        snapshotsR.update { snapshots => snapshots.updated(snapshot.ordinal, snapshot) }
+        snapshotsR.update(snapshots => snapshots.updated(snapshot.ordinal, snapshot))
 
       def get: F[Option[Hashed[GlobalIncrementalSnapshot]]] = snapshotsR.get.map {
         _.lastOption.map { case (_, snapshot) => snapshot }

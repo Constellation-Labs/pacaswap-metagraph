@@ -17,7 +17,7 @@ import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionsAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
@@ -221,9 +221,9 @@ object StakingCombiner {
       case Some(value) => handleFailedUpdate(updates, acc, value, stakingCalculatedState).pure
       case None =>
         for {
-          metagraphGeneratedHashes <- pendingStakingUpdate.generatedSpendActions.traverse(action => Hasher[F].hash(action))
+          metagraphGeneratedSpendActionHash <- Hasher[F].hash(pendingStakingUpdate.generatedSpendAction)
           globalSnapshotsHashes <- spendActions.traverse(action => Hasher[F].hash(action))
-          allSpendActionsAccepted = checkIfSpendActionsAcceptedInGl0(metagraphGeneratedHashes, globalSnapshotsHashes)
+          allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
           updatedState <-
             if (!allSpendActionsAccepted) {
               acc.pure
@@ -319,14 +319,13 @@ object StakingCombiner {
               response = maybeFailedUpdate match {
                 case Some(failedCalculatedState) => handleFailedUpdate(updates, acc, failedCalculatedState, stakingCalculatedState)
                 case None =>
-                  val spendActionTokenA = generateSpendAction(allowSpendTokenA)
-                  val spendActionTokenB = generateSpendAction(allowSpendTokenB)
+                  val spendAction = generateSpendAction(allowSpendTokenA, allowSpendTokenB)
 
                   val updatedPendingAllowSpendCalculatedState =
                     removePendingAllowSpend(stakingCalculatedState, signedStakingUpdate)
                   val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
                     signedStakingUpdate,
-                    List(spendActionTokenA, spendActionTokenB)
+                    spendAction
                   )
 
                   val updatedPendingStakingCalculatedState =
@@ -338,13 +337,14 @@ object StakingCombiner {
                     .focus(_.operations)
                     .modify(_.updated(OperationType.Staking, updatedPendingStakingCalculatedState))
 
+                  val updatedSharedArtifacts = acc.sharedArtifacts ++ SortedSet[SharedArtifact](
+                    spendAction
+                  )
+
                   DataState(
                     AmmOnChainState(updates),
                     updatedCalculatedState,
-                    SortedSet[SharedArtifact](
-                      spendActionTokenA,
-                      spendActionTokenB
-                    )
+                    updatedSharedArtifacts
                   )
               }
             } yield response

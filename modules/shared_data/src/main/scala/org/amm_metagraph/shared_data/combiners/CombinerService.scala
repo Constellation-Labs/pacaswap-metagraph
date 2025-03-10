@@ -16,7 +16,6 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.getCombinedSpendTransactions
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.combiners.GovernanceCombiner._
 import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner._
@@ -97,7 +96,7 @@ object CombinerService {
 
           globalSnapshotSyncAllowSpends = getAllowSpendsFromGlobalSnapshotState(lastSyncState)
           globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
-            oldState.calculated.lastSyncGlobalSnapshotOrdinal.getOrElse(lastSyncGlobalOrdinal),
+            oldState.calculated.lastSyncGlobalSnapshotOrdinal,
             lastSyncGlobalOrdinal,
             globalSnapshotsStorage
           )
@@ -171,7 +170,7 @@ object CombinerService {
 
           stateUpdatedByLastGlobalSync = stateCombinedGovernanceRewards
             .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
-            .replace(lastSyncGlobalOrdinal.some)
+            .replace(lastSyncGlobalOrdinal)
 
         } yield stateUpdatedByLastGlobalSync).handleErrorWith { e =>
           logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
@@ -259,36 +258,38 @@ object CombinerService {
       stateCombinedByNewUpdates.pure
     } else {
       for {
-        _ <- logger.info(s"lastGlobalSnapshotAllowSpends found: $globalSnapshotSyncAllowSpends")
         stateUpdatedByLiquidityPools <- pendingAllowSpendLiquidityPool.toList
           .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingLp) =>
-            combinePendingAllowSpendLiquidityPool(
-              applicationConfig,
-              acc,
-              pendingLp,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncAllowSpends
-            )
+            logger.info(s"Trying to combine pending allow spends LiquidityPool: $pendingLp") >>
+              combinePendingAllowSpendLiquidityPool(
+                applicationConfig,
+                acc,
+                pendingLp,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncAllowSpends
+              )
           }
         stateUpdatedByStaking <- pendingAllowSpendStaking.toList
           .foldLeftM(stateUpdatedByLiquidityPools) { (acc, pendingStake) =>
-            combinePendingAllowSpendStaking(
-              applicationConfig,
-              acc,
-              pendingStake,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncAllowSpends
-            )
+            logger.info(s"Trying to combine pending allow spends Stake: $pendingStake") >>
+              combinePendingAllowSpendStaking(
+                applicationConfig,
+                acc,
+                pendingStake,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncAllowSpends
+              )
           }
         stateUpdatedBySwap <- pendingAllowSpendSwap.toList
           .foldLeftM(stateUpdatedByStaking) { (acc, pendingSwap) =>
-            combinePendingAllowSpendSwap(
-              applicationConfig,
-              acc,
-              pendingSwap,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncAllowSpends
-            )
+            logger.info(s"Trying to combine pending allow spends Swap: $pendingSwap") >>
+              combinePendingAllowSpendSwap(
+                applicationConfig,
+                acc,
+                pendingSwap,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncAllowSpends
+              )
           }
       } yield stateUpdatedBySwap
     }
@@ -307,38 +308,40 @@ object CombinerService {
       stateCombinedByPendingAllowSpends.pure
     } else {
       for {
-        _ <- logger.info(s"lastGlobalSnapshotAllowSpends found: $globalSnapshotSyncSpendActions")
         stateUpdatedByLiquidityPools <- pendingSpendActionLiquidityPool.toList
           .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingLp) =>
-            combinePendingSpendActionLiquidityPool(
-              applicationConfig,
-              acc,
-              pendingLp,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncSpendActions
-            )
+            logger.info(s"Trying to combine pending spend actions LiquidityPool: $pendingLp") >>
+              combinePendingSpendActionLiquidityPool(
+                applicationConfig,
+                acc,
+                pendingLp,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncSpendActions
+              )
           }
         stateUpdatedByStaking <- pendingSpendActionStaking.toList
           .foldLeftM(stateUpdatedByLiquidityPools) { (acc, pendingStake) =>
-            combinePendingSpendActionStaking(
-              applicationConfig,
-              acc,
-              pendingStake,
-              currencySnapshotOrdinal,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncSpendActions
-            )
+            logger.info(s"Trying to combine pending spend actions Stake: $pendingStake") >>
+              combinePendingSpendActionStaking(
+                applicationConfig,
+                acc,
+                pendingStake,
+                currencySnapshotOrdinal,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncSpendActions
+              )
           }
         stateUpdatedBySwap <- pendingSpendActionSwap.toList
           .foldLeftM(stateUpdatedByStaking) { (acc, pendingSwap) =>
-            combinePendingSpendActionSwap(
-              applicationConfig,
-              acc,
-              pendingSwap,
-              currencySnapshotOrdinal,
-              lastSyncGlobalEpochProgress,
-              globalSnapshotSyncSpendActions
-            )
+            logger.info(s"Trying to combine pending spend actions Swap: $pendingSwap") >>
+              combinePendingSpendActionSwap(
+                applicationConfig,
+                acc,
+                pendingSwap,
+                currencySnapshotOrdinal,
+                lastSyncGlobalEpochProgress,
+                globalSnapshotSyncSpendActions
+              )
           }
       } yield stateUpdatedBySwap
     }

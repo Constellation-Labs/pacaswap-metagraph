@@ -6,9 +6,12 @@ import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
+
+import eu.timepit.refined.types.numeric.PosLong
 
 object SpendTransactions {
 
@@ -33,7 +36,9 @@ object SpendTransactions {
     )
 
   def generateSpendAction(
-    hashedAllowSpend: Hashed[AllowSpend]
+    hashedAllowSpend: Hashed[AllowSpend],
+    metagraphGeneratedCurrencyId: Option[CurrencyId],
+    metagraphGeneratedAmount: Amount
   ): SpendAction =
     SpendAction(
       SpendTransaction(
@@ -44,9 +49,28 @@ object SpendTransactions {
       ),
       SpendTransaction(
         none,
-        hashedAllowSpend.currency,
-        hashedAllowSpend.amount,
+        metagraphGeneratedCurrencyId,
+        SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
         hashedAllowSpend.destination
+      )
+    )
+
+  def generateSpendAction(
+    hashedAllowSpendA: Hashed[AllowSpend],
+    hashedAllowSpendB: Hashed[AllowSpend]
+  ): SpendAction =
+    SpendAction(
+      SpendTransaction(
+        hashedAllowSpendA.hash.some,
+        hashedAllowSpendA.currency,
+        hashedAllowSpendA.amount,
+        hashedAllowSpendA.destination
+      ),
+      SpendTransaction(
+        hashedAllowSpendB.hash.some,
+        hashedAllowSpendB.currency,
+        hashedAllowSpendB.amount,
+        hashedAllowSpendB.destination
       )
     )
 
@@ -59,12 +83,10 @@ object SpendTransactions {
     spendActions.flatMap(spendAction => SortedSet(spendAction.input, spendAction.output))
   }
 
-  def checkIfSpendActionsAcceptedInGl0(
-    metagraphGeneratedSpendActionHashes: List[Hash],
+  def checkIfSpendActionAcceptedInGl0(
+    metagraphGeneratedSpendActionHash: Hash,
     globalSyncSpendActionHashes: List[Hash]
   ) =
-    metagraphGeneratedSpendActionHashes.forall { hash =>
-      globalSyncSpendActionHashes.contains(hash)
-    }
+    globalSyncSpendActionHashes.contains(metagraphGeneratedSpendActionHash)
 
 }

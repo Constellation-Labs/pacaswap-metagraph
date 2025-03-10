@@ -19,7 +19,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionsAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
@@ -153,9 +153,9 @@ object LiquidityPoolCombiner {
       case None =>
         for {
           signerAddress <- signedLiquidityPoolUpdate.proofs.head.id.toAddress
-          metagraphGeneratedHashes <- pendingLiquidityPoolUpdate.generatedSpendActions.traverse(action => Hasher[F].hash(action))
+          metagraphGeneratedSpendActionHash <- Hasher[F].hash(pendingLiquidityPoolUpdate.generatedSpendAction)
           globalSnapshotsHashes <- spendActions.traverse(action => Hasher[F].hash(action))
-          allSpendActionsAccepted = checkIfSpendActionsAcceptedInGl0(metagraphGeneratedHashes, globalSnapshotsHashes)
+          allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
           updatedState <-
             if (!allSpendActionsAccepted) {
               acc.pure
@@ -235,14 +235,13 @@ object LiquidityPoolCombiner {
               case Some(failedCalculatedState) =>
                 handleFailedUpdate(updates, acc, failedCalculatedState, liquidityPoolsCalculatedState).pure
               case None =>
-                val spendActionTokenA = generateSpendAction(allowSpendTokenA)
-                val spendActionTokenB = generateSpendAction(allowSpendTokenB)
+                val spendAction = generateSpendAction(allowSpendTokenA, allowSpendTokenB)
 
                 val updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(liquidityPoolsCalculatedState, signedLiquidityPoolUpdate)
                 val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
                   signedLiquidityPoolUpdate,
-                  List(spendActionTokenA, spendActionTokenB)
+                  spendAction
                 )
 
                 val updatedLiquidityPoolCalculatedState =
@@ -254,13 +253,14 @@ object LiquidityPoolCombiner {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
 
+                val updatedSharedArtifacts = acc.sharedArtifacts ++ SortedSet[SharedArtifact](
+                  spendAction
+                )
+
                 DataState(
                   AmmOnChainState(updates),
                   updatedCalculatedState,
-                  SortedSet[SharedArtifact](
-                    spendActionTokenA,
-                    spendActionTokenB
-                  )
+                  updatedSharedArtifacts
                 ).pure
             }
 
