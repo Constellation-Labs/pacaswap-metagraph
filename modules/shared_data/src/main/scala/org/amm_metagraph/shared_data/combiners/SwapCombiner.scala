@@ -12,7 +12,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, SwapAmount}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
@@ -268,7 +268,8 @@ object SwapCombiner {
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedSwapUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    ammCurrencyId: CurrencyId
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val swapCalculatedState = getSwapCalculatedState(acc.calculated)
     val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(acc.calculated)
@@ -299,7 +300,8 @@ object SwapCombiner {
                   val spendActionToken = generateSpendAction(
                     allowSpendToken,
                     updatedTokenInformation.pairTokenInformation.identifier,
-                    updatedTokenInformation.receivedAmount
+                    updatedTokenInformation.receivedAmount,
+                    ammCurrencyId.value
                   )
 
                   val updatedPendingAllowSpendCalculatedState =
@@ -339,7 +341,8 @@ object SwapCombiner {
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedSwapUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
+    lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    ammCurrencyId: CurrencyId
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val swapUpdate = signedSwapUpdate.value
     val swapCalculatedState = getSwapCalculatedState(acc.calculated)
@@ -375,7 +378,8 @@ object SwapCombiner {
           acc,
           signedSwapUpdate,
           lastSyncGlobalEpochProgress,
-          lastGlobalSnapshotsAllowSpends
+          lastGlobalSnapshotsAllowSpends,
+          ammCurrencyId
         )
     }
   }

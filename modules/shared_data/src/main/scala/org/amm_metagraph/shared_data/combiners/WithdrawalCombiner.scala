@@ -97,10 +97,11 @@ object WithdrawalCombiner {
     tokenAAmount: SwapAmount,
     tokenB: Option[CurrencyId],
     tokenBAmount: SwapAmount,
-    destination: Address
+    destination: Address,
+    ammMetagraphId: CurrencyId
   ): SortedSet[SharedArtifact] = {
-    val spendTransactionTokenA = generateSpendActionWithoutInput(tokenA, tokenAAmount, destination)
-    val spendTransactionTokenB = generateSpendActionWithoutInput(tokenB, tokenBAmount, destination)
+    val spendTransactionTokenA = generateSpendActionWithoutInput(tokenA, tokenAAmount, ammMetagraphId.value, destination)
+    val spendTransactionTokenB = generateSpendActionWithoutInput(tokenB, tokenBAmount, ammMetagraphId.value, destination)
     SortedSet[SharedArtifact](
       spendTransactionTokenA,
       spendTransactionTokenB
@@ -111,7 +112,7 @@ object WithdrawalCombiner {
     acc: DataState[AmmOnChainState, AmmCalculatedState],
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     signerAddress: Address,
-    lastSyncGlobalEpochProgress: EpochProgress
+    ammCurrencyId: CurrencyId
   ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
     val withdrawalUpdate = signedWithdrawalUpdate.value
     val updates = withdrawalUpdate :: acc.onChain.updates
@@ -160,7 +161,8 @@ object WithdrawalCombiner {
             SwapAmount(withdrawalAmounts.tokenAAmount),
             withdrawalUpdate.tokenBId,
             SwapAmount(withdrawalAmounts.tokenBAmount),
-            signerAddress
+            signerAddress,
+            ammCurrencyId
           )
 
           val updatedCalculatedState = acc.calculated

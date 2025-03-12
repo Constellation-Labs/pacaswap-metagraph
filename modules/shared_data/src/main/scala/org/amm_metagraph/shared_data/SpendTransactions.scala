@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data
 
+import cats.data.NonEmptyList
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedSet
@@ -18,40 +19,50 @@ object SpendTransactions {
   def generateSpendActionWithoutInput(
     token: Option[CurrencyId],
     amount: SwapAmount,
-    destination: Address
+    destination: Address,
+    ammMetagraphId: Address
   ): SpendAction =
     SpendAction(
-      SpendTransaction(
-        none,
-        token,
-        amount,
-        destination
-      ),
-      SpendTransaction(
-        none,
-        token,
-        amount,
-        destination
+      NonEmptyList.of(
+        SpendTransaction(
+          none,
+          token,
+          amount,
+          ammMetagraphId,
+          destination
+        ),
+        SpendTransaction(
+          none,
+          token,
+          amount,
+          ammMetagraphId,
+          destination
+        )
       )
     )
 
   def generateSpendAction(
     hashedAllowSpend: Hashed[AllowSpend],
     metagraphGeneratedCurrencyId: Option[CurrencyId],
-    metagraphGeneratedAmount: Amount
+    metagraphGeneratedAmount: Amount,
+    ammMetagraphId: Address
   ): SpendAction =
     SpendAction(
-      SpendTransaction(
-        hashedAllowSpend.hash.some,
-        hashedAllowSpend.currency,
-        hashedAllowSpend.amount,
-        hashedAllowSpend.destination
-      ),
-      SpendTransaction(
-        none,
-        metagraphGeneratedCurrencyId,
-        SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
-        hashedAllowSpend.destination
+      NonEmptyList.of(
+        SpendTransaction(
+          hashedAllowSpend.hash.some,
+          hashedAllowSpend.currency,
+          hashedAllowSpend.amount,
+          hashedAllowSpend.source,
+          hashedAllowSpend.destination
+        ),
+        SpendTransaction(
+          none,
+          metagraphGeneratedCurrencyId,
+          SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
+          ammMetagraphId,
+          hashedAllowSpend.destination
+        )
       )
     )
 
@@ -60,17 +71,21 @@ object SpendTransactions {
     hashedAllowSpendB: Hashed[AllowSpend]
   ): SpendAction =
     SpendAction(
-      SpendTransaction(
-        hashedAllowSpendA.hash.some,
-        hashedAllowSpendA.currency,
-        hashedAllowSpendA.amount,
-        hashedAllowSpendA.destination
-      ),
-      SpendTransaction(
-        hashedAllowSpendB.hash.some,
-        hashedAllowSpendB.currency,
-        hashedAllowSpendB.amount,
-        hashedAllowSpendB.destination
+      NonEmptyList.of(
+        SpendTransaction(
+          hashedAllowSpendA.hash.some,
+          hashedAllowSpendA.currency,
+          hashedAllowSpendA.amount,
+          hashedAllowSpendA.source,
+          hashedAllowSpendA.destination
+        ),
+        SpendTransaction(
+          hashedAllowSpendB.hash.some,
+          hashedAllowSpendB.currency,
+          hashedAllowSpendB.amount,
+          hashedAllowSpendB.source,
+          hashedAllowSpendB.destination
+        )
       )
     )
 
@@ -80,7 +95,7 @@ object SpendTransactions {
     val spendActions = artifacts.collect {
       case transaction: SpendAction => transaction
     }
-    spendActions.flatMap(spendAction => SortedSet(spendAction.input, spendAction.output))
+    spendActions.flatMap(spendAction => spendAction.spendTransactions.toList.to(SortedSet))
   }
 
   def checkIfSpendActionAcceptedInGl0(

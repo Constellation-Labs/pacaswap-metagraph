@@ -198,7 +198,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -311,7 +312,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -425,7 +427,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -517,7 +520,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -609,7 +613,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -686,7 +691,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         EpochProgress.MinValue,
-        SortedMap.empty
+        SortedMap.empty,
+        CurrencyId(ownerAddress)
       )
 
       swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -762,7 +768,8 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         swapUpdate,
         EpochProgress.MaxValue,
-        SortedMap.empty
+        SortedMap.empty,
+        CurrencyId(ownerAddress)
       )
 
       swapCalculatedState = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]

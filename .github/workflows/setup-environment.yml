@@ -44,14 +44,14 @@ jobs:
       - name: Upload hypergraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: hypergraph
+          name: hypergraph-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
           path: .github/code/hypergraph
           retention-days: 7
 
       - name: Upload shared_jars artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: shared_jars
+          name: shared_jars-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
           path: .github/code/shared_jars
           retention-days: 7
 
@@ -89,7 +89,7 @@ jobs:
       - name: Upload amm-metagraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: amm-metagraph
+          name: amm-metagraph-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
           path: .github/code/metagraphs/amm-metagraph
           retention-days: 7
 
@@ -128,7 +128,7 @@ jobs:
       - name: Upload currency-metagraph-1 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-1
+          name: currency-metagraph-1-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
           path: .github/code/metagraphs/currency-metagraph-1
           retention-days: 7
 
@@ -167,6 +167,6 @@ jobs:
       - name: Upload currency-metagraph-2 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-2
+          name: currency-metagraph-2-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
           path: .github/code/metagraphs/currency-metagraph-2
           retention-days: 7
