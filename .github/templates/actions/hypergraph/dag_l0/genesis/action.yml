@@ -1,11 +1,15 @@
 name: Global L0 Genesis
+description: "Starts the Global L0 Genesis node"
 
 inputs:
   CL_PUBLIC_HTTP_PORT:
+    description: "Public HTTP port for the node"
     required: true
   CL_P2P_HTTP_PORT:
+    description: "P2P HTTP port for the node"
     required: true
   CL_CLI_HTTP_PORT:
+    description: "CLI HTTP port for the node"
     required: true
 
 runs:
@@ -23,13 +27,11 @@ runs:
         CL_APP_ENV: dev
         CL_COLLATERAL: 0
       run: |
-        ROOT_DIRECTORY=$(pwd)
-        
-        cd $ROOT_DIRECTORY/.github/code/hypergraph/dag-l0/genesis-node
-        java -jar $ROOT_DIRECTORY/.github/code/shared_jars/cl-keytool.jar generate
+        cd ${{ github.workspace }}/.github/code/hypergraph/dag-l0/genesis-node
+        java -jar ${{ github.workspace }}/.github/code/shared_jars/cl-keytool.jar generate
 
         touch dag-l0-genesis.log
-        nohup java -Denvironment=dev -jar $ROOT_DIRECTORY/.github/code/hypergraph/dag-l0.jar run-genesis genesis.csv --ip 127.0.0.1 > dag-l0-genesis.log 2>&1 &
+        nohup java -Denvironment=dev -jar ${{ github.workspace }}/.github/code/hypergraph/dag-l0.jar run-genesis genesis.csv --ip 127.0.0.1 > dag-l0-genesis.log 2>&1 &
         sleep 5
 
     - name: Check if node started
@@ -37,4 +39,4 @@ runs:
       env:
         CL_PUBLIC_HTTP_PORT: ${{ inputs.CL_PUBLIC_HTTP_PORT }}
       run: |
-        npx tsx .github/action_scripts/check_if_node_started.ts -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=DAG-L0
+        npx tsx ${{ github.workspace }}/.github/action_scripts/check_if_node_started.ts -url=http://127.0.0.1:${CL_PUBLIC_HTTP_PORT}/node/info -cluster_name=DAG-L0

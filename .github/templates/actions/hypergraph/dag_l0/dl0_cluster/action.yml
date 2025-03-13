@@ -1,7 +1,9 @@
 name: DAG L0 Cluster
+description: "Sets up and starts a complete DAG L0 cluster with genesis node and validators"
 
 inputs:
   PORT_PREFIX:
+    description: "Port prefix for all DAG L0 nodes"
     required: true
 
 runs:

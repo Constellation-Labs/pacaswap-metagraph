@@ -1,7 +1,9 @@
 name: Hypergraph jar build
+description: "Builds and caches JAR files for hypergraph components"
 
 inputs:
   GITHUB_TOKEN:
+    description: "GitHub token for authentication"
     required: true
   TESSELLATION_COMMIT_HASH:
     required: false
@@ -26,10 +28,56 @@ runs:
       id: cache-tessellation
       with:
         path: |
-          .github/code/hypergraph/dag-l0.jar
-          .github/code/hypergraph/dag-l1.jar
-          .github/code/shared_jars/cl-keytool.jar
-          .github/code/shared_jars/cl-wallet.jar
+          ${{ github.workspace }}/.github/code/hypergraph/dag-l0.jar
+          ${{ github.workspace }}/.github/code/hypergraph/dag-l1.jar
+          ${{ github.workspace }}/.github/code/shared_jars/cl-keytool.jar
+          ${{ github.workspace }}/.github/code/shared_jars/cl-wallet.jar
+        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}
+
+    - name: Checkout Tessellation repository
+      if: steps.cache-tessellation.outputs.cache-hit != 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: Constellation-Labs/tessellation
+        ref: ${{ steps.get-commit-hash.outputs.commit_hash }}
+        path: tessellation-repo
+
+    - name: Build Tessellation
+      if: steps.cache-tessellation.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Create necessary directories
+        mkdir -p ${{ github.workspace }}/.github/code/hypergraph
+        mkdir -p ${{ github.workspace }}/.github/code/shared_jars
+        
+        # Build the project
+        cd ${{ github.workspace }}/tessellation-repo
+        sbt -Dversion.override=99.99.99 --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
+        
+        # Move the built artifacts to the expected locations
+        mv modules/dag-l0/target/scala-2.13/tessellation-dag-l0-assembly-* ${{ github.workspace }}/.github/code/hypergraph/dag-l0.jar
+        mv modules/dag-l1/target/scala-2.13/tessellation-dag-l1-assembly-* ${{ github.workspace }}/.github/code/hypergraph/dag-l1.jar
+        
+        mv modules/keytool/target/scala-2.13/tessellation-keytool-assembly-* ${{ github.workspace }}/.github/code/shared_jars/cl-keytool.jar
+        mv modules/wallet/target/scala-2.13/tessellation-wallet-assembly-* ${{ github.workspace }}/.github/code/shared_jars/cl-wallet.jar
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
+    - name: Clean up Tessellation repository
+      if: steps.cache-tessellation.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        rm -rf ${{ github.workspace }}/tessellation-repo
+
+    - name: Save tessellation cache
+      if: steps.cache-tessellation.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ github.workspace }}/.github/code/hypergraph/dag-l0.jar
+          ${{ github.workspace }}/.github/code/hypergraph/dag-l1.jar
+          ${{ github.workspace }}/.github/code/shared_jars/cl-keytool.jar
+          ${{ github.workspace }}/.github/code/shared_jars/cl-wallet.jar
         key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}
 
     - name: Create hypergraph directories
@@ -66,38 +114,3 @@ runs:
       run: |
         echo "Cache status:"
         echo "- DAG L0, L1 and shared JARs: ${{ steps.cache-tessellation.outputs.cache-hit == 'true' && '✅ Restored' || '⚠️ Need to build' }}"
-
-    #Possible be removed when we have the dependencies on Maven?
-    - name: Generate metagraph dependencies and hypergraph JARs 🔥
-      shell: bash
-      if: ${{ steps.cache-tessellation.outputs.cache-hit != 'true' }}
-      run: |
-        cd .github/code
-        
-        git clone https://github.com/Constellation-Labs/tessellation.git
-        cd tessellation
-        git checkout ${{ steps.get-commit-hash.outputs.commit_hash }}
-        
-        sbt -Dversion.override=99.99.99 --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
-        
-        mv modules/dag-l0/target/scala-2.13/tessellation-dag-l0-assembly-* ../hypergraph/dag-l0.jar
-        mv modules/dag-l1/target/scala-2.13/tessellation-dag-l1-assembly-* ../hypergraph/dag-l1.jar
-        
-        mv modules/keytool/target/scala-2.13/tessellation-keytool-assembly-* ../shared_jars/cl-keytool.jar
-        mv modules/wallet/target/scala-2.13/tessellation-wallet-assembly-* ../shared_jars/cl-wallet.jar
-        
-        cd ..
-        rm -r tessellation
-      env:
-        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
-
-    - name: Save tessellation cache
-      if: ${{ steps.cache-tessellation.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          .github/code/hypergraph/dag-l0.jar
-          .github/code/hypergraph/dag-l1.jar
-          .github/code/shared_jars/cl-keytool.jar
-          .github/code/shared_jars/cl-wallet.jar
-        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}

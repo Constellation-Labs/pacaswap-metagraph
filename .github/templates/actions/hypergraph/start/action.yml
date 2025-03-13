@@ -1,11 +1,15 @@
 name: Start hypergraph
+description: "Starts the hypergraph components including DAG L0 and optionally DAG L1"
 
 inputs:
   INCLUDE_DAG_L1:
+    description: "Whether to include DAG L1 in the startup"
     required: true
   DAG_L0_PORT_PREFIX:
+    description: "Port prefix for DAG L0 nodes"
     required: true
   DAG_L1_PORT_PREFIX:
+    description: "Port prefix for DAG L1 nodes, required if INCLUDE_DAG_L1 is true"
     required: false
 
 runs:

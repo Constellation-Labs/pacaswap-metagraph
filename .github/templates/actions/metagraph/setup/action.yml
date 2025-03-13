@@ -1,13 +1,18 @@
 name: Metagraph - jar build
+description: "Builds and caches JAR files for metagraph components"
 
 inputs:
   METAGRAPH_NAME:
+    description: "Name of the metagraph to build"
     required: true
   TEMPLATE_NAME:
+    description: "Optional template name to use for building"
     required: false
   INCLUDE_DATA_LAYER:
+    description: "Whether to include the data layer in the build"
     required: true
   GITHUB_TOKEN:
+    description: "GitHub token for authentication"
     required: true
 
 runs:
@@ -18,65 +23,65 @@ runs:
       shell: bash
       run: |
         if [ -n "${{ inputs.TEMPLATE_NAME }}" ]; then
-          HASH=$(git rev-parse HEAD:.github/templates/metagraphs/${{ inputs.TEMPLATE_NAME }})
+          echo "hash=${{ hashFiles(
+            format('{0}/.github/templates/metagraphs/{1}/**', github.workspace, inputs.TEMPLATE_NAME)
+          ) }}" >> $GITHUB_OUTPUT
         else
-          MODULES_HASH=$(git rev-parse HEAD:modules)
-          PROJECT_HASH=$(git rev-parse HEAD:project)
-          BUILD_SBT_HASH=$(git rev-parse HEAD:build.sbt)
-          VERSION_HASH=$(git rev-parse HEAD:version.sbt || echo "no-version-sbt")
-          HASH=$(echo "$MODULES_HASH $PROJECT_HASH $BUILD_SBT_HASH $VERSION_HASH" | sha1sum | awk '{print $1}')
+          echo "hash=${{ hashFiles(
+            format('{0}/modules/**', github.workspace),
+            format('{0}/project/**', github.workspace),
+            format('{0}/build.sbt', github.workspace),
+            format('{0}/version.sbt', github.workspace)
+          ) }}" >> $GITHUB_OUTPUT
         fi
-        echo "hash=$HASH" >> $GITHUB_OUTPUT
 
     - name: Create directories - ${{ inputs.METAGRAPH_NAME }}
       shell: bash
       run: |
-        cd .github
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-1
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-1/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-1
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-1/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-2
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-2/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-2
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/validator-2/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/initial-validator
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/initial-validator/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/initial-validator
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/initial-validator/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-1
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-1/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-1
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-1/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-2
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-2/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-2
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/validator-2/placeholder.txt
 
     - name: Create data layer directories if needed
       if: ${{ inputs.INCLUDE_DATA_LAYER == 'true' }}
       shell: bash
       run: |
-        cd .github
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/initial-validator
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/initial-validator/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/initial-validator
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/initial-validator/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-1
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-1/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-1
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-1/placeholder.txt
         
-        mkdir -p code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-2
-        echo "empty" > code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-2/placeholder.txt
+        mkdir -p ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-2
+        echo "empty" > ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/validator-2/placeholder.txt
 
     # Restore individual JARs from cache
     - name: Restore L0 JAR
       id: cache-metagraph-l0
       uses: actions/cache/restore@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-metagraph-l0-${{ steps.project-hash.outputs.hash }}
 
     - name: Restore Currency L1 JAR
       id: cache-currency-l1
       uses: actions/cache/restore@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/currency-l1.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/currency-l1.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-currency-l1-${{ steps.project-hash.outputs.hash }}
 
     - name: Restore Data L1 JAR
@@ -84,7 +89,7 @@ runs:
       if: ${{ inputs.INCLUDE_DATA_LAYER == 'true' }}
       uses: actions/cache/restore@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-data-l1-${{ steps.project-hash.outputs.hash }}
     
     - name: Log cache status
@@ -100,7 +105,7 @@ runs:
     - name: Copy genesis to metagraph L0 - ${{ inputs.METAGRAPH_NAME }}
       shell: bash
       run: |  
-        cp .github/config/genesis.csv .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node
+        cp ${{ github.workspace }}/.github/config/genesis.csv ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/genesis-node
 
     - name: Generate metagraph dependencies and hypergraph JARs - Template 🔥
       if: ${{ inputs.TEMPLATE_NAME != '' && (steps.cache-metagraph-l0.outputs.cache-hit != 'true' || steps.cache-currency-l1.outputs.cache-hit != 'true') }}
@@ -108,15 +113,15 @@ runs:
       run: |
         TESS_VERSION=$(grep -oP 'val tessellation = "\K[0-9.]+(?=")' project/Dependencies.scala)
 
-        cp -r .github/templates/metagraphs/${{ inputs.TEMPLATE_NAME }} .github/code
-        cd .github/code/${{ inputs.TEMPLATE_NAME }}
+        cp -r ${{ github.workspace }}/.github/templates/metagraphs/${{ inputs.TEMPLATE_NAME }} ${{ github.workspace }}/.github/code
+        cd ${{ github.workspace }}/.github/code/${{ inputs.TEMPLATE_NAME }}
         
         sed -i "s/val tessellation = \"99\.99\.99\"/val tessellation = \"$TESS_VERSION\"/" project/Dependencies.scala
         
         sbt --error clean compile currencyL0/assembly currencyL1/assembly
         
-        mv modules/l0/target/scala-2.13/*-assembly-* ../metagraphs/${{inputs.METAGRAPH_NAME}}/metagraph-l0/metagraph-l0.jar
-        mv modules/l1/target/scala-2.13/*-assembly-* ../metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar
+        mv modules/l0/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/metagraph-l0/metagraph-l0.jar
+        mv modules/l1/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar
       env:
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
@@ -124,8 +129,8 @@ runs:
       if: ${{ inputs.TEMPLATE_NAME != '' && inputs.INCLUDE_DATA_LAYER == 'true' && steps.cache-data-l1.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
-        cd .github/code/metagraphs/${{inputs.TEMPLATE_NAME}}
-        mv modules/data_l1/target/scala-2.13/*-assembly-* ../metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
+        cd ${{ github.workspace }}/.github/code/metagraphs/${{inputs.TEMPLATE_NAME}}
+        mv modules/data_l1/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
 
     - name: Generate metagraph dependencies and hypergraph JARs - AMM 🔥
       if: ${{ inputs.TEMPLATE_NAME == '' && (steps.cache-metagraph-l0.outputs.cache-hit != 'true' || steps.cache-currency-l1.outputs.cache-hit != 'true') }}
@@ -133,8 +138,8 @@ runs:
       run: |
         sbt --error clean compile currencyL0/assembly currencyL1/assembly
         
-        mv modules/l0/target/scala-2.13/*-assembly-* .github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/metagraph-l0/metagraph-l0.jar
-        mv modules/l1/target/scala-2.13/*-assembly-* .github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar
+        mv modules/l0/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/metagraph-l0/metagraph-l0.jar
+        mv modules/l1/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar
       env:
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
@@ -143,7 +148,7 @@ runs:
       shell: bash
       run: |
         sbt --error clean compile dataL1/assembly
-        mv modules/data_l1/target/scala-2.13/*-assembly-* .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
+        mv modules/data_l1/target/scala-2.13/*-assembly-* ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
       env:
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
@@ -151,25 +156,25 @@ runs:
       if: ${{ steps.cache-metagraph-l0.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-metagraph-l0-${{ steps.project-hash.outputs.hash }}
 
     - name: Save Currency L1 JAR
       if: ${{ steps.cache-currency-l1.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/currency-l1.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/currency-l1/currency-l1.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-currency-l1-${{ steps.project-hash.outputs.hash }}
 
     - name: Save Data L1 JAR
       if: ${{ inputs.INCLUDE_DATA_LAYER == 'true' && steps.cache-data-l1.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
-        path: .github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
+        path: ${{ github.workspace }}/.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/data-l1/data-l1.jar
         key: ${{ runner.os }}-${{ inputs.TEMPLATE_NAME || 'amm_template' }}-data-l1-${{ steps.project-hash.outputs.hash }}
 
     - name: Cleaning directory
       if: ${{ inputs.TEMPLATE_NAME != '' }}
       shell: bash
       run: |
-        rm -rf .github/code/metagraphs/${{inputs.TEMPLATE_NAME}}
+        rm -rf ${{ github.workspace }}/.github/code/metagraphs/${{inputs.TEMPLATE_NAME}}

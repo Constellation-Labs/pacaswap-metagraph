@@ -1,9 +1,12 @@
 name: DAG L1 Cluster
+description: "Sets up and starts a complete DAG L1 cluster with initial validator and regular validators"
 
 inputs:
   PORT_PREFIX:
+    description: "Port prefix for all DAG L1 nodes"
     required: true
   GLOBAL_L0_PEER_HTTP_PORT:
+    description: "Global L0 peer HTTP port to connect to"
     required: true
 runs:
   using: "composite"
