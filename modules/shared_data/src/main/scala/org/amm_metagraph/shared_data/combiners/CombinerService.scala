@@ -11,6 +11,7 @@ import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal, swap}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
@@ -101,6 +102,8 @@ object CombinerService {
             globalSnapshotsStorage
           )
 
+          ammCurrencyId <- context.getCurrencyId
+
           newState =
             DataState(
               AmmOnChainState(List.empty),
@@ -134,7 +137,8 @@ object CombinerService {
               incomingUpdates,
               lastSyncGlobalEpochProgress,
               globalSnapshotSyncAllowSpends,
-              stateCombinedByVotingWeight
+              stateCombinedByVotingWeight,
+              ammCurrencyId
             )
 
           stateCombinedByPendingAllowSpendUpdates <-
@@ -145,7 +149,8 @@ object CombinerService {
               pendingAllowSpendLiquidityPool,
               pendingAllowSpendStaking,
               pendingAllowSpendSwap,
-              stateCombinedByNewUpdates
+              stateCombinedByNewUpdates,
+              ammCurrencyId
             )
 
           stateCombinedByPendingSpendActions <- HasherSelector[F].withCurrent { implicit hasher =>
@@ -183,7 +188,8 @@ object CombinerService {
     incomingUpdates: List[Signed[AmmUpdate]],
     lastSyncGlobalEpochProgress: EpochProgress,
     globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
-    stateCombinedByVotingWeight: DataState[AmmOnChainState, AmmCalculatedState]
+    stateCombinedByVotingWeight: DataState[AmmOnChainState, AmmCalculatedState],
+    ammCurrencyId: CurrencyId
   ) =
     if (incomingUpdates.isEmpty) {
       logger.info("Snapshot without any updates, updating the state to empty updates").as(stateCombinedByVotingWeight)
@@ -210,7 +216,7 @@ object CombinerService {
                     acc,
                     Signed(withdrawalUpdate, signedUpdate.proofs),
                     address,
-                    lastSyncGlobalEpochProgress
+                    ammCurrencyId
                   )
 
               case liquidityPoolUpdate: LiquidityPoolUpdate =>
@@ -230,7 +236,8 @@ object CombinerService {
                     acc,
                     Signed(swapUpdate, signedUpdate.proofs),
                     lastSyncGlobalEpochProgress,
-                    globalSnapshotSyncAllowSpends
+                    globalSnapshotSyncAllowSpends,
+                    ammCurrencyId
                   )
 
               case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
@@ -252,7 +259,8 @@ object CombinerService {
     pendingAllowSpendLiquidityPool: Set[Signed[LiquidityPoolUpdate]],
     pendingAllowSpendStaking: Set[Signed[StakingUpdate]],
     pendingAllowSpendSwap: Set[Signed[SwapUpdate]],
-    stateCombinedByNewUpdates: DataState[AmmOnChainState, AmmCalculatedState]
+    stateCombinedByNewUpdates: DataState[AmmOnChainState, AmmCalculatedState],
+    ammCurrencyId: CurrencyId
   ) =
     if (globalSnapshotSyncAllowSpends.isEmpty) {
       stateCombinedByNewUpdates.pure
@@ -288,7 +296,8 @@ object CombinerService {
                 acc,
                 pendingSwap,
                 lastSyncGlobalEpochProgress,
-                globalSnapshotSyncAllowSpends
+                globalSnapshotSyncAllowSpends,
+                ammCurrencyId
               )
           }
       } yield stateUpdatedBySwap

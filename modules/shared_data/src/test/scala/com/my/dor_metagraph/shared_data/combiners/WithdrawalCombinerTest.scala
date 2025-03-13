@@ -146,7 +146,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         ownerAddress,
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -156,10 +156,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         .value(poolId)
 
       withdrawalSpendTransactions = withdrawalResponse.sharedArtifacts.collect {
-        case action: artifact.SpendAction => action.output
-      }.collect {
-        case transaction: SpendTransaction => transaction
-      }
+        case action: artifact.SpendAction => action
+      }.flatMap(_.spendTransactions.toList)
 
     } yield
       expect.all(
@@ -229,7 +227,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         secondProviderAddress,
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -327,7 +325,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks"),
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       ).attempt.map {
         case Left(e: IllegalStateException) =>
           expect(e.getMessage == "Liquidity Pool does not exist")
@@ -388,7 +386,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         ownerAddress,
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       )
 
       updatedLiquidityPool = withdrawalResponse.calculated
@@ -453,7 +451,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         ownerAddress,
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       ).attempt.map {
         case Left(e: IllegalArgumentException) =>
           expect(e.getMessage.contains("Predicate failed"))
@@ -513,7 +511,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         withdrawalUpdate,
         ownerAddress,
-        EpochProgress.MinValue
+        CurrencyId(ownerAddress)
       )
 
     } yield expect(result.calculated.operations(Withdrawal).pending.isEmpty)
