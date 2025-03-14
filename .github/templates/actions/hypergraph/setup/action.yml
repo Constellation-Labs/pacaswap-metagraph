@@ -1,15 +1,18 @@
 name: Hypergraph jar build
+description: 'Build and setup hypergraph JARs for the project'
 
 inputs:
   GITHUB_TOKEN:
     required: true
+    description: 'GitHub token for authentication'
   TESSELLATION_COMMIT_HASH:
     required: false
     description: 'Specific tessellation commit hash to use. If not provided, latest develop commit will be used'
-  TESSELLATION_VERSION:
-    required: true
-    type: string
-    description: "Tessellation version generated"
+
+outputs:
+  tessellation_version:
+    description: 'The generated tessellation version string'
+    value: ${{ steps.get-tessellation-version.outputs.tessellation_version }}
 
 runs:
   using: "composite"
@@ -25,6 +28,16 @@ runs:
         fi
         echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
 
+    - name: Get tessellation version
+      shell: bash
+      id: get-tessellation-version
+      run: |
+        BASE_VERSION="1.0.0"
+        COMMIT_HASH="${{ steps.get-commit-hash.outputs.commit_hash }}"
+        SHORT_HASH="${COMMIT_HASH:0:8}"
+        TESSELLATION_VERSION="$BASE_VERSION-$SHORT_HASH"
+        echo "tessellation_version=${TESSELLATION_VERSION}" >> $GITHUB_OUTPUT
+
     - name: Restore tessellation cache
       uses: actions/cache/restore@v4
       id: cache-tessellation
@@ -34,7 +47,7 @@ runs:
           .github/code/hypergraph/dag-l1.jar
           .github/code/shared_jars/cl-keytool.jar
           .github/code/shared_jars/cl-wallet.jar
-        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}-${{ inputs.TESSELLATION_VERSION }}
+        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}-${{ steps.get-tessellation-version.outputs.tessellation_version }}
 
     - name: Create hypergraph directories
       shell: bash
@@ -82,7 +95,7 @@ runs:
         cd tessellation
         git checkout ${{ steps.get-commit-hash.outputs.commit_hash }}
         
-        sbt -Dversion.override=${{ inputs.TESSELLATION_VERSION }} --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
+        sbt -Dversion.override=${{ steps.get-tessellation-version.outputs.tessellation_version }} --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
         
         mv modules/dag-l0/target/scala-2.13/tessellation-dag-l0-assembly-* ../hypergraph/dag-l0.jar
         mv modules/dag-l1/target/scala-2.13/tessellation-dag-l1-assembly-* ../hypergraph/dag-l1.jar
@@ -104,4 +117,4 @@ runs:
           .github/code/hypergraph/dag-l1.jar
           .github/code/shared_jars/cl-keytool.jar
           .github/code/shared_jars/cl-wallet.jar
-        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}-${{ inputs.TESSELLATION_VERSION }}
+        key: tessellation-${{ steps.get-commit-hash.outputs.commit_hash }}-${{ steps.get-tessellation-version.outputs.tessellation_version }}
