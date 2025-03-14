@@ -3,7 +3,7 @@ import sbt.*
 object Dependencies {
 
   object V {
-    val tessellation = "99.99.99"
+    val tessellation = "2.12.3-102-b55a1ffb-SNAPSHOT"
     val decline = "2.4.1"
     val organizeImports = "0.5.0"
   }
@@ -16,7 +16,7 @@ object Dependencies {
     } % V.decline
 
   object Libraries {
-    val tessellationSdk= tessellation("sdk")
+    val tessellationSdk = tessellation("sdk")
     val declineCore = decline()
     val declineEffect = decline("effect")
     val declineRefined = decline("refined")

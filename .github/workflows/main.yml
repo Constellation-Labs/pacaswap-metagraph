@@ -7,16 +7,28 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      # tessellation_commit_hash: "4c30b86a1870fa03226b6cf5e2d2b182f8ede761"
+      tessellation_commit_hash: "b55a1ffb142c3e553f60f0f61e62fdffe5e4d149"
       use_merge_commit: true
     secrets: inherit
 
   call-governance-tests:
     needs: call-workflow-setup-environment
     uses: ./.github/workflows/governance_tests.yml
+    with:
+      amm_metagraph_hash: ${{ needs.call-workflow-setup-environment.outputs.amm_metagraph_hash }}
+      currency_metagraph_1_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_1_hash }}
+      currency_metagraph_2_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_2_hash }}
+      hypergraph_hash: ${{ needs.call-workflow-setup-environment.outputs.hypergraph_hash }}
+      shared_jars_hash: ${{ needs.call-workflow-setup-environment.outputs.shared_jars_hash }}
     secrets: inherit
 
   call-amm-operations-tests:
     needs: call-workflow-setup-environment
     uses: ./.github/workflows/amm_operations_test.yml
+    with:
+      amm_metagraph_hash: ${{ needs.call-workflow-setup-environment.outputs.amm_metagraph_hash }}
+      currency_metagraph_1_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_1_hash }}
+      currency_metagraph_2_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_2_hash }}
+      hypergraph_hash: ${{ needs.call-workflow-setup-environment.outputs.hypergraph_hash }}
+      shared_jars_hash: ${{ needs.call-workflow-setup-environment.outputs.shared_jars_hash }}
     secrets: inherit

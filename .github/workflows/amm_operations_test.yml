@@ -1,11 +1,47 @@
 name: Liquidity Pool Tests
 on:
   workflow_call:
+    inputs:
+      amm_metagraph_hash:
+        required: true
+        type: string
+        description: "Hash for the amm-metagraph artifact"
+      currency_metagraph_1_hash:
+        required: true
+        type: string
+        description: "Hash for the currency-metagraph-1 artifact"
+      currency_metagraph_2_hash:
+        required: true
+        type: string
+        description: "Hash for the currency-metagraph-2 artifact"
+      hypergraph_hash:
+        required: true
+        type: string
+        description: "Hash for the hypergraph artifact"
+      shared_jars_hash:
+        required: true
+        type: string
+        description: "Hash for the shared_jars artifact"
 jobs:
   liquidity-pool-tests:
     runs-on: Ubuntu-22-64-core
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug - Echo workspace path
+        run: |
+          echo "github.workspace: ${{ github.workspace }}"
+          echo "PWD: $(pwd)"
+          ls -la
+
+      - name: Debug - Echo hash inputs
+        run: |
+          echo "amm_metagraph_hash: ${{ inputs.amm_metagraph_hash }}"
+          echo "currency_metagraph_1_hash: ${{ inputs.currency_metagraph_1_hash }}"
+          echo "currency_metagraph_2_hash: ${{ inputs.currency_metagraph_2_hash }}"
+          echo "hypergraph_hash: ${{ inputs.hypergraph_hash }}"
+          echo "shared_jars_hash: ${{ inputs.shared_jars_hash }}"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18
@@ -27,7 +63,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: shared_jars-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: shared_jars-${{ runner.os }}-${{ inputs.shared_jars_hash }}
           path: .github/code/shared_jars
 
       - name: Download Hypergraph Artifact
@@ -35,7 +71,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: hypergraph-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: hypergraph-${{ runner.os }}-${{ inputs.hypergraph_hash }}
           path: .github/code/hypergraph
 
       - name: Download AMM Metagraph Artifact
@@ -43,7 +79,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: amm-metagraph-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: amm-metagraph-${{ runner.os }}-${{ inputs.amm_metagraph_hash }}
           path: .github/code/metagraphs/amm
 
       - name: Download Currency Metagraph 1 Artifact
@@ -51,7 +87,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: currency-metagraph-1-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: currency-metagraph-1-${{ runner.os }}-${{ inputs.currency_metagraph_1_hash }}
           path: .github/code/metagraphs/currency-1
 
       - name: Download Currency Metagraph 2 Artifact
@@ -59,7 +95,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: currency-metagraph-2-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: currency-metagraph-2-${{ runner.os }}-${{ inputs.currency_metagraph_2_hash }}
           path: .github/code/metagraphs/currency-2
 
       - name: Start Hypergraph

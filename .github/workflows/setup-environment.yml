@@ -12,13 +12,38 @@ on:
         type: boolean
         default: false
         description: "Whether to use the PR merge commit SHA instead of the head SHA"
+    outputs:
+      amm_metagraph_hash:
+        description: "Hash used for the amm-metagraph artifact"
+        value: ${{ jobs.setup-amm-metagraph.outputs.artifact_hash }}
+      currency_metagraph_1_hash:
+        description: "Hash used for the currency-metagraph-1 artifact"
+        value: ${{ jobs.setup-currency-metagraph-1.outputs.artifact_hash }}
+      currency_metagraph_2_hash:
+        description: "Hash used for the currency-metagraph-2 artifact"
+        value: ${{ jobs.setup-currency-metagraph-2.outputs.artifact_hash }}
+      hypergraph_hash:
+        description: "Hash used for the hypergraph artifact"
+        value: ${{ jobs.setup-hypergraph.outputs.artifact_hash }}
+      shared_jars_hash:
+        description: "Hash used for the shared_jars artifact"
+        value: ${{ jobs.setup-hypergraph.outputs.shared_jars_hash }}
 
 jobs:
   setup-hypergraph:
     name: Setup Hypergraph
     runs-on: ubuntu-22.04
+    outputs:
+      artifact_hash: ${{ steps.set_hash.outputs.hash }}
+      shared_jars_hash: ${{ steps.set_shared_jars_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug - Echo workspace path
+        run: |
+          echo "github.workspace: ${{ github.workspace }}"
+          echo "PWD: $(pwd)"
+          ls -la
 
       - name: Setup Java and scala
         env:
@@ -41,17 +66,37 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-
 
+      - name: Calculate hypergraph artifact hash
+        id: set_hash
+        run: |
+          HASH=$(echo "${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}")
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Hypergraph hash: $HASH"
+          echo "Files used for hash calculation:"
+          find ${{ github.workspace }} -name "build.sbt" | sort
+          find ${{ github.workspace }} -path "*/src/main/scala/org/amm_metagraph/*" | sort
+
+      - name: Calculate shared_jars artifact hash
+        id: set_shared_jars_hash
+        run: |
+          HASH=$(echo "${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}")
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Shared jars hash: $HASH"
+          echo "Files used for hash calculation:"
+          find ${{ github.workspace }} -name "build.sbt" | sort
+          find ${{ github.workspace }} -path "*/src/main/scala/org/amm_metagraph/*" | sort
+
       - name: Upload hypergraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: hypergraph-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: hypergraph-${{ runner.os }}-${{ steps.set_hash.outputs.hash }}
           path: .github/code/hypergraph
           retention-days: 7
 
       - name: Upload shared_jars artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: shared_jars-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: shared_jars-${{ runner.os }}-${{ steps.set_shared_jars_hash.outputs.hash }}
           path: .github/code/shared_jars
           retention-days: 7
 
@@ -59,10 +104,18 @@ jobs:
     name: Setup AMM Metagraph
     runs-on: ubuntu-22.04
     needs: setup-hypergraph
+    outputs:
+      artifact_hash: ${{ steps.set_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
+
+      - name: Debug - Echo workspace path
+        run: |
+          echo "github.workspace: ${{ github.workspace }}"
+          echo "PWD: $(pwd)"
+          ls -la
 
       - name: Setup Java and scala
         env:
@@ -86,10 +139,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: "./.github/templates/actions/metagraph/setup"
 
+      - name: Calculate amm-metagraph artifact hash
+        id: set_hash
+        run: |
+          HASH=$(echo "${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}")
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "AMM Metagraph hash: $HASH"
+          echo "Files used for hash calculation:"
+          find ${{ github.workspace }} -name "build.sbt" | sort
+          find ${{ github.workspace }} -path "*/src/main/scala/org/amm_metagraph/*" | sort
+
       - name: Upload amm-metagraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: amm-metagraph-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: amm-metagraph-${{ runner.os }}-${{ steps.set_hash.outputs.hash }}
           path: .github/code/metagraphs/amm-metagraph
           retention-days: 7
 
@@ -97,10 +160,18 @@ jobs:
     name: Setup Currency Metagraph - 1
     runs-on: ubuntu-22.04
     needs: setup-hypergraph
+    outputs:
+      artifact_hash: ${{ steps.set_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
+
+      - name: Debug - Echo workspace path
+        run: |
+          echo "github.workspace: ${{ github.workspace }}"
+          echo "PWD: $(pwd)"
+          ls -la
 
       - name: Setup Java and scala
         env:
@@ -125,10 +196,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: "./.github/templates/actions/metagraph/setup"
 
+      - name: Calculate currency-metagraph-1 artifact hash
+        id: set_hash
+        run: |
+          HASH=$(echo "${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}")
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Currency Metagraph 1 hash: $HASH"
+          echo "Files used for hash calculation:"
+          find ${{ github.workspace }} -name "build.sbt" | sort
+          find ${{ github.workspace }} -path "*/src/main/scala/org/amm_metagraph/*" | sort
+
       - name: Upload currency-metagraph-1 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-1-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: currency-metagraph-1-${{ runner.os }}-${{ steps.set_hash.outputs.hash }}
           path: .github/code/metagraphs/currency-metagraph-1
           retention-days: 7
 
@@ -136,10 +217,18 @@ jobs:
     name: Setup Currency Metagraph - 2
     runs-on: ubuntu-22.04
     needs: setup-hypergraph
+    outputs:
+      artifact_hash: ${{ steps.set_hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ !inputs.use_merge_commit && github.event.pull_request.head.sha || '' }}
+
+      - name: Debug - Echo workspace path
+        run: |
+          echo "github.workspace: ${{ github.workspace }}"
+          echo "PWD: $(pwd)"
+          ls -la
 
       - name: Setup Java and scala
         env:
@@ -164,9 +253,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: "./.github/templates/actions/metagraph/setup"
 
+      - name: Calculate currency-metagraph-2 artifact hash
+        id: set_hash
+        run: |
+          HASH=$(echo "${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}")
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Currency Metagraph 2 hash: $HASH"
+          echo "Files used for hash calculation:"
+          find ${{ github.workspace }} -name "build.sbt" | sort
+          find ${{ github.workspace }} -path "*/src/main/scala/org/amm_metagraph/*" | sort
+
       - name: Upload currency-metagraph-2 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-2-${{ runner.os }}-${{ hashFiles(format('{0}/**/build.sbt', github.workspace), format('{0}/**/src/main/scala/org/amm_metagraph/**', github.workspace)) }}
+          name: currency-metagraph-2-${{ runner.os }}-${{ steps.set_hash.outputs.hash }}
           path: .github/code/metagraphs/currency-metagraph-2
           retention-days: 7
