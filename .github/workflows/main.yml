@@ -4,43 +4,31 @@ on:
   pull_request: {}
 
 jobs:
-  calculate-version:
-    runs-on: ubuntu-latest
-    outputs:
-      tessellation_version: ${{ steps.calculate_version.outputs.tessellation_version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get Version
-        id: calculate_version
-        run: |
-          BASE_VERSION="1.0.0"
-          FILES_HASH=${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
-          SHORT_HASH=${FILES_HASH:0:8}
-
-          TESSELLATION_VERSION="$BASE_VERSION-$SHORT_HASH"
-
-          echo "TESSELLATION_VERSION=$TESSELLATION_VERSION" >> $GITHUB_ENV
-          echo "tessellation_version=$TESSELLATION_VERSION" >> $GITHUB_OUTPUT
-
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
-    needs: calculate-version
     with:
       # tessellation_commit_hash: "4c30b86a1870fa03226b6cf5e2d2b182f8ede761"
       use_merge_commit: true
-      tessellation_version: ${{ needs.calculate-version.outputs.tessellation_version }}
     secrets: inherit
 
+  debug-outputs:
+    runs-on: ubuntu-latest
+    needs: call-workflow-setup-environment
+    steps:
+      - name: Debug outputs
+        run: |
+          echo "call-workflow-setup-environment outputs: ${{ toJSON(needs.call-workflow-setup-environment.outputs) }}"
+
   call-governance-tests:
-    needs: [calculate-version, call-workflow-setup-environment]
+    needs: [call-workflow-setup-environment]
     uses: ./.github/workflows/governance_tests.yml
     with:
-      tessellation_version: ${{ needs.calculate-version.outputs.tessellation_version }}
+      tessellation_version: ${{ needs.call-workflow-setup-environment.outputs.tessellation_version }}
     secrets: inherit
 
   call-amm-operations-tests:
-    needs: [calculate-version, call-workflow-setup-environment]
+    needs: [call-workflow-setup-environment]
     uses: ./.github/workflows/amm_operations_test.yml
     with:
-      tessellation_version: ${{ needs.calculate-version.outputs.tessellation_version }}
+      tessellation_version: ${{ needs.call-workflow-setup-environment.outputs.tessellation_version }}
     secrets: inherit

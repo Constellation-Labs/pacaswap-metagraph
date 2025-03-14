@@ -1,18 +1,27 @@
 name: Metagraph - jar build
+description: "Build and cache metagraph JARs"
 
 inputs:
   METAGRAPH_NAME:
     required: true
+    description: "Name of the metagraph to set up"
   TEMPLATE_NAME:
     required: false
+    description: "Name of the template to use, if any"
   INCLUDE_DATA_LAYER:
     required: true
+    description: "Whether to include the data layer"
   GITHUB_TOKEN:
     required: true
+    description: "GitHub token for authentication"
   TESSELLATION_VERSION:
     required: true
-    type: string
     description: "Tessellation version generated"
+
+outputs:
+  hash:
+    description: "Hash of the project files used for caching"
+    value: ${{ steps.project-hash.outputs.hash }}
 
 runs:
   using: "composite"
@@ -22,13 +31,9 @@ runs:
       shell: bash
       run: |
         if [ -n "${{ inputs.TEMPLATE_NAME }}" ]; then
-          HASH=$(git rev-parse HEAD:.github/templates/metagraphs/${{ inputs.TEMPLATE_NAME }})
+          HASH=${{ hashFiles('.github/templates/metagraphs/**') }}
         else
-          MODULES_HASH=$(git rev-parse HEAD:modules)
-          PROJECT_HASH=$(git rev-parse HEAD:project)
-          BUILD_SBT_HASH=$(git rev-parse HEAD:build.sbt)
-          VERSION_HASH=$(git rev-parse HEAD:version.sbt || echo "no-version-sbt")
-          HASH=$(echo "$MODULES_HASH $PROJECT_HASH $BUILD_SBT_HASH $VERSION_HASH" | sha1sum | awk '{print $1}')
+          HASH=${{ hashFiles('modules/**', 'project/**', 'build.sbt', 'version.sbt') }}
         fi
         echo "hash=$HASH" >> $GITHUB_OUTPUT
 
