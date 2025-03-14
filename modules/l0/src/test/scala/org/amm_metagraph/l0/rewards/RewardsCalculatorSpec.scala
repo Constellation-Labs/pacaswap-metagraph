@@ -3,12 +3,10 @@ package org.amm_metagraph.l0.rewards
 import cats.Functor
 import cats.data.EitherT
 import cats.syntax.all._
-
 import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.tokenLock.{TokenLock, TokenLockAmount, TokenLockReference}
-
+import io.constellationnetwork.schema.tokenLock.{TokenLock, TokenLockAmount, TokenLockFee, TokenLockReference}
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.all.NonNegLong
 import eu.timepit.refined.types.numeric.PosLong
@@ -59,6 +57,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       TokenLock(
         source = voterA,
         amount = TokenLockAmount(PosLong(1000L)),
+        fee = TokenLockFee(NonNegLong.MinValue),
         parent = TokenLockReference.empty,
         currencyId = None,
         unlockEpoch = epochProgress
