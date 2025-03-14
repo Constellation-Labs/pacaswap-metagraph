@@ -66,6 +66,7 @@ const getSignedTokenLock = async (config, { privateKey, publicKey, address, lock
     const body = {
         amount: lockAmount,
         currencyId: metagraphId,
+        fee: 0,
         parent: { hash, ordinal },
         source: address,
         unlockEpoch: expireEpochProgress,

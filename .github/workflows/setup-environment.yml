@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
         description: "Whether to use the PR merge commit SHA instead of the head SHA"
+      tessellation_version:
+        required: true
+        type: string
+        description: "Tessellation version generated"
 
 jobs:
   setup-hypergraph:
@@ -31,34 +35,73 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TESSELLATION_COMMIT_HASH: ${{ inputs.tessellation_commit_hash }}
+          TESSELLATION_VERSION: ${{ inputs.tessellation_version }}
         uses: "./.github/templates/actions/hypergraph/setup"
 
       - name: Cache SBT and Coursier (~/.ivy2, ~/.sbt, ~/.cache/coursier)
         uses: actions/cache@v4
         with:
           path: ~/.m2
-          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}
-          restore-keys: |
-            maven-${{ runner.os }}-
+          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ inputs.tessellation_version }}
 
       - name: Upload hypergraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: hypergraph-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
+          name: hypergraph-${{ runner.os }}-${{ inputs.tessellation_version }}
           path: .github/code/hypergraph
-          retention-days: 7
+          retention-days: 3
 
       - name: Upload shared_jars artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: shared_jars-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
+          name: shared_jars-${{ runner.os }}-${{ inputs.tessellation_version }}
           path: .github/code/shared_jars
-          retention-days: 7
+          retention-days: 3
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: setup-hypergraph
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Test Execution
+        id: cache-test-execution
+        uses: actions/cache@v4
+        with:
+          path: |
+            .test-execution-marker
+          key: test-execution-${{ runner.os }}-${{ inputs.tessellation_version }}
+
+      - name: Cache SBT and Coursier (~/.ivy2, ~/.sbt, ~/.cache/coursier) - Reuse from setup hypergraph
+        if: steps.cache-test-execution.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        id: cache-tessellation
+        with:
+          path: ~/.m2
+          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ inputs.tessellation_version }}
+
+      - name: Setup Java and scala
+        if: steps.cache-test-execution.outputs.cache-hit != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          JAVA_VERSION: 11
+        uses: "./.github/templates/actions/setup_java_and_scala"
+
+      - name: Run Tests
+        if: steps.cache-test-execution.outputs.cache-hit != 'true'
+        run: |
+          sbt -J-Xmx4G -J-XX:+UseG1GC test
+          touch .test-execution-marker
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESSELLATION_VERSION: ${{ inputs.tessellation_version }}
 
   setup-amm-metagraph:
     name: Setup AMM Metagraph
     runs-on: ubuntu-22.04
-    needs: setup-hypergraph
+    needs: [setup-hypergraph, unit-tests]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,28 +118,27 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2
-          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}
-          restore-keys: |
-            maven-${{ runner.os }}-
+          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ inputs.tessellation_version }}
 
       - name: Setup AMM Metagraph
         with:
           METAGRAPH_NAME: amm-metagraph
           INCLUDE_DATA_LAYER: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESSELLATION_VERSION: ${{ inputs.tessellation_version }}
         uses: "./.github/templates/actions/metagraph/setup"
 
       - name: Upload amm-metagraph artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: amm-metagraph-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
+          name: amm-metagraph-${{ runner.os }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/amm-metagraph
-          retention-days: 7
+          retention-days: 3
 
   setup-currency-metagraph-1:
     name: Setup Currency Metagraph - 1
     runs-on: ubuntu-22.04
-    needs: setup-hypergraph
+    needs: [setup-hypergraph, unit-tests]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,9 +155,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2
-          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}
-          restore-keys: |
-            maven-${{ runner.os }}-
+          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ inputs.tessellation_version }}
 
       - name: Setup Currency Metagraph - 1
         with:
@@ -123,19 +163,20 @@ jobs:
           TEMPLATE_NAME: base_currency_metagraph
           INCLUDE_DATA_LAYER: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESSELLATION_VERSION: ${{ inputs.tessellation_version }}
         uses: "./.github/templates/actions/metagraph/setup"
 
       - name: Upload currency-metagraph-1 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-1-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
+          name: currency-metagraph-1-${{ runner.os }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/currency-metagraph-1
-          retention-days: 7
+          retention-days: 3
 
   setup-currency-metagraph-2:
     name: Setup Currency Metagraph - 2
     runs-on: ubuntu-22.04
-    needs: setup-hypergraph
+    needs: [setup-hypergraph, unit-tests]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,9 +193,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2
-          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}
-          restore-keys: |
-            maven-${{ runner.os }}-
+          key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ inputs.tessellation_version }}
 
       - name: Setup Currency Metagraph - 2
         with:
@@ -162,11 +201,12 @@ jobs:
           TEMPLATE_NAME: base_currency_metagraph
           INCLUDE_DATA_LAYER: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TESSELLATION_VERSION: ${{ inputs.tessellation_version }}
         uses: "./.github/templates/actions/metagraph/setup"
 
       - name: Upload currency-metagraph-2 artifacts to run CI tests
         uses: actions/upload-artifact@v4
         with:
-          name: currency-metagraph-2-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/src/main/scala/org/amm_metagraph/**') }}
+          name: currency-metagraph-2-${{ runner.os }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/currency-metagraph-2
-          retention-days: 7
+          retention-days: 3
