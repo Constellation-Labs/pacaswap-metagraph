@@ -1,0 +1,124 @@
+name: Deploy
+
+inputs:
+  SSH_NODE_1_HOST:
+    required: true
+  SSH_NODE_2_HOST:
+    required: true
+  SSH_NODE_3_HOST:
+    required: true
+  SSH_HOST_MONITORING:
+    required: true
+
+  SSH_NODE_1_USER:
+    required: true
+  SSH_NODE_2_USER:
+    required: true
+  SSH_NODE_3_USER:
+    required: true
+  SSH_USER_MONITORING:
+    required: true
+
+  MONITORING_PROJECT_DIRECTORY:
+    required: true
+
+  SSH_PRIVATE_KEY:
+    required: true
+
+  GITHUB_TOKEN:
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+    - name: Setup Java and scala
+      with:
+        JAVA_VERSION: 11
+      uses: "./.github/templates/actions/setup_java_and_scala"
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ inputs.SSH_PRIVATE_KEY }}
+
+    - name: Build tessellation dependencies
+      with:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      uses: "./.github/templates/deploy/build_tessellation"
+
+    - name: Fetch Dependencies
+      shell: bash
+      if: steps.coursier-cache.outputs.cache-hit-coursier != 'true'
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      run: |
+        sbt +update
+
+    - name: Assembly 🚀
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        sbt 'currencyL0/assembly;currencyL1/assembly;dataL1/assembly'
+
+    - name: Copy dependencies
+      shell: bash
+      run: |
+        cp ./modules/l0/target/scala-2.13/*.jar ./metagraph-l0.jar
+        cp ./modules/l1/target/scala-2.13/*.jar ./currency-l1.jar
+        cp ./modules/data_l1/target/scala-2.13/*.jar ./data-l1.jar
+
+    - name: Copy Metagraph L0 - Nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        wait
+
+    - name: Copy Currency L1 - Nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/currency-l1/currency-l1.jar &
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/currency-l1/currency-l1.jar &
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/currency-l1/currency-l1.jar &
+        wait
+
+    - name: Copy Data L1 - Nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/data-l1/data-l1.jar &
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/data-l1/data-l1.jar &
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/data-l1/data-l1.jar &
+        wait
+
+    - name: Stopping execution in monitoring
+      shell: bash
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn kill"
+
+    - name: Forcing metagraph restart
+      shell: bash
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn force-restart"
+
+    - name: Upload Metagraph L0 Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: metagraph-l0.jar
+        path: ./modules/l0/target/scala-2.13/*.jar
+        retention-days: 1
+
+    - name: Upload Currency L1 Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: currency-l1.jar
+        path: ./modules/l1/target/scala-2.13/*.jar
+        retention-days: 1
+
+    - name: Upload Data L1 Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: data-l1.jar
+        path: ./modules/data_l1/target/scala-2.13/*.jar
+        retention-days: 1

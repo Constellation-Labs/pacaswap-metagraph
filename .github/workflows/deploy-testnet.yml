@@ -1,0 +1,30 @@
+name: Deploy Testnet
+
+on:
+  push:
+    branches:
+      - "deploy/testnet"
+
+jobs:
+  deploy-testnet:
+    runs-on: ubuntu-latest
+    environment: TESTNET
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy Testnet
+        uses: "./.github/templates/deploy/deploy"
+        with:
+          SSH_NODE_1_HOST: ${{ secrets.SSH_NODE_1_HOST }}
+          SSH_NODE_1_USER: ${{ secrets.SSH_NODE_1_USER }}
+          SSH_NODE_2_HOST: ${{ secrets.SSH_NODE_2_HOST }}
+          SSH_NODE_2_USER: ${{ secrets.SSH_NODE_2_USER }}
+          SSH_NODE_3_HOST: ${{ secrets.SSH_NODE_3_HOST }}
+          SSH_NODE_3_USER: ${{ secrets.SSH_NODE_3_USER }}
+
+          SSH_HOST_MONITORING: ${{ secrets.SSH_HOST_MONITORING }}
+          SSH_USER_MONITORING: ${{ secrets.SSH_USER_MONITORING }}
+          MONITORING_PROJECT_DIRECTORY: ${{ secrets.MONITORING_PROJECT_DIRECTORY }}
+
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

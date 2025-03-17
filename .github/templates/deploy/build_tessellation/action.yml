@@ -1,0 +1,30 @@
+name: Build tessellation dependencies
+
+inputs:
+  GITHUB_TOKEN:
+    required: true
+    description: "Github token"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get tessellation version to build
+      shell: bash
+      run: |
+        echo "TESSELLATION_VERSION=v$(cat project/Dependencies.scala | grep -E "tessellation = \"(.*)" | grep -o "\".*\"" | grep -Eo "[^\"]*")" >> $GITHUB_ENV
+
+    - name: Clone and generate Tessellation dependencies
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        echo "TESSELLATION_VERSION=$TESSELLATION_VERSION"
+        
+        mkdir .github/dependencies
+        cd .github/dependencies
+        git clone https://github.com/Constellation-Labs/tessellation.git
+        cd tessellation
+        git checkout adding-delegated-staking-and-node-collateral-starting-ordinals
+        
+        sbt clean 
+        sbt -Dversion.override=99.99.99 sdk/publishM2 #remove this 99.99.99 when we have official version
