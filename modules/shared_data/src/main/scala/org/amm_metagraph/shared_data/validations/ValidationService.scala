@@ -3,16 +3,15 @@ package org.amm_metagraph.shared_data.validations
 import cats.data.{NonEmptyList, OptionT}
 import cats.effect.kernel.Async
 import cats.syntax.all._
-
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
-
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.Errors.valid
 import org.amm_metagraph.shared_data.validations.GovernanceValidations.{rewardAllocationValidationsL0, rewardAllocationValidationsL1}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations.{liquidityPoolValidationsL0, liquidityPoolValidationsL1}
 import org.amm_metagraph.shared_data.validations.StakingValidations.{stakingValidationsL0, stakingValidationsL1}
@@ -41,6 +40,7 @@ object ValidationService {
         case liquidityPoolUpdate: LiquidityPoolUpdate               => liquidityPoolValidationsL1(liquidityPoolUpdate)
         case swapUpdate: SwapUpdate                                 => swapValidationsL1(swapUpdate)
         case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate => rewardAllocationValidationsL1(rewardAllocationVoteUpdate)
+        case _: ResetCalculatedState => valid.pure
       }
 
       private def validateL0(
@@ -63,6 +63,7 @@ object ValidationService {
                 state,
                 lastSyncGlobalSnapshot.epochProgress
               )
+            case _: ResetCalculatedState => valid.pure
           }
         } yield result
 

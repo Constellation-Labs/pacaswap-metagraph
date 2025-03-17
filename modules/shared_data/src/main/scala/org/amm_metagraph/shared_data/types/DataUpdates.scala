@@ -68,6 +68,9 @@ object DataUpdates {
   ) extends AmmUpdate
 
   @derive(decoder, encoder)
+  case class ResetCalculatedState() extends AmmUpdate
+  
+  @derive(decoder, encoder)
   case class RewardAllocationVoteUpdate(
     address: Address,
     parent: RewardAllocationVoteReference,
