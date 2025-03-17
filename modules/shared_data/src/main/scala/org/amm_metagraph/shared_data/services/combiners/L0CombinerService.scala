@@ -20,6 +20,7 @@ import org.amm_metagraph.shared_data.globalSnapshots._
 import org.amm_metagraph.shared_data.services.combiners._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.Governance.Allocations
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
@@ -75,6 +76,7 @@ object L0CombinerService {
       private def combineIncomingUpdates(
         incomingUpdates: List[Signed[AmmUpdate]],
         lastSyncGlobalEpochProgress: EpochProgress,
+        lastSyncGlobalOrdinal: SnapshotOrdinal,
         globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
         stateCombinedByVotingWeight: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
@@ -135,6 +137,11 @@ object L0CombinerService {
                         globalSnapshotSyncAllowSpends,
                         currencyId
                       )
+                  case _: ResetCalculatedState =>
+                    DataState(
+                      AmmOnChainState(List.empty),
+                      AmmCalculatedState(Map.empty, Map.empty, Allocations.empty, lastSyncGlobalOrdinal)
+                    ).pure
                 }
               } yield combinedState
             }
@@ -297,6 +304,7 @@ object L0CombinerService {
             combineIncomingUpdates(
               incomingUpdates,
               lastSyncGlobalEpochProgress,
+              lastSyncGlobalOrdinal,
               globalSnapshotSyncAllowSpends,
               stateCombinedByVotingWeight,
               currencyId

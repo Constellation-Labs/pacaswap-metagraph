@@ -24,7 +24,7 @@ runs:
         cd .github/dependencies
         git clone https://github.com/Constellation-Labs/tessellation.git
         cd tessellation
-        git checkout adding-delegated-staking-and-node-collateral-starting-ordinals
+        git checkout develop
         
         sbt clean 
         sbt -Dversion.override=99.99.99 sdk/publishM2 #remove this 99.99.99 when we have official version

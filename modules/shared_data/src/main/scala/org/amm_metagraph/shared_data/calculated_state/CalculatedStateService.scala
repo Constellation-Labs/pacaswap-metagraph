@@ -35,18 +35,12 @@ object CalculatedStateService {
           snapshotOrdinal: SnapshotOrdinal,
           state: AmmCalculatedState
         ): F[Boolean] =
-          stateRef.modify { currentState =>
-            val currentCalculatedState = currentState.state
-            val updatedOperations = state.operations.foldLeft(currentCalculatedState.operations) {
-              case (acc, (address, value)) =>
-                acc.updated(address, value)
-            }
-
+          stateRef.modify { _ =>
             (
               CalculatedState(
                 snapshotOrdinal,
                 AmmCalculatedState(
-                  updatedOperations,
+                  state.operations,
                   state.votingWeights,
                   state.allocations,
                   state.lastSyncGlobalSnapshotOrdinal
