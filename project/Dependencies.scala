@@ -16,7 +16,7 @@ object Dependencies {
     } % V.decline
 
   object Libraries {
-    val tessellationSdk= tessellation("sdk")
+    val tessellationSdk = tessellation("sdk")
     val declineCore = decline()
     val declineEffect = decline("effect")
     val declineRefined = decline("refined")

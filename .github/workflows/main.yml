@@ -7,7 +7,7 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      # tessellation_commit_hash: "f07e2c70ad20f02ed33601803dd86b6a32b2517f"
+      # tessellation_commit_hash: "261c1de72bd33a626056264462143028df1f90e6"
       use_merge_commit: true
     secrets: inherit
 
@@ -24,6 +24,7 @@ jobs:
     uses: ./.github/workflows/governance_tests.yml
     with:
       tessellation_version: ${{ needs.call-workflow-setup-environment.outputs.tessellation_version }}
+      amm_metagraph_hash: ${{ needs.call-workflow-setup-environment.outputs.amm_metagraph_hash }}
     secrets: inherit
 
   call-amm-operations-tests:
@@ -31,4 +32,7 @@ jobs:
     uses: ./.github/workflows/amm_operations_test.yml
     with:
       tessellation_version: ${{ needs.call-workflow-setup-environment.outputs.tessellation_version }}
+      amm_metagraph_hash: ${{ needs.call-workflow-setup-environment.outputs.amm_metagraph_hash }}
+      currency_metagraph_1_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_1_hash }}
+      currency_metagraph_2_hash: ${{ needs.call-workflow-setup-environment.outputs.currency_metagraph_2_hash }}
     secrets: inherit

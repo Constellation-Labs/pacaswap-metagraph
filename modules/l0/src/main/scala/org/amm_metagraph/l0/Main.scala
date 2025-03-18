@@ -59,7 +59,7 @@ object Main
     liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-    withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+    withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
     combinerService = L0CombinerService
       .make[IO](

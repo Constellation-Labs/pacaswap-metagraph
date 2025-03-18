@@ -1,6 +1,7 @@
 import { BaseWithCurrencyMetagraphsCliArgsSchema, log } from '../shared';
 import liquidityPoolTests from './liquidity-pool'
 import stakingTests from './staking'
+import withdrawalTests from './withdrawal'
 
 const getBaseConfig = () => {
   const args = process.argv.slice(2);
@@ -47,6 +48,7 @@ const main = async () => {
 
   await liquidityPoolTests(baseConfig);
   await stakingTests(baseConfig);
+  await withdrawalTests(baseConfig);
 };
 
 main().catch((error) => {

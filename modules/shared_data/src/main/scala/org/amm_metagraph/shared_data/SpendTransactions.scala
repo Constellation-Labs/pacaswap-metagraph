@@ -16,27 +16,29 @@ import eu.timepit.refined.types.numeric.PosLong
 
 object SpendTransactions {
 
-  def generateSpendActionWithoutInput(
-    token: Option[CurrencyId],
-    amount: SwapAmount,
-    destination: Address,
-    ammMetagraphId: Address
+  def generateSpendActionWithoutAllowSpends(
+    fromTokenAId: Option[CurrencyId],
+    amountA: SwapAmount,
+    fromTokenBId: Option[CurrencyId],
+    amountB: SwapAmount,
+    toDestination: Address,
+    ammMetagraphId: CurrencyId
   ): SpendAction =
     SpendAction(
       NonEmptyList.of(
         SpendTransaction(
           none,
-          token,
-          amount,
-          ammMetagraphId,
-          destination
+          fromTokenAId,
+          amountA,
+          ammMetagraphId.value,
+          toDestination
         ),
         SpendTransaction(
           none,
-          token,
-          amount,
-          ammMetagraphId,
-          destination
+          fromTokenBId,
+          amountB,
+          ammMetagraphId.value,
+          toDestination
         )
       )
     )

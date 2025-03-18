@@ -29,7 +29,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import org.amm_metagraph.shared_data.types.codecs
-import org.amm_metagraph.shared_data.validations.Errors.{LiquidityPoolDoesNotExists, WithdrawalAlreadyPending, WithdrawalInsufficientShares}
+import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 import weaver.MutableIOSuite
 
@@ -247,6 +247,57 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       )
 
     } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == WithdrawalInsufficientShares))
+  }
+
+  test("Validation fails when withdrawal is for all LP shares") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+
+      withdrawalUpdate = getFakeSignedUpdate(
+        WithdrawalUpdate(
+          ownerAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))),
+          WithdrawalReference.empty,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+
+      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+        withdrawalUpdate,
+        ammCalculatedState
+      )
+
+    } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == WithdrawalAllLPShares))
   }
 
   test("Validation fails when withdrawal is already pending") { implicit res =>

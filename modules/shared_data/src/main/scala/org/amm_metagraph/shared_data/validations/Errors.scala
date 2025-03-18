@@ -82,6 +82,10 @@ object Errors {
     val message: String = "Insufficient shares for withdrawal"
   }
 
+  case object WithdrawalAllLPShares extends DataApplicationValidationError {
+    val message: String = "Withdrawal of all LP shares is not allowed"
+  }
+
   case object WithdrawalAlreadyPending extends DataApplicationValidationError {
     val message: String = "Withdrawal already pending for this pool"
   }

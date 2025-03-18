@@ -3,7 +3,7 @@ import { getPublicKey } from "./account";
 import { log, throwInContext } from "../log";
 import { getHash, serializeBrotli } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
-import { TokenConfig } from "./token";
+import { TokenConfig, TokenConfigWithAllowSpend } from "./token";
 import { getCurrencySnapshotCombined, getCurrentEpochProgress, getGlobalSnapshotCombined } from "./snapshot";
 import { getBalance } from "./balances";
 import { Signed } from "./signed";
@@ -40,7 +40,7 @@ const getAllowSpendHash = async (allowSpend: AllowSpend) => {
 
 const createSignedAllowSpend = async (
     privateKey: string,
-    tokenConf: TokenConfig,
+    tokenConf: TokenConfigWithAllowSpend,
     ammMetagraphId: string,
     parent?: Signed<AllowSpend>
 ): Promise<Signed<AllowSpend>> => {
@@ -103,7 +103,7 @@ const validateIfHasEnoughBalanceForAllowSpend = async (
     tokenConfig: TokenConfig,
     allowSpendAmount: number,
 ) => {
-    const balance = await getBalance(tokenConfig.account, tokenConfig.l0Url, tokenConfig.isCurrency, tokenConfig.context);
+    const balance = await getBalance(tokenConfig);
     if (balance < allowSpendAmount) {
         throwInContext(tokenConfig.context)(`Not enough balance for allow spend: ${balance} < ${allowSpendAmount}`);
     }
@@ -224,4 +224,4 @@ const validateIfAllowSpendAcceptedOnCL1 = async (
     }
 }
 
-export { createSignedAllowSpend, sendSignedAllowSpend, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfAllowSpendAcceptedinSnapshot, validateIfHasEnoughBalanceForAllowSpend };
+export { createSignedAllowSpend, sendSignedAllowSpend, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfAllowSpendAcceptedinSnapshot, validateIfHasEnoughBalanceForAllowSpend, type AllowSpend };

@@ -8,6 +8,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 
+import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
@@ -49,7 +50,7 @@ object DataUpdates {
     val ordinal: StakingOrdinal = parent.ordinal.next
   }
 
-  @derive(decoder, encoder)
+  @derive(eqv, decoder, encoder)
   case class WithdrawalUpdate(
     source: Address,
     tokenAId: Option[CurrencyId],

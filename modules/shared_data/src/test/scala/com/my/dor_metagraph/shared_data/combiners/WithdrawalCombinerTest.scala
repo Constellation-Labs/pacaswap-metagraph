@@ -4,7 +4,7 @@ import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -12,6 +12,7 @@ import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.{SpendAction, SpendTransaction}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
@@ -22,7 +23,9 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined.PosLongOps
 import org.amm_metagraph.shared_data.services.combiners.WithdrawalCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
@@ -30,17 +33,41 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import weaver.MutableIOSuite
 
 object WithdrawalCombinerTest extends MutableIOSuite {
-  type Res = (Hasher[IO], SecurityProvider[IO])
+  type Res = (Hasher[IO], SecurityProvider[IO], HasherSelector[IO])
   val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    ),
+    Rewards(
+      Amount.empty,
+      Amount.empty,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      EpochProgress.MinValue,
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+    )
+  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
     h = Hasher.forJson[IO]
-  } yield (h, sp)
+    hs = HasherSelector.forSync(h, h)
+  } yield (h, sp, hs)
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
 
@@ -54,7 +81,6 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
     val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
 
-    // Initial shares for owner - 1.0 share = 100000000
     val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
 
@@ -96,7 +122,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     )
 
   test("Test successful withdrawal - single provider") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, sp, hs) = res
 
     // 100.0 tokens = 10000000000 in fixed-point
     val primaryToken = TokenInformation(
@@ -132,20 +158,22 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
+      reference <- WithdrawalReference.of(withdrawalUpdate)
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap.empty,
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         SnapshotOrdinal.MinValue,
         SortedMap.empty,
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
-      withdrawalResponse <- withdrawalCombinerService.combineNew(
+      withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
         state,
         EpochProgress.MinValue,
@@ -153,18 +181,36 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         CurrencyId(ownerAddress)
       )
 
-      updatedLiquidityPool = withdrawalResponse.calculated
+      spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+
+      withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
+        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        withdrawalResponsePendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue
+      )
+
+      updatedLiquidityPool = withdrawalResponseConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
         .confirmed
         .value(poolId)
 
-      withdrawalSpendTransactions = withdrawalResponse.sharedArtifacts.collect {
+      withdrawalSpendTransactions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.collect {
         case action: artifact.SpendAction => action
       }.flatMap(_.spendTransactions.toList)
 
+      withdrawalCalculatedState = withdrawalResponseConfirmedResponse.calculated.operations
+        .getOrElse(Withdrawal, WithdrawalCalculatedState.empty)
+        .asInstanceOf[WithdrawalCalculatedState]
+
     } yield
       expect.all(
+        withdrawalCalculatedState.pending.isEmpty,
+        withdrawalCalculatedState.failed.isEmpty,
+        withdrawalCalculatedState.confirmed.value.flatMap { case (_, s) => s }.exists(_.parent === reference),
+        withdrawalResponseConfirmedResponse.sharedArtifacts.isEmpty,
         // Should have 50.0 tokens remaining = 5000000000
         updatedLiquidityPool.tokenA.amount.value === toFixedPoint(50.0),
         // Should have 25.0 tokens remaining = 2500000000
@@ -177,7 +223,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
   }
 
   test("Test successful withdrawal - multiple providers") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, sp, hs) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -217,6 +263,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         )
       )
 
+      reference <- WithdrawalReference.of(withdrawalUpdate)
+
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap.empty,
@@ -228,9 +276,9 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
-      withdrawalResponse <- withdrawalCombinerService.combineNew(
+      withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
         state,
         EpochProgress.MinValue,
@@ -238,67 +286,40 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         CurrencyId(ownerAddress)
       )
 
-      updatedLiquidityPool = withdrawalResponse.calculated
+      spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+
+      withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
+        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        withdrawalResponsePendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue
+      )
+
+      updatedLiquidityPool = withdrawalResponseConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
         .confirmed
         .value(poolId)
 
+      withdrawalCalculatedState = withdrawalResponseConfirmedResponse.calculated.operations
+        .getOrElse(Withdrawal, WithdrawalCalculatedState.empty)
+        .asInstanceOf[WithdrawalCalculatedState]
+
     } yield
       expect.all(
+        withdrawalCalculatedState.pending.isEmpty,
+        withdrawalCalculatedState.failed.isEmpty,
+        withdrawalCalculatedState.confirmed.value.flatMap { case (_, s) => s }.exists(_.parent === reference),
+        withdrawalResponseConfirmedResponse.sharedArtifacts.isEmpty,
         updatedLiquidityPool.poolShares.addressShares.size === 2,
         updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(0.5),
         updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0)
       )
   }
 
-//  test("Test withdrawal fails when trying to withdraw more shares than owned") { implicit res =>
-//    implicit val (h, sp) = res
-//
-//    val primaryToken = TokenInformation(
-//      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
-//      PosLong.unsafeFrom(toFixedPoint(100.0))
-//    )
-//    val pairToken = TokenInformation(
-//      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
-//      PosLong.unsafeFrom(toFixedPoint(50.0))
-//    )
-//    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-//
-//    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-//    val ammOnChainState = AmmOnChainState(List.empty)
-//    val ammCalculatedState = AmmCalculatedState(
-//      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
-//    )
-//    val state = DataState(ammOnChainState, ammCalculatedState)
-//
-//    for {
-//      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-//
-//      // Try to withdraw 2.0 shares when only 1.0 is owned
-//      withdrawalUpdate = getFakeSignedUpdate(
-//        WithdrawalUpdate(
-//          primaryToken.identifier,
-//          pairToken.identifier,
-//          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(2.0)))),
-//          EpochProgress.MaxValue
-//        )
-//      )
-//
-//      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(keyPair, SortedMap.empty)
-//
-//      result <- combineWithdrawal[IO](
-//        state,
-//        withdrawalUpdate,
-//        ownerAddress,
-//        SnapshotOrdinal.MinValue
-//      ).attempt
-//
-//    } yield expect(result.isLeft)
-//  }
-
   test("Test withdrawal fails when liquidity pool does not exist") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, sp, hs) = res
 
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
@@ -330,7 +351,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -353,7 +374,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
   }
 
   test("Test withdrawal with minimum amount") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, sp, hs) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -398,9 +419,9 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
-      withdrawalResponse <- withdrawalCombinerService.combineNew(
+      withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
         state,
         EpochProgress.MinValue,
@@ -408,7 +429,17 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         CurrencyId(ownerAddress)
       )
 
-      updatedLiquidityPool = withdrawalResponse.calculated
+      spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+
+      withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
+        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        withdrawalResponsePendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue
+      )
+
+      updatedLiquidityPool = withdrawalResponseConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
         .asInstanceOf[LiquidityPoolCalculatedState]
         .confirmed
@@ -422,75 +453,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
   }
 
   test("Test withdrawal of all shares") { implicit res =>
-    implicit val (h, sp) = res
-
-    val primaryToken = TokenInformation(
-      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
-      PosLong.unsafeFrom(toFixedPoint(100.0))
-    )
-    val pairToken = TokenInformation(
-      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
-      PosLong.unsafeFrom(toFixedPoint(50.0))
-    )
-    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
-    val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
-    )
-    val state = DataState(ammOnChainState, ammCalculatedState)
-
-    for {
-      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-
-      // Withdraw all shares (1.0)
-      withdrawalUpdate = getFakeSignedUpdate(
-        WithdrawalUpdate(
-          sourceAddress,
-          primaryToken.identifier,
-          pairToken.identifier,
-          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))),
-          WithdrawalReference.empty,
-          EpochProgress.MaxValue
-        )
-      )
-
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
-        keyPair,
-        SortedMap.empty,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        SortedMap.empty,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        ownerAddress
-      )
-
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
-
-      result <- withdrawalCombinerService
-        .combineNew(
-          withdrawalUpdate,
-          state,
-          EpochProgress.MinValue,
-          SortedMap.empty,
-          CurrencyId(ownerAddress)
-        )
-        .attempt
-        .map {
-          case Left(e: IllegalArgumentException) =>
-            expect(e.getMessage.contains("Predicate failed"))
-          case Left(e) =>
-            failure(s"Unexpected exception: $e")
-          case Right(_) =>
-            failure("Expected exception was not thrown")
-        }
-    } yield result
-  }
-
-  test("Test withdrawal respects epoch progress") { implicit res =>
-    implicit val (h, sp) = res
+    implicit val (h, sp, hs) = res
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
@@ -517,33 +480,38 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
-          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))),
           WithdrawalReference.empty,
-          EpochProgress.MinValue // Set to minimum to test epoch progress validation
+          EpochProgress.MaxValue
         )
       )
 
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap.empty,
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         SnapshotOrdinal.MinValue,
         SortedMap.empty,
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
 
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
 
-      result <- withdrawalCombinerService.combineNew(
-        withdrawalUpdate,
-        state,
-        EpochProgress.MinValue,
-        SortedMap.empty,
-        CurrencyId(ownerAddress)
+      result <- withdrawalCombinerService
+        .combineNew(
+          withdrawalUpdate,
+          state,
+          EpochProgress(NonNegLong.unsafeFrom(100L)),
+          SortedMap.empty,
+          CurrencyId(ownerAddress)
+        )
+    } yield
+      expect.all(
+        result.calculated.operations(Withdrawal).pending.isEmpty,
+        result.calculated.operations(Withdrawal).failed.nonEmpty,
+        result.sharedArtifacts.isEmpty
       )
-
-    } yield expect(result.calculated.operations(Withdrawal).pending.isEmpty)
   }
 }

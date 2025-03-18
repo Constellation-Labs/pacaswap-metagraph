@@ -3,8 +3,10 @@ import { createAccount, getPublicKey } from "./account";
 import { log, throwInContext } from "../log";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
-import { LastRef, Signed } from "./data-update";
 import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
+import { LastRef, lastRefSchema } from "./last-ref";
+import { Signed } from "./signed";
+import { singleResponseSchema } from "./response";
 
 type StakingUpdate = {
     source: string
@@ -13,7 +15,7 @@ type StakingUpdate = {
     tokenAId: string | null
     tokenAAmount: number
     tokenBId: string | null
-    parent: string
+    parent: LastRef
     maxValidGsEpochProgress: number
 }
 
@@ -33,6 +35,15 @@ type ConfirmedStakingCalculatedState = {
     value: Record<string, StakingCalculatedStateAddress[]>
 }
 
+const getLastStakingReference = async (
+    address: string,
+    l0Url: string
+): Promise<LastRef> => {
+    const { data } = await axios.get(`${l0Url}/v1/addresses/${address}/stakings/last-reference`);
+    const lastRefResponse = singleResponseSchema(lastRefSchema).parse(data);
+    return lastRefResponse.data
+}
+
 const createStakingUpdate = async (
     tokenAAllowSpendHash: string,
     tokenBAllowSpendHash: string,
@@ -46,11 +57,8 @@ const createStakingUpdate = async (
 ): Promise<Signed<StakingUpdateBody>> => {
     log(`Fetching last staking reference for wallet: ${account.address}`, "INFO", context);
 
-    const { data } = await axios.get(
-        `${l0Url}/v1/addresses/${account.address}/stakings/last-reference`
-    );
+    const lastRef = await getLastStakingReference(account.address, l0Url);
 
-    const lastRef = data.data
     log(`Last staking reference for wallet: ${account.address}: ${JSON.stringify(lastRef, null, 2)}`, "INFO", context);
 
     const body: StakingUpdateBody = {

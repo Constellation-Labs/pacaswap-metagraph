@@ -5,7 +5,7 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.AllowSpend
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
@@ -13,7 +13,7 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
-import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, ShareAmount}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateAddress
@@ -200,5 +200,9 @@ object States {
   case class SwapLessThanMinAmount() extends FailedCalculatedStateReason
   case class SwapPriceBelowAcceptableMinPrice() extends FailedCalculatedStateReason
   case class SwapPriceExceedsAcceptableMaxPrice() extends FailedCalculatedStateReason
-
+  case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailedCalculatedStateReason
+  case class CannotWithdrawAllShares() extends FailedCalculatedStateReason
+  case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
+      extends FailedCalculatedStateReason
+  case class ArithmeticError(message: String) extends FailedCalculatedStateReason
 }
