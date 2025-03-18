@@ -8,9 +8,9 @@ import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.tokenLock.TokenLock
-import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegInt
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -84,15 +84,15 @@ object GovernanceCombiner {
     tokenLock: TokenLock,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
   ): Double = {
-    val unlockEpochValue = tokenLock.unlockEpoch.value.value
     val syncEpochProgressValue = lastSyncGlobalSnapshotEpochProgress.value.value
     val votingWeightMultipliers = applicationConfig.governance.votingWeightMultipliers
-    if (syncEpochProgressValue + epochProgress2Years <= unlockEpochValue) {
-      tokenLock.amount.value.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier.value
-    } else if (syncEpochProgressValue + epochProgress1Year <= unlockEpochValue) {
-      tokenLock.amount.value.value * votingWeightMultipliers.lockForOneYearMultiplier.value
-    } else {
-      tokenLock.amount.value.value * votingWeightMultipliers.lockForSixMonthsMultiplier.value
+    tokenLock.unlockEpoch match {
+      case Some(unlockEpoch) if (syncEpochProgressValue + epochProgress2Years) <= unlockEpoch.value =>
+        tokenLock.amount.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier
+      case Some(unlockEpoch) if (syncEpochProgressValue + epochProgress1Year) <= unlockEpoch.value =>
+        tokenLock.amount.value * votingWeightMultipliers.lockForOneYearMultiplier
+      case _ =>
+        tokenLock.amount.value * votingWeightMultipliers.lockForSixMonthsMultiplier
     }
   }
 

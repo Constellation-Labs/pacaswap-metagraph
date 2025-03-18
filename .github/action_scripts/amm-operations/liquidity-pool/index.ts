@@ -17,7 +17,8 @@ import {
     validateIfBalanceChanged,
     validateLiquidityPoolCreated,
     buildLiquidityPoolUniqueIdentifier,
-    getCalculatedState
+    getCalculatedState,
+    getBalance
 } from '../../shared';
 
 const lpCreation: z.infer<typeof LPCreationSchema> = {
@@ -54,6 +55,12 @@ const processLiquidityPoolCreation = async (
 ) => {
     const privateKey = config.lpCreation.privateKey;
     const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+
+    const initialBalanceA = await getBalance(tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context);
+    log(`Initial balance: ${initialBalanceA}`, "INFO", tokenA.context);
+    const initialBalanceB = await getBalance(tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context);
+    log(`Initial balance: ${initialBalanceB}`, "INFO", tokenB.context);
+
     log("Created LP provider account", "INFO", 'AMM');
     const signedAllowSpendA = await createSignedAllowSpend(
         privateKey,
@@ -123,15 +130,15 @@ const processLiquidityPoolCreation = async (
     });
 
     await retry('Validate if balance changed')(async (logger) => {
-        await validateIfBalanceChanged(tokenA.initialBalance, signedAllowSpendA, tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context, logger);
-        await validateIfBalanceChanged(tokenB.initialBalance, signedAllowSpendB, tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context, logger);
+        await validateIfBalanceChanged(initialBalanceA, signedAllowSpendA, tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context, logger);
+        await validateIfBalanceChanged(initialBalanceB, signedAllowSpendB, tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context, logger);
     });
 }
 
 const lastGlobalSnapshotIncreasingTest = async (config: ReturnType<typeof createConfig>) => {
     log("Starting lastGlobalSnapshotIncreasingTest");
     const calculatedState = await getCalculatedState(config.ammMl0Url)
-    const initialLastSyncGlobalSnapshotOrdinal= calculatedState.lastSyncGlobalSnapshotOrdinal
+    const initialLastSyncGlobalSnapshotOrdinal = calculatedState.lastSyncGlobalSnapshotOrdinal
 
     log(`Initial lastSyncGlobalSnapshotOrdinal: ${initialLastSyncGlobalSnapshotOrdinal}`)
 

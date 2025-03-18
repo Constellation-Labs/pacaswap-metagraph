@@ -6,7 +6,6 @@ type TokenConfig = {
     account: ReturnType<typeof createAccount>;
     l1Url: string;
     l0Url: string;
-    initialBalance: number;
     context: string;
     tokenId: string | null;
     allowSpendAmount: number;
@@ -25,14 +24,10 @@ const createTokenConfig = async (
     const account = createAccount(privateKey, l0Url, l1Url);
     log(`Created token account`, "INFO", context);
 
-    const initialBalance = await getBalance(account, l0Url, isCurrency, context);
-    log(`Initial balance: ${initialBalance}`, "INFO", context);
-
     return {
         account,
         l1Url,
         l0Url,
-        initialBalance,
         context,
         tokenId,
         allowSpendAmount,
