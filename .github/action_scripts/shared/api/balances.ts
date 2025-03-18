@@ -36,7 +36,7 @@ const validateIfBalanceChanged = async (
     l0Url: string,
     isCurrency: boolean,
     context: string,
-    logger: Logger = log
+    logger: Logger
 ) => {
     const balance = await getBalance(account, l0Url, isCurrency, context);
     const expectedBalance = initialBalance - tokenAllowSpend.value.amount - tokenAllowSpend.value.fee;

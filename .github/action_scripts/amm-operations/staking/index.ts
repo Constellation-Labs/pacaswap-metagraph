@@ -1,26 +1,7 @@
-import { z } from 'zod';
-import {
-    BaseConfig,
-    buildLiquidityPoolUniqueIdentifier,
-    createAccount,
-    createLiquidityPoolUpdate,
-    createSignedAllowSpend, createTokenConfig,
-    getCalculatedState,
-    log,
-    sendDataUpdate,
-    sendSignedAllowSpend,
-    throwInContext,
-    TokenConfig, validateIfAllowSpendAcceptedOnCL1,
-    validateIfAllowSpendAcceptedOnGL0,
-    validateIfAllowSpendAcceptedOnML0,
-    validateIfBalanceChanged,
-    validateIfHasEnoughBalanceForAllowSpend,
-    validateIfSyncedToGlobalOrdinal,
-    validateLiquidityPoolCreated,
-    getBalance
-} from "../../shared";
-import { delay, retry } from "../../shared/retry";
-import { lastGlobalSnapshotIncreasingTest } from '../../shared/tests/last-global-snapshot-increasing';
+import { z } from "zod";
+import { BaseConfig, buildLiquidityPoolUniqueIdentifier, createAccount, createSignedAllowSpend, createStakingUpdate, createTokenConfig, delay, getBalance, getCalculatedState, getLiquidityPool, log, retry, sendDataUpdate, sendSignedAllowSpend, throwInContext, TokenConfig, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfBalanceChanged, validateIfHasEnoughBalanceForAllowSpend, validateIfSyncedToGlobalOrdinal, validateLiquidityPoolAmountChanged, validateStakingCreated } from "../../shared";
+import { getCurrentEpochProgress, getCurrentOrdinal } from "../../shared/api/snapshot";
+import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global-snapshot-increasing";
 
 const InputsSchema = z
     .object({
@@ -31,45 +12,47 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
-    tokenAAllowSpendAmount: 100,
-    tokenBAllowSpendAmount: 200,
+    tokenAAllowSpendAmount: 50,
+    tokenBAllowSpendAmount: 100,
 });
 
-type LiquidityPoolConfig = BaseConfig & {
+type StakingConfig = BaseConfig & {
     inputs: z.infer<typeof InputsSchema>
 }
 
-const createConfig = (baseConfig: BaseConfig): LiquidityPoolConfig => {
-    const config = { ...baseConfig, inputs };
-    return config;
+const createConfig = (baseConfig: BaseConfig): StakingConfig => {
+    return { ...baseConfig, inputs };
 };
 
-const processLiquidityPoolCreation = async (
-    config: LiquidityPoolConfig,
+const processStakingCreation = async (
+    config: StakingConfig,
     tokenA: TokenConfig,
     tokenB: TokenConfig,
 ) => {
     const privateKey = config.inputs.privateKey;
-    const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+    const stakingProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+    log("Created staking provider account", "INFO", 'AMM');
 
     const initialBalanceA = await getBalance(tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context);
     log(`Initial balance: ${initialBalanceA}`, "INFO", tokenA.context);
     const initialBalanceB = await getBalance(tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context);
     log(`Initial balance: ${initialBalanceB}`, "INFO", tokenB.context);
 
-    log("Created LP provider account", "INFO", 'AMM');
+    const poolId = buildLiquidityPoolUniqueIdentifier(tokenA.tokenId, tokenB.tokenId);
+    const createdLiquidityPool = await getLiquidityPool(config.ammMl0Url, poolId, log);
+
+    if (!createdLiquidityPool) {
+        throwInContext('AMM')("Liquidity pool not found.");
+        return
+    }
+
+    const tokenAPoolBalance = createdLiquidityPool.data.tokenA.amount;
+    const tokenBPoolBalance = createdLiquidityPool.data.tokenB.amount;
 
     const signedAllowSpendA = await createSignedAllowSpend(
         privateKey,
         tokenA,
         config.ammMetagraphId,
-    );
-
-    const signedAllowSpendB = await createSignedAllowSpend(
-        privateKey,
-        tokenB,
-        config.ammMetagraphId,
-        tokenA.tokenId === tokenB.tokenId ? signedAllowSpendA : undefined // Note: For same currency we reference the previous ref directly
     );
 
     await validateIfHasEnoughBalanceForAllowSpend(tokenA, signedAllowSpendA.value.amount);
@@ -80,6 +63,13 @@ const processLiquidityPoolCreation = async (
         tokenA.context
     );
 
+    const signedAllowSpendB = await createSignedAllowSpend(
+        privateKey,
+        tokenB,
+        config.ammMetagraphId,
+        tokenA.tokenId === tokenB.tokenId ? signedAllowSpendA : undefined // Note: For same currency we reference the previous ref directly
+    );
+
     await validateIfHasEnoughBalanceForAllowSpend(tokenB, signedAllowSpendB.value.amount);
 
     const { hash: tokenBAllowSpendHash } = await sendSignedAllowSpend(
@@ -88,32 +78,32 @@ const processLiquidityPoolCreation = async (
         tokenB.context
     );
 
-    const update = await createLiquidityPoolUpdate(
+    const stakingUpdate = await createStakingUpdate(
         tokenAAllowSpendHash,
         tokenBAllowSpendHash,
         tokenA.tokenId,
         tokenB.tokenId,
         tokenA.allowSpendAmount,
-        tokenB.allowSpendAmount,
+        stakingProviderAccount,
         privateKey,
-        lpProviderAccount,
-        config.ammMl0Url
+        config.ammMl0Url,
+        'AMM'
     );
 
-    await sendDataUpdate(config.ammDl1Url, update);
+    await sendDataUpdate(config.ammDl1Url, stakingUpdate);
 
     await retry('Validate if allow spends accepted on CL1')(async (logger) => {
         await validateIfAllowSpendAcceptedOnCL1(tokenA.l1Url, tokenAAllowSpendHash, tokenA.context, logger);
         await validateIfAllowSpendAcceptedOnCL1(tokenB.l1Url, tokenBAllowSpendHash, tokenB.context, logger);
     });
 
+    delay(5000);
+
     await retry('Validate if allow spends accepted on ML0')(async (logger) => {
         if (tokenA.tokenId !== null) {
-            await validateIfAllowSpendAcceptedOnML0(tokenA.l0Url, tokenA.account.address, tokenAAllowSpendHash, tokenA.tokenId, tokenA.context, logger);
+            await validateIfAllowSpendAcceptedOnML0(tokenA.l0Url, stakingProviderAccount.address, tokenAAllowSpendHash, tokenA.tokenId, tokenA.context, logger);
         }
-        if (tokenB.tokenId !== null) {
-            await validateIfAllowSpendAcceptedOnML0(tokenB.l0Url, tokenB.account.address, tokenBAllowSpendHash, tokenB.tokenId, tokenB.context, logger);
-        }
+        await validateIfAllowSpendAcceptedOnML0(tokenB.l0Url, stakingProviderAccount.address, tokenBAllowSpendHash, tokenB.tokenId, tokenB.context, logger);
     });
 
     const globalOrdinal = await retry<number>('Validate if allow spends accepted on GL0')(async (logger) => {
@@ -129,20 +119,34 @@ const processLiquidityPoolCreation = async (
         await validateIfSyncedToGlobalOrdinal(config.ammMl0Url, globalOrdinal, logger);
     });
 
-    const maxAttempts = tokenA.tokenId === tokenB.tokenId ? 1 : 60;
-
-    await retry('Validate if liquidity pool created', { maxAttempts, delayMs: 5000 })(async (logger) => {
-        await validateLiquidityPoolCreated(config.ammMl0Url, lpProviderAccount, tokenA.tokenId, tokenB.tokenId, logger);
+    await retry('Validate if staking created', { delayMs: 5000 })(async (logger) => {
+        await validateStakingCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, tokenAAllowSpendHash, tokenBAllowSpendHash, stakingProviderAccount, logger);
     });
 
     await retry('Validate if balance changed')(async (logger) => {
         await validateIfBalanceChanged(initialBalanceA, signedAllowSpendA, tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context, logger);
         await validateIfBalanceChanged(initialBalanceB, signedAllowSpendB, tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context, logger);
     });
+
+    await retry('Validate if liquidity pool token amount changed')(async (logger) => {
+        const tokenBPrice = signedAllowSpendB.value.amount / signedAllowSpendA.value.amount;
+        const expectedTokenABalance = tokenAPoolBalance + signedAllowSpendA.value.amount
+        const expectedTokenBBalance = tokenBPoolBalance + signedAllowSpendA.value.amount * tokenBPrice;
+
+        await validateLiquidityPoolAmountChanged(
+            config.ammMl0Url,
+            poolId,
+            tokenAPoolBalance,
+            tokenBPoolBalance,
+            expectedTokenABalance,
+            expectedTokenBBalance,
+            logger
+        );
+    });
 }
 
-const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => {
-    log("Starting liquidity pool creation test (Currency to Currency)".toUpperCase());
+const stakingCurrencyToCurrencyTest = async (config: StakingConfig) => {
+    log("Starting staking creation test (Currency to Currency)".toUpperCase(), 'INFO', 'AMM');
 
     const tokenA = await createTokenConfig(
         config.inputs.privateKey,
@@ -164,11 +168,11 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         config.inputs.tokenBAllowSpendAmount
     );
 
-    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    await processStakingCreation(config, tokenA, tokenB);
 }
 
-const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
-    log("Starting liquidity pool creation test (DAG to Currency)".toUpperCase());
+const stakingDagToCurrencyTest = async (config: StakingConfig) => {
+    log("Starting staking creation test (DAG to Currency)".toUpperCase(), 'INFO', 'AMM');
 
     const tokenA = await createTokenConfig(
         config.inputs.privateKey,
@@ -190,11 +194,11 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         config.inputs.tokenBAllowSpendAmount
     );
 
-    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    await processStakingCreation(config, tokenA, tokenB);
 }
 
-const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
-    log("Starting liquidity pool creation test (DAG to DAG - should fail)".toUpperCase());
+const stakingDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting staking creation test (DAG to DAG - should fail)".toUpperCase(), 'INFO', 'AMM');
 
     const tokenA = await createTokenConfig(
         config.inputs.privateKey,
@@ -217,15 +221,15 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
     );
 
     try {
-        await processLiquidityPoolCreation(config, tokenA, tokenB);
-        throw new Error("Expected DAG to DAG liquidity pool creation to fail, but it succeeded");
+        await processStakingCreation(config, tokenA, tokenB);
+        throw new Error("Expected DAG to DAG staking creation to fail, but it succeeded");
     } catch (error) {
-        log("DAG to DAG liquidity pool creation failed as expected", "INFO", 'AMM');
+        log("DAG to DAG staking creation failed as expected", "INFO", 'AMM');
     }
 }
 
-const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
-    log("Starting liquidity pool creation test (Same Currency to Same Currency - should fail)".toUpperCase());
+const stakingSameCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting staking creation test (Same Currency to Same Currency - should fail)".toUpperCase(), 'INFO', 'AMM');
 
     const tokenA = await createTokenConfig(
         config.inputs.privateKey,
@@ -248,10 +252,10 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
     );
 
     try {
-        await processLiquidityPoolCreation(config, tokenA, tokenB);
-        throw new Error("Expected same currency liquidity pool creation to fail, but it succeeded");
+        await processStakingCreation(config, tokenA, tokenB);
+        throw new Error("Expected same currency staking creation to fail, but it succeeded");
     } catch (error) {
-        log("Same currency liquidity pool creation failed as expected", "INFO", 'AMM');
+        log("Same currency staking creation failed as expected", "INFO", 'AMM');
     }
 }
 
@@ -261,17 +265,17 @@ export default async (baseConfig: BaseConfig) => {
     await lastGlobalSnapshotIncreasingTest({ ammMl0Url: config.ammMl0Url });
     log("=".repeat(80), "INFO");
 
-    await lpCreationCurrencyToCurrencyTest(config);
+    await stakingCurrencyToCurrencyTest(config);
     log("=".repeat(80), "INFO");
 
-    await lpCreationDagToCurrencyTest(config);
+    await stakingDagToCurrencyTest(config);
     log("=".repeat(80), "INFO");
 
-    await lpCreationSameCurrencyTest(config);
+    await stakingDagToDagTest(config);
     log("=".repeat(80), "INFO");
 
-    await lpCreationDagToDagTest(config);
+    await stakingSameCurrencyTest(config);
     log("=".repeat(80), "INFO");
 
-    log("All liquidity pool creation tests passed!", "INFO", 'AMM');
-};
+    log("All staking creation tests passed!", "INFO", 'AMM');
+}

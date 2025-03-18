@@ -1,7 +1,8 @@
-import { log } from '../shared';
-import { liquidityPoolTests } from './liquidity-pool'
+import { BaseWithCurrencyMetagraphsCliArgsSchema, log } from '../shared';
+import liquidityPoolTests from './liquidity-pool'
+import stakingTests from './staking'
 
-const getArgs = () => {
+const getBaseConfig = () => {
   const args = process.argv.slice(2);
 
   const [
@@ -25,7 +26,7 @@ const getArgs = () => {
     );
   }
 
-  return {
+  return BaseWithCurrencyMetagraphsCliArgsSchema.parse({
     gl0Url,
     dagCl1Url,
     ammMl0Url,
@@ -38,13 +39,14 @@ const getArgs = () => {
     ammMetagraphId,
     tokenAId,
     tokenBId
-  }
+  })
 };
 
 const main = async () => {
-  const args = getArgs();
+  const baseConfig = getBaseConfig();
 
-  await liquidityPoolTests(args);
+  await liquidityPoolTests(baseConfig);
+  await stakingTests(baseConfig);
 };
 
 main().catch((error) => {

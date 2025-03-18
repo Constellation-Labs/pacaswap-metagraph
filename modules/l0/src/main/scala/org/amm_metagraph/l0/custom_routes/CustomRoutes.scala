@@ -14,10 +14,12 @@ import io.constellationnetwork.security.signature.Signed
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
+import eu.timepit.refined.cats._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.Governance._
-import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
+import org.amm_metagraph.shared_data.types.Staking.StakingReference
+import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType, StakingCalculatedState}
 import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, getPendingAllowSpendsSwapUpdates, getSwapCalculatedState}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
@@ -141,6 +143,20 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
       Ok(calculatedState.state.allocations.allocationsRewards)
     }
 
+  private def getLastStakingReference(address: Address): F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      calculatedState.state.operations
+        .get(OperationType.Staking)
+        .collect {
+          case stakingCalculatedState: StakingCalculatedState =>
+            stakingCalculatedState.confirmed.value
+              .get(address)
+              .flatMap(_.maxByOption(_.parent.ordinal))
+              .map(_.parent)
+        }
+        .fold(Ok(StakingReference.empty))(Ok(_))
+    }
+
   private val routes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "calculated-state" / "latest"                                      => getLatestCalculatedState
     case GET -> Root / "swaps" / allowSpendHashString                                     => getSwapByAllowSpendHash(allowSpendHashString)
@@ -148,6 +164,7 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
     case GET -> Root / "addresses" / AddressVar(address) / "vote-weight"                  => getAddressVoteWeight(address)
     case GET -> Root / "addresses" / AddressVar(address) / "vote-info" / "last-reference" => getAddressVoteInfoLastReference(address)
     case GET -> Root / "governance" / "allocations" / "rewards"                           => getAllocationsRewards
+    case GET -> Root / "addresses" / AddressVar(address) / "stakings" / "last-reference"  => getLastStakingReference(address)
   }
 
   val public: HttpRoutes[F] = {

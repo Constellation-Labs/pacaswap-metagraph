@@ -23,4 +23,6 @@ const BaseAmmMetagraphCliArgsSchema = z.object({
     metagraphId: z.string().min(1, "Metagraph ID cannot be empty"),
 });
 
-export { BaseAmmMetagraphCliArgsSchema, BaseWithCurrencyMetagraphsCliArgsSchema };
+type BaseConfig = z.infer<typeof BaseWithCurrencyMetagraphsCliArgsSchema>;
+
+export { BaseWithCurrencyMetagraphsCliArgsSchema, BaseAmmMetagraphCliArgsSchema, type BaseConfig };

@@ -7,7 +7,8 @@
   "type": "commonjs",
   "main": "check_if_node_started.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "check-ts": "tsc --noEmit --pretty --skipLibCheck --allowSyntheticDefaultImports **/*.ts"
   },
   "dependencies": {
     "@stardust-collective/dag4": "^2.0.0",

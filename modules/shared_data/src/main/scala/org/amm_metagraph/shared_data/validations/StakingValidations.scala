@@ -3,11 +3,10 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
-import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
@@ -93,8 +92,8 @@ object StakingValidations {
   ): DataApplicationValidationErrorOr[Unit] = {
     val lastConfirmedOrdinal: Option[StakingOrdinal] = stakingCalculatedState.confirmed.value
       .get(address)
-      .flatMap(_.maxByOption(_.ordinal.value.value))
-      .map(_.ordinal)
+      .flatMap(_.maxByOption(_.parent.ordinal))
+      .map(_.parent.ordinal)
 
     lastConfirmedOrdinal match {
       case Some(last) if last.value >= signedStaking.ordinal.value => StakingOrdinalLowerThanLastConfirmed.invalid
