@@ -87,7 +87,7 @@ jobs:
         with:
           path: |
             .test-execution-marker
-          key: test-execution-${{ runner.os }}-${{ needs.setup-hypergraph.outputs.tessellation_version }}
+          key: test-execution-${{ runner.os }}-${{ hashFiles('modules/**', 'project/**', 'build.sbt', 'version.sbt')}}-${{ needs.setup-hypergraph.outputs.tessellation_version }}
 
       - name: Cache SBT and Coursier (~/.ivy2, ~/.sbt, ~/.cache/coursier) - Reuse from setup hypergraph
         if: steps.cache-test-execution.outputs.cache-hit != 'true'
