@@ -10,7 +10,8 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import io.circe.generic.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPoolCalculatedState, getLiquidityPoolPrices}
+import org.amm_metagraph.shared_data.services.pricing.PricingService
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPoolCalculatedState}
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -35,9 +36,7 @@ object LiquidityPoolRoutes {
   )
 
   object LiquidityPoolResponse {
-    def from(pool: LiquidityPool): LiquidityPoolResponse = {
-      val (priceTokenA, priceTokenB) = getLiquidityPoolPrices(pool)
-
+    def from(pool: LiquidityPool, priceTokenA: Long, priceTokenB: Long): LiquidityPoolResponse =
       LiquidityPoolResponse(
         poolId = pool.poolId.value,
         tokenA = TokenInfoResponse(pool.tokenA.identifier, pool.tokenA.amount.value, priceTokenA),
@@ -46,12 +45,12 @@ object LiquidityPoolRoutes {
         k = pool.k,
         totalShared = pool.poolShares.totalShares.value
       )
-    }
   }
 }
 
 case class LiquidityPoolRoutes[F[_]: Async](
-  calculatedStateService: CalculatedStateService[F]
+  calculatedStateService: CalculatedStateService[F],
+  pricingService: PricingService[F]
 ) extends Http4sDsl[F] {
   import LiquidityPoolRoutes._
   import Pagination._
@@ -59,30 +58,48 @@ case class LiquidityPoolRoutes[F[_]: Async](
 
   private def getLiquidityPools(
     pagination: PaginationParams
-  ): F[(List[LiquidityPoolResponse], PaginationResponse)] =
-    calculatedStateService.get.map { calculatedState =>
-      val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state)
+  ): F[(List[LiquidityPoolResponse], PaginationResponse)] = for {
+    calculatedState <- calculatedStateService.get
+    liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state)
+    allLiquidityPools = liquidityPoolCalculatedState.confirmed.value.values
 
-      val allLiquidityPools = liquidityPoolCalculatedState.confirmed.value.values
-      val filteredLPs = allLiquidityPools
-        .slice(pagination.offset, pagination.offset + pagination.limit)
-        .map(LiquidityPoolResponse.from)
-        .toList
+    filteredLPs <- allLiquidityPools
+      .slice(pagination.offset, pagination.offset + pagination.limit)
+      .toList
+      .traverse { lp =>
+        pricingService
+          .getLiquidityPoolPrices(lp.poolId)
+          .map {
+            case Right((tokenAPrice, tokenBPrice)) if tokenAPrice > 0 && tokenBPrice > 0 =>
+              Some(LiquidityPoolResponse.from(lp, tokenAPrice, tokenBPrice))
+            case _ => None
+          }
+      }
+      .map(_.flatten)
 
-      val allLPsSize = allLiquidityPools.size
-      (
-        filteredLPs,
-        PaginationResponse(allLPsSize, pagination.limit, pagination.offset, filteredLPs.length < allLPsSize)
-      )
-    }
+    allLpSize = allLiquidityPools.size
+    response = (
+      filteredLPs,
+      PaginationResponse(allLpSize, pagination.limit, pagination.offset, filteredLPs.length < allLpSize)
+    )
+
+  } yield response
 
   private def getLiquidityPoolByPoolId(
     poolId: String
   ): F[Option[LiquidityPoolResponse]] =
-    calculatedStateService.get.map { calculatedState =>
+    calculatedStateService.get.flatMap { calculatedState =>
       val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state)
 
-      liquidityPoolCalculatedState.confirmed.value.get(poolId).fold(none[LiquidityPoolResponse])(LiquidityPoolResponse.from(_).some)
+      liquidityPoolCalculatedState.confirmed.value.get(poolId).traverseFilter { lp =>
+        pricingService
+          .getLiquidityPoolPrices(lp.poolId)
+          .map {
+            case Right((tokenAPrice, tokenBPrice)) if tokenAPrice > 0 && tokenBPrice > 0 =>
+              Some(LiquidityPoolResponse.from(lp, tokenAPrice, tokenBPrice))
+            case _ => None
+          }
+      }
     }
 
   private def handleGetLiquidityPools(

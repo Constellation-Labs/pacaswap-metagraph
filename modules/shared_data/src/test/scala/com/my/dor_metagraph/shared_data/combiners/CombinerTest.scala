@@ -27,8 +27,10 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.combiners.CombinerService
+import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
+import org.amm_metagraph.shared_data.services.combiners.{L0CombinerService, _}
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -197,8 +199,25 @@ object CombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
-      combinerService <- CombinerService.make[IO](config, globalSnapshotService)
+      governanceCombinerService <- GovernanceCombinerService.make[IO](config)
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      combinerService <- L0CombinerService
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService
+        )
 
       combineResponsePendingSpendAction <- combinerService.combine(
         state,
@@ -311,8 +330,25 @@ object CombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
-      combinerService <- CombinerService.make[IO](config, globalSnapshotService)
+      governanceCombinerService <- GovernanceCombinerService.make[IO](config)
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      combinerService <- L0CombinerService
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService
+        )
 
       combineResponsePendingSpendAction <- combinerService.combine(
         state,
@@ -432,8 +468,25 @@ object CombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
-      combinerService <- CombinerService.make[IO](config, globalSnapshotService)
+      governanceCombinerService <- GovernanceCombinerService.make[IO](config)
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      combinerService <- L0CombinerService
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService
+        )
 
       combineResponsePendingSpendAction <- combinerService.combine(
         state,

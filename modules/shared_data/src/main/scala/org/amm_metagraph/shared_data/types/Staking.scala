@@ -33,6 +33,12 @@ object Staking {
     parent: StakingReference
   )
 
+  case class StakingTokenInformation(
+    primaryTokenInformation: TokenInformation,
+    pairTokenInformation: TokenInformation,
+    newlyIssuedShares: Long
+  )
+
   @derive(decoder, encoder, order, ordering)
   case class StakingReference(ordinal: StakingOrdinal, hash: Hash)
 

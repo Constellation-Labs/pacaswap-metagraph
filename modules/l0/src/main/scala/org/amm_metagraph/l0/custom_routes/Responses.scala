@@ -30,4 +30,14 @@ object Responses {
     implicit def singleResponseEncoder[F[_], A: Encoder]: EntityEncoder[F, SingleResponse[A]] =
       jsonEncoderOf[F, SingleResponse[A]]
   }
+
+  @derive(encoder, decoder)
+  case class ErrorResponse[A](
+    errorMessage: A
+  )
+
+  object ErrorResponse {
+    implicit def errorResponseEncoder[F[_], A: Encoder]: EntityEncoder[F, ErrorResponse[A]] =
+      jsonEncoderOf[F, ErrorResponse[A]]
+  }
 }
