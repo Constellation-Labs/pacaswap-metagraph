@@ -52,8 +52,6 @@ components:
     SwapUpdate:
       type: object
       properties:
-        sourceAddress:
-          type: string
         swapFromPair:
           type: string
         swapToPair:

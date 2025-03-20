@@ -136,8 +136,8 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(stakingUpdate)
     } yield expect.eql(Valid(()), response)
   }
@@ -217,7 +217,7 @@ object StakingValidationTest extends MutableIOSuite {
         ownerAddress
       )
 
-      validationService <- ValidationService.make[IO](config)
+      validationService = ValidationService.make[IO](config)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -244,8 +244,9 @@ object StakingValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
+
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -313,8 +314,8 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,

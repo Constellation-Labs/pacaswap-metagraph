@@ -22,13 +22,12 @@ object DataL1Service {
     validationService: ValidationService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
     jsonSerializer: JsonSerializer[F]
-  ): F[BaseDataApplicationL1Service[F]] = Async[F].delay {
+  ): BaseDataApplicationL1Service[F] =
     makeBaseDataApplicationL1Service(
       validationService,
       dataUpdateCodec,
       jsonSerializer
     )
-  }
 
   private def makeBaseDataApplicationL1Service[F[+_]: Async](
     validationService: ValidationService[F],

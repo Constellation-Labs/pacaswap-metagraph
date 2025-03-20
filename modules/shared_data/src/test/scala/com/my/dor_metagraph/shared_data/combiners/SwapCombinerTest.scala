@@ -32,10 +32,11 @@ import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.SwapCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.Swap.SwapReference
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
 object SwapCombinerTest extends MutableIOSuite {
@@ -165,7 +166,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -173,7 +173,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           EpochProgress.MaxValue,
           PosLong.unsafeFrom(toFixedPoint(0.4)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.6)).some
+          PosLong.unsafeFrom(toFixedPoint(0.6)).some,
+          SwapReference.empty
         )
       )
 
@@ -197,8 +198,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -282,7 +284,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -290,7 +291,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           EpochProgress.MaxValue,
           none,
-          none
+          none,
+          SwapReference.empty
         )
       )
 
@@ -314,8 +316,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -400,7 +403,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -408,7 +410,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           EpochProgress.MaxValue,
           PosLong.unsafeFrom(toFixedPoint(0.8)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.9)).some
+          PosLong.unsafeFrom(toFixedPoint(0.9)).some,
+          SwapReference.empty
         )
       )
 
@@ -432,8 +435,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -497,7 +501,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -505,7 +508,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           EpochProgress.MaxValue,
           PosLong.unsafeFrom(toFixedPoint(0.1)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.2)).some
+          PosLong.unsafeFrom(toFixedPoint(0.2)).some,
+          SwapReference.empty
         )
       )
 
@@ -529,8 +533,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -594,7 +599,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -602,7 +606,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           EpochProgress.MaxValue,
           PosLong.unsafeFrom(toFixedPoint(0.4)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.6)).some
+          PosLong.unsafeFrom(toFixedPoint(0.6)).some,
+          SwapReference.empty
         )
       )
 
@@ -626,8 +631,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -683,7 +689,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -691,7 +696,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(100000L),
           EpochProgress.MaxValue,
           none,
-          none
+          none,
+          SwapReference.empty
         )
       )
 
@@ -708,8 +714,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
@@ -764,7 +771,6 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -772,7 +778,8 @@ object SwapCombinerTest extends MutableIOSuite {
           SwapAmount(100000L),
           EpochProgress.MinValue,
           none,
-          none
+          none,
+          SwapReference.empty
         )
       )
 
@@ -789,8 +796,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,

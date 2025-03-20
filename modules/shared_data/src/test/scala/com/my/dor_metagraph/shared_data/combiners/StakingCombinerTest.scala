@@ -215,9 +215,9 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
 
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -353,8 +353,8 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -481,8 +481,8 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -592,8 +592,8 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,

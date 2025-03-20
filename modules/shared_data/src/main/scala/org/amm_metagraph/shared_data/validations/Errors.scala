@@ -22,8 +22,8 @@ object Errors {
     val message = "Allocation percentage exceed"
   }
 
-  case object NotSignedExclusivelyByAddressOwner extends DataApplicationValidationError {
-    val message = "Not signed exclusively by address owner"
+  case object MultipleSignatures extends DataApplicationValidationError {
+    val message = "Multiple signatures"
   }
 
   case object ParentOrdinalLowerThenLastProcessedTxOrdinal extends DataApplicationValidationError {
@@ -108,6 +108,10 @@ object Errors {
 
   case object SwapMissingAllowSpend extends DataApplicationValidationError {
     val message = "Missing swap allow spend"
+  }
+
+  case object InvalidSwapParent extends DataApplicationValidationError {
+    val message: String = "Swap ordinal lower than last confirmed"
   }
 
   case object DuplicatedOperation extends DataApplicationValidationError {

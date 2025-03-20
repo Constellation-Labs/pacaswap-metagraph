@@ -4,21 +4,25 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.routes.internal.{InternalUrlPrefix, PublicRoutes}
+import io.constellationnetwork.security.SecurityProvider
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
+import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.middleware.CORS
 import org.http4s.{HttpRoutes, Response}
 
-case class CustomRoutes[F[_]: Async](
+case class CustomRoutes[F[_]: Async: HasherSelector: SecurityProvider](
   calculatedStateService: CalculatedStateService[F],
-  pricingService: PricingService[F]
+  pricingService: PricingService[F],
+  dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
 ) extends Http4sDsl[F]
     with PublicRoutes[F] {
 
@@ -38,7 +42,7 @@ case class CustomRoutes[F[_]: Async](
 
   val public: HttpRoutes[F] = {
     val liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
-    val swapRoutes = SwapRoutes(calculatedStateService, pricingService)
+    val swapRoutes = SwapRoutes(calculatedStateService, pricingService, dataUpdateCodec)
     val governanceRoutes = GovernanceRoutes(calculatedStateService)
     val voteRoutes = VoteRoutes(calculatedStateService)
     val stakingRoutes = StakingRoutes(calculatedStateService)

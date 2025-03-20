@@ -24,7 +24,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 
 trait SwapCombinerService[F[_]] {
   def combineNew(
@@ -55,16 +55,17 @@ trait SwapCombinerService[F[_]] {
 object SwapCombinerService {
   def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig,
-    pricingService: PricingService[F]
-  ): F[SwapCombinerService[F]] = Async[F].delay {
+    pricingService: PricingService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+  ): SwapCombinerService[F] =
     new SwapCombinerService[F] {
       private def updateLiquidityPool(
         liquidityPool: LiquidityPool,
         fromTokenInfo: TokenInformation,
         toTokenInfo: TokenInformation
       ): LiquidityPool = {
-        val tokenA = if (liquidityPool.tokenA.identifier == fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
-        val tokenB = if (liquidityPool.tokenB.identifier == toTokenInfo.identifier) toTokenInfo else fromTokenInfo
+        val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
+        val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
 
         liquidityPool.copy(
           tokenA = tokenA,
@@ -86,40 +87,36 @@ object SwapCombinerService {
           ).some
         } else {
           (maybeTokenInformation, maybeAllowSpendToken).mapN { (updatedTokenInformation, allowSpend) =>
+            val expireEpochProgress = EpochProgress(
+              NonNegLong
+                .from(
+                  lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+                )
+                .getOrElse(NonNegLong.MinValue)
+            )
+
             if (updatedTokenInformation.receivedAmount.value.value < signedUpdate.minAmount.value.value) {
               FailedCalculatedState(
                 SwapLessThanMinAmount(),
-                EpochProgress(
-                  NonNegLong.unsafeFrom(
-                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                  )
-                ),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (signedUpdate.minPrice.exists(p => updatedTokenInformation.effectivePrice.value.value < p.value)) {
               FailedCalculatedState(
                 SwapPriceBelowAcceptableMinPrice(),
-                EpochProgress(
-                  NonNegLong.unsafeFrom(
-                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                  )
-                ),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (signedUpdate.maxPrice.exists(p => updatedTokenInformation.effectivePrice.value.value > p.value)) {
               FailedCalculatedState(
                 SwapPriceExceedsAcceptableMaxPrice(),
-                EpochProgress(
-                  NonNegLong.unsafeFrom(
-                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                  )
-                ),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (allowSpend.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
               FailedCalculatedState(
                 AllowSpendExpired(allowSpend.signed.value),
-                EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else {
@@ -327,6 +324,10 @@ object SwapCombinerService {
                     poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
                     liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
                     swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
+                    swapReference <- HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate))
+                    swapUpdateHashed <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+                    sourceAddress <- signedSwapUpdate.proofs.head.id.toAddress
+
                     response = swapTokenInfo match {
                       case Left(_) => oldState
                       case Right(updatedTokenInformation) =>
@@ -337,7 +338,8 @@ object SwapCombinerService {
                         )
 
                         val swapCalculatedStateAddress = SwapCalculatedStateAddress(
-                          swapUpdate.sourceAddress,
+                          swapUpdateHashed.hash,
+                          sourceAddress,
                           updatedTokenInformation.primaryTokenInformation,
                           updatedTokenInformation.pairTokenInformation,
                           swapUpdate.allowSpendReference,
@@ -347,14 +349,15 @@ object SwapCombinerService {
                           poolId.some,
                           swapUpdate.minPrice,
                           swapUpdate.maxPrice,
-                          currentSnapshotOrdinal
+                          currentSnapshotOrdinal,
+                          swapReference
                         )
 
                         val updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
                         val newSwapState = swapCalculatedState
                           .focus(_.confirmed.value)
                           .modify(current =>
-                            current.updatedWith(swapUpdate.sourceAddress) {
+                            current.updatedWith(sourceAddress) {
                               case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
                               case None                 => Some(Set(swapCalculatedStateAddress))
                             }
@@ -384,7 +387,5 @@ object SwapCombinerService {
             } yield updatedState
         }
       }
-
     }
-  }
 }

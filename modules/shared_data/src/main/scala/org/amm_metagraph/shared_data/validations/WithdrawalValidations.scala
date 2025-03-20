@@ -15,6 +15,7 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, getWithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.SharedValidations._
 
 object WithdrawalValidations {
   def withdrawalValidationsL1[F[_]: Async](
@@ -26,7 +27,8 @@ object WithdrawalValidations {
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    address <- signedWithdrawalUpdate.proofs.head.id.toAddress
+    sourceAddress <- signedWithdrawalUpdate.proofs.head.id.toAddress
+    maxSignatureValidation = validateHasSingleSignature(signedWithdrawalUpdate)
     withdrawalUpdate = signedWithdrawalUpdate.value
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
@@ -40,7 +42,7 @@ object WithdrawalValidations {
     hasEnoughShares <- validateIfHasEnoughShares(
       withdrawalUpdate,
       liquidityPoolsCalculatedState,
-      address
+      sourceAddress
     )
 
     withdrawalNotPending <- HasherSelector[F].withCurrent { implicit hs =>
@@ -50,10 +52,11 @@ object WithdrawalValidations {
       )
     }
 
-    lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, address)
+    lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, sourceAddress)
 
   } yield
-    liquidityPoolExists
+    maxSignatureValidation
+      .productR(liquidityPoolExists)
       .productR(hasEnoughShares)
       .productR(withdrawalNotPending)
       .productR(lastRef)

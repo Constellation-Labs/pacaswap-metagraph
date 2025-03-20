@@ -133,8 +133,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(liquidityPoolUpdate)
     } yield expect.eql(Valid(()), response)
   }
@@ -154,8 +154,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(liquidityPoolUpdate)
     } yield {
       val expectedError = response match {
@@ -190,8 +190,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -229,8 +229,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -268,8 +268,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -318,8 +318,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,

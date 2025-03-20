@@ -17,7 +17,6 @@ import io.constellationnetwork.security.signature.Signed
 
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.globalSnapshots._
-import org.amm_metagraph.shared_data.services.combiners._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -42,7 +41,7 @@ object L0CombinerService {
     stakingCombinerService: StakingCombinerService[F],
     swapCombinerService: SwapCombinerService[F],
     withdrawalCombinerService: WithdrawalCombinerService[F]
-  ): F[L0CombinerService[F]] = Async[F].delay {
+  ): L0CombinerService[F] =
     new L0CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
 
@@ -338,5 +337,4 @@ object L0CombinerService {
           logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
         }
     }
-  }
 }

@@ -141,7 +141,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -225,7 +225,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -326,7 +326,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -393,7 +393,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -461,7 +461,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -527,7 +527,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
       result <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
