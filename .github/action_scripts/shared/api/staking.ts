@@ -45,10 +45,11 @@ const createStakingUpdate = async (
 ): Promise<Signed<StakingUpdateBody>> => {
     log(`Fetching last staking reference for wallet: ${account.address}`, "INFO", context);
 
-    const { data: lastRef } = await axios.get(
+    const { data } = await axios.get(
         `${l0Url}/v1/addresses/${account.address}/stakings/last-reference`
     );
 
+    const lastRef = data.data
     log(`Last staking reference for wallet: ${account.address}: ${JSON.stringify(lastRef, null, 2)}`, "INFO", context);
 
     const body: StakingUpdateBody = {
