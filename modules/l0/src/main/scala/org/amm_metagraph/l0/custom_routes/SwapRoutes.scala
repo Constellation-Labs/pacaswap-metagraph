@@ -4,8 +4,12 @@ import cats.data.{Validated, ValidatedNec}
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
+import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
@@ -14,8 +18,10 @@ import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
+import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.LiquidityPoolCalculatedState
+import org.amm_metagraph.shared_data.types.Swap._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -28,6 +34,18 @@ object SwapRoutes {
     toTokenId: Option[CurrencyId],
     amount: Amount,
     slippagePercent: Percentage
+  )
+
+  @derive(encoder, decoder)
+  case class SwapResponse(
+    sourceAddress: Address,
+    swapFromPair: Option[CurrencyId],
+    swapToPair: Option[CurrencyId],
+    allowSpendReference: Hash,
+    minAmount: SwapAmount,
+    maxAmount: SwapAmount,
+    maxValidGsEpochProgress: EpochProgress,
+    state: String
   )
 
   object SwapQuoteRequestValidator {
@@ -97,6 +115,57 @@ case class SwapRoutes[F[_]: Async](
   import Responses._
   import SwapRoutes._
 
+  private def getSwapByAllowSpendHash(
+    allowSpendHashString: String
+  ): F[Response[F]] = {
+    def buildPendingSwapResponse(swap: Signed[SwapUpdate]): F[Response[F]] = Ok(
+      SingleResponse(
+        SwapResponse(
+          sourceAddress = swap.value.sourceAddress,
+          swapFromPair = swap.value.swapFromPair,
+          swapToPair = swap.value.swapToPair,
+          allowSpendReference = swap.value.allowSpendReference,
+          minAmount = swap.value.minAmount,
+          maxAmount = swap.value.maxAmount,
+          maxValidGsEpochProgress = swap.value.maxValidGsEpochProgress,
+          state = "Pending"
+        )
+      )
+    )
+
+    def buildConfirmedSwapResponse(swap: SwapCalculatedStateAddress): F[Response[F]] = Ok(
+      SingleResponse(
+        SwapResponse(
+          sourceAddress = swap.sourceAddress,
+          swapFromPair = swap.fromToken.identifier,
+          swapToPair = swap.toToken.identifier,
+          allowSpendReference = swap.allowSpendReference,
+          minAmount = swap.minAmount,
+          maxAmount = swap.maxAmount,
+          maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
+          state = "Confirmed"
+        )
+      )
+    )
+
+    for {
+      calculatedState <- calculatedStateService.get
+      allowSpendHash = Hash(allowSpendHashString)
+      swapCalculatedState = getSwapCalculatedState(calculatedState.state)
+      pendingAllowSpendsSwap = getPendingAllowSpendsSwapUpdates(calculatedState.state)
+      pendingSpendActionSwap = getPendingSpendActionSwapUpdates(calculatedState.state).map(_.update)
+      result <- (pendingAllowSpendsSwap ++ pendingSpendActionSwap)
+        .find(_.value.allowSpendReference === allowSpendHash)
+        .map(buildPendingSwapResponse)
+        .orElse {
+          swapCalculatedState.confirmed.value.values.flatten
+            .find(_.allowSpendReference === allowSpendHash)
+            .map(buildConfirmedSwapResponse)
+        }
+        .getOrElse(NotFound())
+    } yield result
+  }
+
   private def handleSwapQuote(
     request: SwapQuoteRequest
   ): F[Response[F]] =
@@ -131,6 +200,7 @@ case class SwapRoutes[F[_]: Async](
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "swaps" / allowSpendHashString => getSwapByAllowSpendHash(allowSpendHashString)
     case req @ POST -> Root / "swap" / "quote" =>
       for {
         swapQuoteRequest <- req.as[SwapQuoteRequest]

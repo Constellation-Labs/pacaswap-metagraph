@@ -41,7 +41,7 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
 
     log(`Fetching last reference for wallet: ${address} ${`${ammMl0Url}/v1/addresses/${address}/vote-info/last-reference`}`);
     const { data: lastRef } = await axios.get(`${ammMl0Url}/v1/addresses/${address}/vote-info/last-reference`);
-    const { hash, ordinal } = lastRef;
+    const { hash, ordinal } = lastRef.data;
     const parsedAllocations = allocations.map(allocation => [allocation.key, allocation.amount])
 
     const body = {

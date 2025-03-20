@@ -271,14 +271,14 @@ object SwapCombinerService {
                             spendActionToken
                           )
 
-                          val updatedPendingStakingCalculatedState =
+                          val updatedPendingSwapCalculatedState =
                             swapCalculatedState
                               .focus(_.pending)
                               .replace(updatedPendingSpendActionCalculatedState)
 
                           val updatedCalculatedState = oldState.calculated
                             .focus(_.operations)
-                            .modify(_.updated(OperationType.Staking, updatedPendingStakingCalculatedState))
+                            .modify(_.updated(OperationType.Swap, updatedPendingSwapCalculatedState))
 
                           val updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](
                             spendActionToken
