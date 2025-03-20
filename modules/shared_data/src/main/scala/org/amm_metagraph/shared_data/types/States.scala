@@ -1,11 +1,9 @@
 package org.amm_metagraph.shared_data.types
 
-import scala.collection.immutable.SortedSet
-
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.{SpendAction, SpendTransaction}
+import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.AllowSpend
 import io.constellationnetwork.security.signature.Signed

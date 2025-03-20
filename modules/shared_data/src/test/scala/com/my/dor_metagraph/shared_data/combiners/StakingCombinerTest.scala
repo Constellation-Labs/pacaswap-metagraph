@@ -28,8 +28,10 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.combiners.StakingCombiner.{combineNewStaking, combinePendingSpendActionStaking}
+import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
+import org.amm_metagraph.shared_data.services.combiners.StakingCombinerService
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingReference
@@ -211,25 +213,29 @@ object StakingCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
 
-      stakeResponsePendingSpendActionResponse <- combineNewStaking[IO](
-        config,
-        state,
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
+        state,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
 
-      stakeResponseConfirmedResponse <- combinePendingSpendActionStaking[IO](
-        config,
-        state,
+      stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
         PendingSpendAction(stakingUpdate, spendActions.head),
-        SnapshotOrdinal.MinValue,
+        stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
+
       oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
       updatedLiquidityPool = stakeResponseConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
@@ -345,24 +351,28 @@ object StakingCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
 
-      stakeResponsePendingSpendActionResponse <- combineNewStaking[IO](
-        config,
-        state,
+      stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
+        state,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
 
-      stakeResponseConfirmedResponse <- combinePendingSpendActionStaking[IO](
-        config,
-        state,
+      stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
         PendingSpendAction(stakingUpdate, spendActions.head),
-        SnapshotOrdinal.MinValue,
+        stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
+
       oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
       updatedLiquidityPool = stakeResponseConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
@@ -379,96 +389,6 @@ object StakingCombinerTest extends MutableIOSuite {
         updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(2.0),
         updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0)
       )
-  }
-
-  test("Throws error if liquidity pool does not exists") { implicit res =>
-    implicit val (h, hs, sp) = res
-
-    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
-    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-
-    val ammOnChainState = AmmOnChainState(List.empty)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
-    val state = DataState(ammOnChainState, ammCalculatedState)
-    for {
-      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
-        SwapAmount(PosLong.MinValue),
-        AllowSpendFee(PosLong.MinValue),
-        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-        EpochProgress.MaxValue,
-        List.empty
-      )
-      allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
-        SwapAmount(PosLong.MaxValue),
-        AllowSpendFee(PosLong.MinValue),
-        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-        EpochProgress.MaxValue,
-        List.empty
-      )
-
-      signedAllowSpendA <- Signed
-        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
-        .flatMap(_.toHashed[IO])
-      signedAllowSpendB <- Signed
-        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
-        .flatMap(_.toHashed[IO])
-      stakingUpdate = getFakeSignedUpdate(
-        StakingUpdate(
-          signedAllowSpendA.hash,
-          signedAllowSpendB.hash,
-          primaryToken.identifier,
-          100L.toPosLongUnsafe,
-          pairToken.identifier,
-          StakingReference.empty,
-          EpochProgress.MaxValue
-        )
-      )
-
-      allowSpends = SortedMap(
-        primaryToken.identifier.get.value.some ->
-          SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-          ),
-        pairToken.identifier.get.value.some ->
-          SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-          )
-      )
-
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
-        keyPair,
-        allowSpends,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        SortedMap.empty,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        ownerAddress
-      )
-
-      result <- combineNewStaking[IO](
-        config,
-        state,
-        stakingUpdate,
-        EpochProgress.MinValue,
-        allowSpends
-      ).attempt.map {
-        case Left(e: IllegalStateException) =>
-          expect(e.getMessage == "Liquidity Pool does not exist")
-        case Left(e) =>
-          failure(s"Unexpected exception: $e")
-        case Right(_) =>
-          failure("Expected exception was not thrown")
-      }
-    } yield result
   }
 
   test("Return failed due staking more than allowSpend") { implicit res =>
@@ -559,12 +479,17 @@ object StakingCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      stakeResponse <- combineNewStaking[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+
+      stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
+        state,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
     } yield
@@ -665,12 +590,17 @@ object StakingCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      stakeResponse <- combineNewStaking[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+
+      stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
+        state,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
     } yield

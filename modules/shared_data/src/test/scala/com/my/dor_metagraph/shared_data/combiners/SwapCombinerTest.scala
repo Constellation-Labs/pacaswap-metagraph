@@ -28,8 +28,10 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.combiners.SwapCombiner.{combineNewSwap, combinePendingSpendActionSwap}
+import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
+import org.amm_metagraph.shared_data.services.combiners.SwapCombinerService
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
@@ -193,10 +195,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapPendingSpendActionResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         EpochProgress.MinValue,
         allowSpends,
         CurrencyId(ownerAddress)
@@ -204,13 +210,12 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
 
-      swapConfirmedResponse <- combinePendingSpendActionSwap[IO](
-        config,
-        state,
+      swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
         PendingSpendAction(swapUpdate, spendActions.head),
-        SnapshotOrdinal.MinValue,
+        swapPendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -307,10 +312,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapPendingSpendActionResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         EpochProgress.MinValue,
         allowSpends,
         CurrencyId(ownerAddress)
@@ -318,13 +327,12 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
 
-      swapConfirmedResponse <- combinePendingSpendActionSwap[IO](
-        config,
-        state,
+      swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
         PendingSpendAction(swapUpdate, spendActions.head),
-        SnapshotOrdinal.MinValue,
+        swapPendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -422,10 +430,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         futureEpoch,
         allowSpends,
         CurrencyId(ownerAddress)
@@ -515,10 +527,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         futureEpoch,
         allowSpends,
         CurrencyId(ownerAddress)
@@ -608,10 +624,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         futureEpoch,
         allowSpends,
         CurrencyId(ownerAddress)
@@ -686,10 +706,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         EpochProgress.MinValue,
         SortedMap.empty,
         CurrencyId(ownerAddress)
@@ -763,10 +787,14 @@ object SwapCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      swapPendingSpendActionResponse <- combineNewSwap[IO](
-        config,
-        state,
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService <- PricingService.make[IO](calculatedStateService)
+      swapCombinerService <- SwapCombinerService.make[IO](config, pricingService)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
+        state,
         EpochProgress.MaxValue,
         SortedMap.empty,
         CurrencyId(ownerAddress)

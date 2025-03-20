@@ -29,8 +29,8 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.combiners.LiquidityPoolCombiner.{combineNewLiquidityPool, combinePendingSpendActionLiquidityPool}
 import org.amm_metagraph.shared_data.refined._
+import org.amm_metagraph.shared_data.services.combiners.LiquidityPoolCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{TokenInformation, buildLiquidityPoolUniqueIdentifier}
 import org.amm_metagraph.shared_data.types.States.OperationType.LiquidityPool
@@ -170,23 +170,24 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolPendingSpendActionResponse <- combineNewLiquidityPool[IO](
-        config,
-        state,
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
+        state,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
 
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
 
-      liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
-        config,
-        liquidityPoolPendingSpendActionResponse,
+      liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
         PendingSpendAction(liquidityPoolUpdate, spendActions.head),
+        liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
       updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
@@ -282,22 +283,24 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolPendingSpendActionResponse <- combineNewLiquidityPool[IO](
-        config,
-        state,
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+
+      liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
+        state,
         EpochProgress.MinValue,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
 
-      liquidityPoolConfirmedResponse <- combinePendingSpendActionLiquidityPool[IO](
-        config,
-        liquidityPoolPendingSpendActionResponse,
+      liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
         PendingSpendAction(liquidityPoolUpdate, spendActions.head),
+        liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
-        spendActions
+        spendActions,
+        SnapshotOrdinal.MinValue
       )
 
       updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
@@ -404,12 +407,14 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolResponse <- combineNewLiquidityPool[IO](
-        config,
-        state,
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+
+      liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
+        state,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield
@@ -509,13 +514,14 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
+      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
 
-      liquidityPoolResponse <- combineNewLiquidityPool[IO](
-        config,
-        state,
+      liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
+        state,
         futureEpoch,
-        allowSpends
+        allowSpends,
+        CurrencyId(ownerAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield

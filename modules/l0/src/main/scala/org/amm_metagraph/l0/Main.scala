@@ -19,7 +19,8 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.combiners.CombinerService
+import org.amm_metagraph.shared_data.services.combiners._
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonBinaryCodec, JsonWithBase64BinaryCodec}
@@ -54,7 +55,24 @@ object Main
       ValidationService.make[IO](config).asResource
     }
     globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
-    combinerService <- CombinerService.make[IO](config, globalSnapshotsStorage).asResource
+    pricingService <- PricingService.make[IO](calculatedStateService).asResource
+
+    governanceCombinerService <- GovernanceCombinerService.make[IO](config).asResource
+    liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config).asResource
+    stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService).asResource
+    swapCombinerService <- SwapCombinerService.make[IO](config, pricingService).asResource
+    withdrawalCombinerService <- WithdrawalCombinerService.make[IO].asResource
+
+    combinerService <- L0CombinerService
+      .make[IO](
+        globalSnapshotsStorage,
+        governanceCombinerService,
+        liquidityPoolCombinerService,
+        stakingCombinerService,
+        swapCombinerService,
+        withdrawalCombinerService
+      )
+      .asResource
 
     l0Service <- MetagraphL0Service
       .make[IO](
@@ -63,7 +81,8 @@ object Main
         combinerService,
         jsonBase64BinaryCodec,
         jsonBinaryCodec,
-        globalSnapshotsStorage
+        globalSnapshotsStorage,
+        pricingService
       )
       .asResource
 

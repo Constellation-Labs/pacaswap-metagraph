@@ -1,7 +1,13 @@
 package org.amm_metagraph.shared_data
 
+import scala.math.BigDecimal.RoundingMode
+
+import eu.timepit.refined.api.Refined
+import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}
 import eu.timepit.refined.types.numeric.{NonNegInt, PosLong}
+import eu.timepit.refined.{W, refineV}
+import io.circe.{Decoder, Encoder}
 
 object refined {
 
@@ -38,4 +44,44 @@ object refined {
       NonNegInt.unsafeFrom(value)
   }
 
+  implicit class BigDecimalOps(val bd: BigDecimal) extends AnyVal {
+    def toPercentage: BigDecimal = bd * BigDecimal(100)
+    def floorToLong: Long = bd.setScale(0, RoundingMode.FLOOR).toLong
+    def halfUpToLong: Long = bd.setScale(0, RoundingMode.HALF_UP).toLong
+  }
+
+  implicit class BigIntOps(val bi: BigInt) extends AnyVal {
+    def toBigDecimal: BigDecimal = BigDecimal(bi)
+  }
+
+  type PercentageRange = Interval.Closed[W.`0`.T, W.`100`.T]
+  type Percentage = BigDecimal Refined PercentageRange
+
+  object Percentage {
+    def apply(value: BigDecimal): Either[String, Percentage] =
+      refineV[PercentageRange](value)
+
+    def unsafeFrom(value: BigDecimal): Percentage =
+      refineV[PercentageRange](value) match {
+        case Right(refined) => refined
+        case Left(error)    => throw new IllegalArgumentException(s"Invalid percentage value: $value. Error: $error")
+      }
+
+    val zero: Percentage = unsafeFrom(0.0)
+    val one: Percentage = unsafeFrom(1.0)
+
+    implicit val percentageEncoder: Encoder[Percentage] =
+      Encoder.encodeBigDecimal.contramap(_.value)
+
+    implicit val percentageDecoder: Decoder[Percentage] =
+      Decoder.decodeBigDecimal.emap { value =>
+        eu.timepit.refined.refineV[PercentageRange](value)
+      }
+
+    implicit class PercentageOps(percentage: Percentage) {
+      lazy val toDecimal: BigDecimal = percentage.value.setScale(8) / BigDecimal(100)
+      def of(amount: BigDecimal): BigDecimal = amount * toDecimal
+      def toFactor: BigDecimal = BigDecimal(1) - toDecimal
+    }
+  }
 }

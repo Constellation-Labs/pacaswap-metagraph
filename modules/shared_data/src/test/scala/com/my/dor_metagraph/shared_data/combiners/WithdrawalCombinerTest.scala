@@ -12,7 +12,6 @@ import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.SpendTransaction
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
@@ -24,8 +23,8 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.combiners.WithdrawalCombiner.combineNewWithdraw
 import org.amm_metagraph.shared_data.refined.PosLongOps
+import org.amm_metagraph.shared_data.services.combiners.WithdrawalCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
@@ -142,10 +141,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalResponse <- combineNewWithdraw[IO](
-        state,
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
-        ownerAddress,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
         CurrencyId(ownerAddress)
       )
 
@@ -223,10 +225,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalResponse <- combineNewWithdraw[IO](
-        state,
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
-        secondProviderAddress,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
         CurrencyId(ownerAddress)
       )
 
@@ -239,8 +244,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     } yield
       expect.all(
         updatedLiquidityPool.poolShares.addressShares.size === 2,
-        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.0),
-        updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(0.5)
+        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(0.5),
+        updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0)
       )
   }
 
@@ -321,19 +326,25 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- combineNewWithdraw[IO](
-        state,
-        withdrawalUpdate,
-        Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Ks"),
-        CurrencyId(ownerAddress)
-      ).attempt.map {
-        case Left(e: IllegalStateException) =>
-          expect(e.getMessage == "Liquidity Pool does not exist")
-        case Left(e) =>
-          failure(s"Unexpected exception: $e")
-        case Right(_) =>
-          failure("Expected exception was not thrown")
-      }
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      result <- withdrawalCombinerService
+        .combineNew(
+          withdrawalUpdate,
+          state,
+          EpochProgress.MinValue,
+          SortedMap.empty,
+          CurrencyId(ownerAddress)
+        )
+        .attempt
+        .map {
+          case Left(e: IllegalStateException) =>
+            expect(e.getMessage === "Liquidity Pool does not exist")
+          case Left(e) =>
+            failure(s"Unexpected exception: $e")
+          case Right(_) =>
+            failure("Expected exception was not thrown")
+        }
     } yield result
   }
 
@@ -382,10 +393,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalResponse <- combineNewWithdraw[IO](
-        state,
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      withdrawalResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
-        ownerAddress,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
         CurrencyId(ownerAddress)
       )
 
@@ -447,19 +461,25 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- combineNewWithdraw[IO](
-        state,
-        withdrawalUpdate,
-        ownerAddress,
-        CurrencyId(ownerAddress)
-      ).attempt.map {
-        case Left(e: IllegalArgumentException) =>
-          expect(e.getMessage.contains("Predicate failed"))
-        case Left(e) =>
-          failure(s"Unexpected exception: $e")
-        case Right(_) =>
-          failure("Expected exception was not thrown")
-      }
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      result <- withdrawalCombinerService
+        .combineNew(
+          withdrawalUpdate,
+          state,
+          EpochProgress.MinValue,
+          SortedMap.empty,
+          CurrencyId(ownerAddress)
+        )
+        .attempt
+        .map {
+          case Left(e: IllegalArgumentException) =>
+            expect(e.getMessage.contains("Predicate failed"))
+          case Left(e) =>
+            failure(s"Unexpected exception: $e")
+          case Right(_) =>
+            failure("Expected exception was not thrown")
+        }
     } yield result
   }
 
@@ -507,10 +527,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- combineNewWithdraw[IO](
-        state,
+      withdrawalCombinerService <- WithdrawalCombinerService.make[IO]
+
+      result <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
-        ownerAddress,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
         CurrencyId(ownerAddress)
       )
 

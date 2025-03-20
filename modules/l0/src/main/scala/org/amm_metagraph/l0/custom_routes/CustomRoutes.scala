@@ -16,6 +16,7 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.Staking.StakingReference
@@ -26,7 +27,11 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.server.middleware.CORS
 import org.http4s.{HttpRoutes, Response}
 
-case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateService[F]) extends Http4sDsl[F] with PublicRoutes[F] {
+case class CustomRoutes[F[_]: Async](
+  calculatedStateService: CalculatedStateService[F],
+  pricingService: PricingService[F]
+) extends Http4sDsl[F]
+    with PublicRoutes[F] {
 
   @derive(encoder, decoder)
   case class CalculatedStateResponse(
@@ -168,13 +173,15 @@ case class CustomRoutes[F[_]: Async](calculatedStateService: CalculatedStateServ
   }
 
   val public: HttpRoutes[F] = {
-    val liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService)
+    val liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
+    val swapRoutes = SwapRoutes(calculatedStateService, pricingService)
 
     CORS.policy
       .withAllowCredentials(false)
       .httpRoutes(
         routes <+>
-          liquidityPoolRoutes.routes
+          liquidityPoolRoutes.routes <+>
+          swapRoutes.routes
       )
   }
 

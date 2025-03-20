@@ -2,8 +2,9 @@ package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.SwapAmount
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
@@ -11,6 +12,7 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
+import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
@@ -29,6 +31,25 @@ object Swap {
     minPrice: Option[PosLong],
     maxPrice: Option[PosLong],
     ordinal: SnapshotOrdinal
+  )
+
+  @derive(encoder, decoder)
+  case class SwapQuote(
+    fromTokenId: Option[CurrencyId],
+    toTokenId: Option[CurrencyId],
+    amount: Amount,
+    slippagePercent: Percentage,
+    rate: BigDecimal,
+    priceImpactPercent: BigDecimal,
+    estimatedReceived: BigInt,
+    minimumReceived: BigInt
+  )
+
+  case class SwapTokenInfo(
+    primaryTokenInformation: TokenInformation,
+    pairTokenInformation: TokenInformation,
+    receivedAmount: Amount,
+    effectivePrice: Amount
   )
 
   def getSwapCalculatedState(

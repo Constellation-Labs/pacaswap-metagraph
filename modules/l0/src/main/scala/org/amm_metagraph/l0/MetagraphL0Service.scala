@@ -3,14 +3,12 @@ package org.amm_metagraph.l0
 import cats.Applicative
 import cats.data.NonEmptyList
 import cats.effect.Async
-import cats.effect.std.Queue
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.routes.internal.ExternalUrlPrefix
-import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
@@ -20,7 +18,8 @@ import eu.timepit.refined.auto._
 import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.l0.custom_routes.CustomRoutes
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.combiners.CombinerService
+import org.amm_metagraph.shared_data.services.combiners.L0CombinerService
+import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
@@ -35,10 +34,11 @@ object MetagraphL0Service {
   def make[F[+_]: Async](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
-    combinerService: CombinerService[F],
+    combinerService: L0CombinerService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
     jsonSerializer: JsonSerializer[F],
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    pricingService: PricingService[F]
   ): F[BaseDataApplicationL0Service[F]] = Async[F].delay {
     makeBaseDataApplicationL0Service(
       calculatedStateService,
@@ -46,17 +46,19 @@ object MetagraphL0Service {
       combinerService,
       dataUpdateCodec,
       jsonSerializer,
-      globalSnapshotsStorage
+      globalSnapshotsStorage,
+      pricingService
     )
   }
 
   private def makeBaseDataApplicationL0Service[F[+_]: Async](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
-    combinerService: CombinerService[F],
+    combinerService: L0CombinerService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
     jsonSerializer: JsonSerializer[F],
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    pricingService: PricingService[F]
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
@@ -134,7 +136,7 @@ object MetagraphL0Service {
         calculatedStateService.hash(state)
 
       override def routes(implicit context: L0NodeContext[F]): HttpRoutes[F] =
-        CustomRoutes[F](calculatedStateService).public
+        CustomRoutes[F](calculatedStateService, pricingService).public
 
       override def serializeCalculatedState(
         state: AmmCalculatedState
