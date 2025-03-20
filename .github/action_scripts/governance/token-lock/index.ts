@@ -1,7 +1,7 @@
 import { dag4 } from "@stardust-collective/dag4";
 import jsSha256 from "js-sha256";
 import axios from "axios";
-import { BaseAmmMetagraphCliArgsSchema, delay, getPublicKey, log, retry, serializeBrotli } from "../../shared";
+import { BaseAmmMetagraphCliArgsSchema, delay, getGlobalSnapshotCombined, getPublicKey, log, retry, serializeBrotli, validateIfSyncedToGlobalOrdinal } from "../../shared";
 import { z } from 'zod';
 
 const tokenLocks = [
@@ -104,13 +104,17 @@ const validateTokenLockInGL0 = async (
     const { gl0Url, metagraphId } = config;
 
     try {
-
-        const { data: snapshot } = await axios.get(`${gl0Url}/global-snapshots/latest/combined`);
-        const tokenLockBalances = snapshot[1]?.tokenLockBalances;
+        const combined = await getGlobalSnapshotCombined(gl0Url);
+        const [snapshot, info] = combined;
+        const tokenLockBalances = info?.tokenLockBalances;
 
         if (tokenLockBalances?.[metagraphId]?.[walletAddress]) {
-            logger("Token lock successfully accepted in GL0.");
-            return;
+            const ordinal = snapshot.value.ordinal;
+            logger(`Token lock successfully accepted in GL0 with ordinal ${ordinal}.`);
+            return ordinal;
+        } else {
+            logger(`Token lock not found in GL0 for wallet: ${walletAddress}.`);
+            throw new Error(`Token lock not found in GL0 for wallet: ${walletAddress}.`);
         }
     } catch (error) {
         logger(`Error checking token lock in GL0: ${error.message}`, "ERROR");
@@ -165,9 +169,15 @@ const tokenLockTests = async (argsObject: object) => {
 
         const signedTokenLock = await getSignedTokenLock(config, tokenLockInfo);
         await sendSignedTokenLock(config, signedTokenLock);
-        await retry('Validate token lock in GL0')(async (logger) => {
-            await validateTokenLockInGL0(config, address, logger);
+
+        const globalOrdinal = await retry<number>('Validate token lock in GL0')(async (logger) => {
+            return await validateTokenLockInGL0(config, address, logger);
         })
+
+        await retry('Validate if calculated state is synced to global ordinal', { delayMs: 5000 })(async (logger) => {
+            await validateIfSyncedToGlobalOrdinal(config.ammMl0Url, globalOrdinal, logger);
+        });
+
         await retry('Validate voting weight')(async (logger) => {
             await validateVotingWeight(config, address, lockAmount, multiplier, logger);
         })
@@ -175,7 +185,7 @@ const tokenLockTests = async (argsObject: object) => {
         await delay(30 * 1000)
     }
 
-    log("All token locks validated successfully.");
+    log("All token locks validated successfully.", "SUCCESS");
 };
 
 export { tokenLockTests }
