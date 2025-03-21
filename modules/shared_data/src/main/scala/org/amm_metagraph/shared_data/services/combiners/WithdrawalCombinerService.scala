@@ -19,13 +19,11 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendActionWithoutInput
-import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.{StakingUpdate, SwapUpdate, WithdrawalUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, getWithdrawalCalculatedState}
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 trait WithdrawalCombinerService[F[_]] {
   def combineNew(
@@ -38,7 +36,7 @@ trait WithdrawalCombinerService[F[_]] {
 }
 
 object WithdrawalCombinerService {
-  def make[F[_]: Async: SecurityProvider]: F[WithdrawalCombinerService[F]] = Async[F].delay {
+  def make[F[_]: Async: SecurityProvider]: WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
       private case class WithdrawalTokenAmounts(
         tokenAAmount: PosLong,
@@ -138,13 +136,13 @@ object WithdrawalCombinerService {
           poolId <- buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
           liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
           liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
-          signerAddress <- signedUpdate.proofs.head.id.toAddress
+          sourceAddress <- signedUpdate.proofs.head.id.toAddress
 
-          result <- calculateWithdrawalAmounts(liquidityPool, withdrawalUpdate.shareToWithdraw, signerAddress) match {
+          result <- calculateWithdrawalAmounts(liquidityPool, withdrawalUpdate.shareToWithdraw, sourceAddress) match {
             case Some(withdrawalAmounts) =>
               val liquidityPoolUpdated = updateLiquidityPool(
                 liquidityPool,
-                signerAddress,
+                sourceAddress,
                 withdrawalUpdate.shareToWithdraw,
                 withdrawalAmounts
               )
@@ -162,7 +160,7 @@ object WithdrawalCombinerService {
                 withdrawalCalculatedState
                   .focus(_.confirmed.value)
                   .modify(current =>
-                    current.updatedWith(signerAddress) {
+                    current.updatedWith(sourceAddress) {
                       case Some(confirmedWithdrawals) => Some(confirmedWithdrawals + withdrawalCalculatedStateAddress)
                       case None                       => Some(Set(withdrawalCalculatedStateAddress))
                     }
@@ -178,7 +176,7 @@ object WithdrawalCombinerService {
                 SwapAmount(withdrawalAmounts.tokenAAmount),
                 withdrawalUpdate.tokenBId,
                 SwapAmount(withdrawalAmounts.tokenBAmount),
-                signerAddress,
+                sourceAddress,
                 currencyId
               )
 
@@ -201,5 +199,4 @@ object WithdrawalCombinerService {
         } yield result
       }
     }
-  }
 }

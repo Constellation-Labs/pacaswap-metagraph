@@ -14,7 +14,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLi
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
+import org.amm_metagraph.shared_data.validations.SharedValidations.{validateHasSingleSignature, validateIfAllowSpendsAreDuplicated}
 
 object StakingValidations {
   def stakingValidationsL1[F[_]: Async](
@@ -25,45 +25,52 @@ object StakingValidations {
   def stakingValidationsL0[F[_]: Async](
     signedStakingUpdate: Signed[StakingUpdate],
     state: AmmCalculatedState
-  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    address <- signedStakingUpdate.proofs.head.id.toAddress
-    stakingUpdate = signedStakingUpdate.value
+  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = {
+    val singleSignatureValidation = validateHasSingleSignature(signedStakingUpdate)
+    val stakingUpdate = signedStakingUpdate.value
 
-    stakingCalculatedState = getStakingCalculatedState(state)
-    pendingStaking = getPendingAllowSpendsStakingUpdates(state)
+    val stakingCalculatedState = getStakingCalculatedState(state)
+    val pendingStaking = getPendingAllowSpendsStakingUpdates(state)
 
-    liquidityPoolsCalculatedState = getLiquidityPools(state)
+    val liquidityPoolsCalculatedState = getLiquidityPools(state)
 
-    confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
-      stakingUpdate,
-      stakingCalculatedState.confirmed.value.get(address)
-    )
-    pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
+    val pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
       stakingUpdate,
       pendingStaking
     )
-    liquidityPoolExists <- validateIfLiquidityPoolExists(
-      stakingUpdate,
-      liquidityPoolsCalculatedState
-    )
-    tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-      stakingUpdate.tokenAAllowSpend,
-      stakingCalculatedState.getPendingUpdates
-    )
-    tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-      stakingUpdate.tokenBAllowSpend,
-      stakingCalculatedState.getPendingUpdates
-    )
 
-    lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, address)
+    for {
+      sourceAddress <- signedStakingUpdate.proofs.head.id.toAddress
 
-  } yield
-    confirmedTransactionAlreadyExists
-      .productR(pendingTransactionAlreadyExists)
-      .productR(liquidityPoolExists)
-      .productR(tokenAAllowSpendIsDuplicated)
-      .productR(tokenBAllowSpendIsDuplicated)
-      .productR(lastRef)
+      confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
+        stakingUpdate,
+        stakingCalculatedState.confirmed.value.get(sourceAddress)
+      )
+
+      liquidityPoolExists <- validateIfLiquidityPoolExists(
+        stakingUpdate,
+        liquidityPoolsCalculatedState
+      )
+      tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
+        stakingUpdate.tokenAAllowSpend,
+        stakingCalculatedState.getPendingUpdates
+      )
+      tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
+        stakingUpdate.tokenBAllowSpend,
+        stakingCalculatedState.getPendingUpdates
+      )
+
+      lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)
+
+    } yield
+      singleSignatureValidation
+        .productR(confirmedTransactionAlreadyExists)
+        .productR(pendingTransactionAlreadyExists)
+        .productR(liquidityPoolExists)
+        .productR(tokenAAllowSpendIsDuplicated)
+        .productR(tokenBAllowSpendIsDuplicated)
+        .productR(lastRef)
+  }
 
   private def validateIfConfirmedTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,

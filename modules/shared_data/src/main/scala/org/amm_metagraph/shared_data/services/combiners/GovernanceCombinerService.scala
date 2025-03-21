@@ -10,10 +10,10 @@ import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContex
 import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.schema.tokenLock.TokenLock
+import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
@@ -27,7 +27,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdat
 import org.amm_metagraph.shared_data.types.Governance.MonthlyReference.getMonthlyReference
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState, PendingSpendAction}
+import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -55,9 +55,9 @@ trait GovernanceCombinerService[F[_]] {
 }
 
 object GovernanceCombinerService {
-  def make[F[_]: Async: HasherSelector](
+  def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig
-  ): F[GovernanceCombinerService[F]] = Async[F].delay {
+  ): GovernanceCombinerService[F] =
     new GovernanceCombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("GovernanceCombinerService")
 
@@ -149,43 +149,46 @@ object GovernanceCombinerService {
 
               Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
           }.toList
-          oldState.calculated.allocations.usersAllocations
-            .get(signedUpdate.address)
-            .fold {
-              UserAllocations(
-                maxCredits,
-                reference,
-                globalEpochProgress,
-                allocationsUpdate
-              ).pure
-            } { existing =>
-              getUpdatedCredits(
-                existing.allocationGlobalEpochProgress.value.value,
-                existing.credits,
-                globalEpochProgress.value.value,
-                maxCredits
-              ).fold(
-                msg => logger.warn(s"Error when combining reward allocation: $msg").as(existing),
-                updatedCredits =>
-                  UserAllocations(
-                    updatedCredits,
-                    reference,
-                    globalEpochProgress,
-                    allocationsUpdate
-                  ).pure
-              )
-            }
-            .map { allocationsCalculatedState =>
-              val updatedUsersAllocation = oldState.calculated.allocations
-                .focus(_.usersAllocations)
-                .modify(_.updated(signedUpdate.address, allocationsCalculatedState))
 
-              val updatedAllocations = oldState.calculated
-                .focus(_.allocations)
-                .replace(updatedUsersAllocation)
+          signedUpdate.proofs.head.id.toAddress.flatMap { sourceAddress =>
+            oldState.calculated.allocations.usersAllocations
+              .get(sourceAddress)
+              .fold {
+                UserAllocations(
+                  maxCredits,
+                  reference,
+                  globalEpochProgress,
+                  allocationsUpdate
+                ).pure
+              } { existing =>
+                getUpdatedCredits(
+                  existing.allocationGlobalEpochProgress.value.value,
+                  existing.credits,
+                  globalEpochProgress.value.value,
+                  maxCredits
+                ) match {
+                  case Left(msg) => logger.warn(s"Error when combining reward allocation: $msg").as(existing)
+                  case Right(updatedCredits) =>
+                    UserAllocations(
+                      updatedCredits,
+                      reference,
+                      globalEpochProgress,
+                      allocationsUpdate
+                    ).pure
+                }
+              }
+              .map { allocationsCalculatedState =>
+                val updatedUsersAllocation = oldState.calculated.allocations
+                  .focus(_.usersAllocations)
+                  .modify(_.updated(sourceAddress, allocationsCalculatedState))
 
-              oldState.focus(_.calculated).replace(updatedAllocations)
-            }
+                val updatedAllocations = oldState.calculated
+                  .focus(_.allocations)
+                  .replace(updatedUsersAllocation)
+
+                oldState.focus(_.calculated).replace(updatedAllocations)
+              }
+          }
         }
       }
 
@@ -268,5 +271,4 @@ object GovernanceCombinerService {
         }
       }
     }
-  }
 }

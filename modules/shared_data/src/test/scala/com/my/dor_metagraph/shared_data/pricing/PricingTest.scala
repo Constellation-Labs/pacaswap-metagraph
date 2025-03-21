@@ -26,6 +26,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{StakingUpdate, SwapUpdat
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.Swap.SwapReference
 import weaver.SimpleIOSuite
 
 object PricingTest extends SimpleIOSuite {
@@ -106,7 +107,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -148,7 +149,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -190,7 +191,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         None,
         pairToken.identifier,
@@ -233,7 +234,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -270,7 +271,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -307,11 +308,10 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
 
       swapUpdate = getFakeSignedUpdate[SwapUpdate](
         SwapUpdate(
-          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           Hash.empty,
@@ -319,7 +319,8 @@ object PricingTest extends SimpleIOSuite {
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
           EpochProgress.MaxValue,
           PosLong.unsafeFrom(toFixedPoint(0.4)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.6)).some
+          PosLong.unsafeFrom(toFixedPoint(0.6)).some,
+          SwapReference.empty
         )
       )
 
@@ -360,7 +361,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
 
       stakingUpdate = getFakeSignedUpdate[StakingUpdate](
         StakingUpdate(

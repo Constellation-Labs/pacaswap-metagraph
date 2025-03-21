@@ -2,6 +2,8 @@ package org.amm_metagraph.shared_data
 
 import scala.math.BigDecimal.RoundingMode
 
+import io.constellationnetwork.security.hash.Hash
+
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}

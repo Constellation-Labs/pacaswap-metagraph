@@ -46,7 +46,6 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
 
     const body = {
         RewardAllocationVoteUpdate: {
-            address,
             allocations: parsedAllocations,
             parent: {
                 hash,

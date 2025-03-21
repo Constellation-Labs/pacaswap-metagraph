@@ -1,6 +1,7 @@
 package org.amm_metagraph.shared_data.types
 
 import io.constellationnetwork.currency.dataApplication.DataUpdate
+import io.constellationnetwork.ext.cats.syntax.next._
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -13,6 +14,7 @@ import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.Staking.{StakingOrdinal, StakingReference}
+import org.amm_metagraph.shared_data.types.Swap.{SwapOrdinal, SwapReference}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
 
 object DataUpdates {
@@ -56,7 +58,6 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class SwapUpdate(
-    sourceAddress: Address,
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
     allowSpendReference: Hash,
@@ -64,12 +65,14 @@ object DataUpdates {
     maxAmount: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
     minPrice: Option[PosLong],
-    maxPrice: Option[PosLong]
-  ) extends AmmUpdate
+    maxPrice: Option[PosLong],
+    parent: SwapReference
+  ) extends AmmUpdate {
+    val ordinal: SwapOrdinal = parent.ordinal.next
+  }
 
   @derive(decoder, encoder)
   case class RewardAllocationVoteUpdate(
-    address: Address,
     parent: RewardAllocationVoteReference,
     allocations: Seq[(String, PosLong)]
   ) extends AmmUpdate {

@@ -16,7 +16,7 @@ import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWe
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SharedValidations.isSignedExclusivelyByValidation
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateHasSingleSignature
 
 object GovernanceValidations {
   def rewardAllocationValidationsL1[F[_]: Async](
@@ -33,10 +33,11 @@ object GovernanceValidations {
     val lastAllocations = state.allocations
     val lastVotingWeights = state.votingWeights
     val liquidityPools = getLiquidityPoolCalculatedState(state)
-    val lastUserAllocation = lastAllocations.usersAllocations.get(rewardAllocationVoteUpdate.address)
 
     for {
-      isSignedExclusivelyBy <- isSignedExclusivelyByValidation(rewardAllocationVoteUpdate, rewardAllocationVoteUpdate.address)
+      sourceAddress <- rewardAllocationVoteUpdate.proofs.head.id.toAddress
+      lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
+      singleSignatureValidation = validateHasSingleSignature(rewardAllocationVoteUpdate)
       lastTransactionRef = lastTransactionRefValidation(rewardAllocationVoteUpdate, lastUserAllocation)
       dailyLimitAllocation = dailyLimitAllocationValidation(
         lastUserAllocation,
@@ -44,7 +45,7 @@ object GovernanceValidations {
       )
       walletHasVotingWeight = walletHasVotingWeightValidation(
         lastVotingWeights,
-        rewardAllocationVoteUpdate.address
+        sourceAddress
       )
       isValidId = allocationIdValidation(
         applicationConfig,
@@ -52,8 +53,8 @@ object GovernanceValidations {
         liquidityPools
       )
     } yield
-      isSignedExclusivelyBy
-        .productR(lastTransactionRef)
+      lastTransactionRef
+        .productR(singleSignatureValidation)
         .productR(dailyLimitAllocation)
         .productR(walletHasVotingWeight)
         .productR(isValidId)
