@@ -196,7 +196,8 @@ object SwapCombinerService {
 
             DataState(
               AmmOnChainState(updates),
-              updatedCalculatedState
+              updatedCalculatedState,
+              oldState.sharedArtifacts
             ).pure
 
           case Some(_) =>
@@ -366,7 +367,8 @@ object SwapCombinerService {
 
                         DataState(
                           AmmOnChainState(updates),
-                          updatedCalculatedState
+                          updatedCalculatedState,
+                          oldState.sharedArtifacts
                         )
                     }
 

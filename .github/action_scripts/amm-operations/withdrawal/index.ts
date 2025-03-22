@@ -93,8 +93,8 @@ const processWithdrawal = async (
         const expectedBalanceA = initialBalanceA + confirmedWithdrawal.tokenAAmount;
         const expectedBalanceB = initialBalanceB + confirmedWithdrawal.tokenBAmount;
         const results = await Promise.allSettled([
-            validateIfBalanceChanged(initialBalanceA, expectedBalanceA, tokenA, logger),
-            validateIfBalanceChanged(initialBalanceB, expectedBalanceB, tokenB, logger),
+            validateIfBalanceChanged(initialBalanceA, expectedBalanceA, tokenA),
+            validateIfBalanceChanged(initialBalanceB, expectedBalanceB, tokenB),
         ]);
 
         const failedResults = results.filter(result => result.status === 'rejected');

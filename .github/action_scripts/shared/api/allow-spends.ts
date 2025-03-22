@@ -238,7 +238,7 @@ const validateIfAmountHasBeenSpentCorrectly = async (
     const expectedBalance = initialBalance - amountToSpend - fee;
     const unspentAmount = amount - amountToSpend;
 
-    await validateIfBalanceChanged(initialBalance, expectedBalance, tokenConfig, logger);
+    await validateIfBalanceChanged(initialBalance, expectedBalance, tokenConfig);
 
     logger(
         `Balance has changed to ${expectedBalance} (Δ ${expectedBalance - initialBalance}).${unspentAmount > 0 ? ` Unspent amount returned to address (${unspentAmount})` : "Whole allow spend has been spent"

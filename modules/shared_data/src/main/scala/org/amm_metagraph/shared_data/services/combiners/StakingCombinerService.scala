@@ -236,7 +236,8 @@ object StakingCombinerService {
 
             DataState(
               AmmOnChainState(updates),
-              updatedCalculatedState
+              updatedCalculatedState,
+              oldState.sharedArtifacts
             ).pure
 
           case (Some(_), Some(_)) =>
@@ -411,7 +412,8 @@ object StakingCombinerService {
 
                         DataState(
                           AmmOnChainState(updates),
-                          updatedCalculatedState
+                          updatedCalculatedState,
+                          oldState.sharedArtifacts
                         )
                     }
                   } yield response
