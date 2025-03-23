@@ -27,7 +27,7 @@ object LiquidityPoolValidations {
     val liquidityPoolUpdate = signedLiquidityPoolUpdate.value
     for {
       liquidityPoolValidationsL1 <- liquidityPoolValidationsL1(liquidityPoolUpdate)
-      singleSignatureValidation = validateHasSingleSignature(signedLiquidityPoolUpdate)
+      signatures <- signatureValidations(signedLiquidityPoolUpdate, signedLiquidityPoolUpdate.source)
 
       calculatedState = getLiquidityPools(state)
       liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(state)
@@ -45,7 +45,7 @@ object LiquidityPoolValidations {
       )
     } yield
       liquidityPoolValidationsL1
-        .productR(singleSignatureValidation)
+        .productR(signatures)
         .productR(poolAlreadyExists)
         .productR(tokenAAllowSpendIsDuplicated)
         .productR(tokenBAllowSpendIsDuplicated)

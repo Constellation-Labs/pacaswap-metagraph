@@ -19,10 +19,13 @@ import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, Withdr
 
 object DataUpdates {
   @derive(encoder, decoder)
-  sealed trait AmmUpdate extends DataUpdate
+  sealed trait AmmUpdate extends DataUpdate {
+    val source: Address
+  }
 
   @derive(decoder, encoder)
   case class LiquidityPoolUpdate(
+    source: Address,
     tokenAAllowSpend: Hash,
     tokenBAllowSpend: Hash,
     tokenAId: Option[CurrencyId],
@@ -34,6 +37,7 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class StakingUpdate(
+    source: Address,
     tokenAAllowSpend: Hash,
     tokenBAllowSpend: Hash,
     tokenAId: Option[CurrencyId],
@@ -47,6 +51,7 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class WithdrawalUpdate(
+    source: Address,
     tokenAId: Option[CurrencyId],
     tokenBId: Option[CurrencyId],
     shareToWithdraw: ShareAmount,
@@ -58,6 +63,7 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class SwapUpdate(
+    source: Address,
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
     allowSpendReference: Hash,
@@ -73,6 +79,7 @@ object DataUpdates {
 
   @derive(decoder, encoder)
   case class RewardAllocationVoteUpdate(
+    source: Address,
     parent: RewardAllocationVoteReference,
     allocations: Seq[(String, PosLong)]
   ) extends AmmUpdate {

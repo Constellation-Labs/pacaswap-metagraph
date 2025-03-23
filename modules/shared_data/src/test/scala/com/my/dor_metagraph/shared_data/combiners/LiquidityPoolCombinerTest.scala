@@ -139,6 +139,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -252,6 +253,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -376,6 +378,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -484,6 +487,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,

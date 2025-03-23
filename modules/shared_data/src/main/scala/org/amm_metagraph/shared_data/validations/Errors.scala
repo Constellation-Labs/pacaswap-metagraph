@@ -26,6 +26,10 @@ object Errors {
     val message = "Multiple signatures"
   }
 
+  case object NotSignedExclusivelyBySourceAddress extends DataApplicationValidationError {
+    val message = "Not signed exclusively by address owner"
+  }
+
   case object ParentOrdinalLowerThenLastProcessedTxOrdinal extends DataApplicationValidationError {
     val message = "Parent ordinal lower then last processed tx ordinal"
   }

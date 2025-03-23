@@ -117,7 +117,7 @@ object StakingCombinerService {
                   )
                   .getOrElse(NonNegLong.MinValue)
               )
-              val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currency) {
+              val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currencyId) {
                 (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
               } else {
                 (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
@@ -353,7 +353,7 @@ object StakingCombinerService {
                     poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
                     liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
                     stakingReference <- HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
-                    sourceAddress <- signedStakingUpdate.proofs.head.id.toAddress
+                    sourceAddress = signedStakingUpdate.source
 
                     stakingTokenInfo <- pricingService.getStakingTokenInfo(stakingUpdate, poolId)
                     response = stakingTokenInfo match {

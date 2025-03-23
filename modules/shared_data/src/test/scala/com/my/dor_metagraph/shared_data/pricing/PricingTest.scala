@@ -30,6 +30,8 @@ import org.amm_metagraph.shared_data.types.Swap.SwapReference
 import weaver.SimpleIOSuite
 
 object PricingTest extends SimpleIOSuite {
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
 
   def buildLiquidityPoolCalculatedState(
@@ -312,6 +314,7 @@ object PricingTest extends SimpleIOSuite {
 
       swapUpdate = getFakeSignedUpdate[SwapUpdate](
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           Hash.empty,
@@ -365,6 +368,7 @@ object PricingTest extends SimpleIOSuite {
 
       stakingUpdate = getFakeSignedUpdate[StakingUpdate](
         StakingUpdate(
+          sourceAddress,
           Hash.empty,
           Hash.empty,
           primaryToken.identifier,

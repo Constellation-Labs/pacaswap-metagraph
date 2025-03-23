@@ -27,8 +27,8 @@ object WithdrawalValidations {
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-    sourceAddress <- signedWithdrawalUpdate.proofs.head.id.toAddress
-    maxSignatureValidation = validateHasSingleSignature(signedWithdrawalUpdate)
+    signatures <- signatureValidations(signedWithdrawalUpdate, signedWithdrawalUpdate.source)
+    sourceAddress = signedWithdrawalUpdate.source
     withdrawalUpdate = signedWithdrawalUpdate.value
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
@@ -55,7 +55,7 @@ object WithdrawalValidations {
     lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, sourceAddress)
 
   } yield
-    maxSignatureValidation
+    signatures
       .productR(liquidityPoolExists)
       .productR(hasEnoughShares)
       .productR(withdrawalNotPending)

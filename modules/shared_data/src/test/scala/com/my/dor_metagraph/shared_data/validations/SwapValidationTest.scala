@@ -41,6 +41,7 @@ import weaver.MutableIOSuite
 
 object SwapValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -126,6 +127,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val stakingUpdate = SwapUpdate(
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,
@@ -175,6 +177,7 @@ object SwapValidationTest extends MutableIOSuite {
         .flatMap(_.toHashed[IO])
 
       swapUpdate = SwapUpdate(
+        ownerAddress,
         primaryToken.identifier,
         pairToken.identifier,
         signedAllowSpend.hash,
@@ -220,6 +223,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,
@@ -274,6 +278,7 @@ object SwapValidationTest extends MutableIOSuite {
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,

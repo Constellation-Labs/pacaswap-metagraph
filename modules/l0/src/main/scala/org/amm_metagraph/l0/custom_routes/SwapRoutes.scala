@@ -11,7 +11,6 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
-import io.constellationnetwork.schema.tokenLock.TokenLockStatus.findValues
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
@@ -148,22 +147,20 @@ case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
 
     def buildPendingSwapResponse(signedSwap: Signed[SwapUpdate]): F[Response[F]] = {
       val swap = signedSwap.value
-      signedSwap.proofs.head.id.toAddress.flatMap { sourceAddress =>
-        Ok(
-          SingleResponse(
-            SwapResponse(
-              sourceAddress = sourceAddress,
-              swapFromPair = swap.swapFromPair,
-              swapToPair = swap.swapToPair,
-              allowSpendReference = swap.allowSpendReference,
-              minAmount = swap.minAmount,
-              maxAmount = swap.maxAmount,
-              maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
-              state = SwapState.Pending
-            )
+      Ok(
+        SingleResponse(
+          SwapResponse(
+            sourceAddress = swap.source,
+            swapFromPair = swap.swapFromPair,
+            swapToPair = swap.swapToPair,
+            allowSpendReference = swap.allowSpendReference,
+            minAmount = swap.minAmount,
+            maxAmount = swap.maxAmount,
+            maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
+            state = SwapState.Pending
           )
         )
-      }
+      )
     }
 
     def buildConfirmedSwapResponse(swap: SwapCalculatedStateAddress): F[Response[F]] =

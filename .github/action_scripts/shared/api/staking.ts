@@ -7,6 +7,7 @@ import { LastRef, Signed } from "./data-update";
 import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
 
 type StakingUpdate = {
+    source: string
     tokenAAllowSpend: string
     tokenBAllowSpend: string
     tokenAId: string | null
@@ -55,6 +56,7 @@ const createStakingUpdate = async (
     const body: StakingUpdateBody = {
         StakingUpdate: {
             maxValidGsEpochProgress: 1000,
+            source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount: tokenAAllowSpendAmount,
             tokenAId,

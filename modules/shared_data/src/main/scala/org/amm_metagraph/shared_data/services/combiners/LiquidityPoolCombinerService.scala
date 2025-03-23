@@ -298,7 +298,7 @@ object LiquidityPoolCombinerService {
               metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
                 Hasher[F].hash(pendingSpendAction.generatedSpendAction)
               )
-              sourceAddress <- signedLiquidityPoolUpdate.proofs.head.id.toAddress
+              sourceAddress = liquidityPoolUpdate.source
               globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
               allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
               updatedState <-

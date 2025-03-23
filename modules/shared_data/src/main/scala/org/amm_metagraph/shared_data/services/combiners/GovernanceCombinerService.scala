@@ -150,45 +150,43 @@ object GovernanceCombinerService {
               Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
           }.toList
 
-          signedUpdate.proofs.head.id.toAddress.flatMap { sourceAddress =>
-            oldState.calculated.allocations.usersAllocations
-              .get(sourceAddress)
-              .fold {
-                UserAllocations(
-                  maxCredits,
-                  reference,
-                  globalEpochProgress,
-                  allocationsUpdate
-                ).pure
-              } { existing =>
-                getUpdatedCredits(
-                  existing.allocationGlobalEpochProgress.value.value,
-                  existing.credits,
-                  globalEpochProgress.value.value,
-                  maxCredits
-                ) match {
-                  case Left(msg) => logger.warn(s"Error when combining reward allocation: $msg").as(existing)
-                  case Right(updatedCredits) =>
-                    UserAllocations(
-                      updatedCredits,
-                      reference,
-                      globalEpochProgress,
-                      allocationsUpdate
-                    ).pure
-                }
+          oldState.calculated.allocations.usersAllocations
+            .get(signedUpdate.source)
+            .fold {
+              UserAllocations(
+                maxCredits,
+                reference,
+                globalEpochProgress,
+                allocationsUpdate
+              ).pure
+            } { existing =>
+              getUpdatedCredits(
+                existing.allocationGlobalEpochProgress.value.value,
+                existing.credits,
+                globalEpochProgress.value.value,
+                maxCredits
+              ) match {
+                case Left(msg) => logger.warn(s"Error when combining reward allocation: $msg").as(existing)
+                case Right(updatedCredits) =>
+                  UserAllocations(
+                    updatedCredits,
+                    reference,
+                    globalEpochProgress,
+                    allocationsUpdate
+                  ).pure
               }
-              .map { allocationsCalculatedState =>
-                val updatedUsersAllocation = oldState.calculated.allocations
-                  .focus(_.usersAllocations)
-                  .modify(_.updated(sourceAddress, allocationsCalculatedState))
+            }
+            .map { allocationsCalculatedState =>
+              val updatedUsersAllocation = oldState.calculated.allocations
+                .focus(_.usersAllocations)
+                .modify(_.updated(signedUpdate.source, allocationsCalculatedState))
 
-                val updatedAllocations = oldState.calculated
-                  .focus(_.allocations)
-                  .replace(updatedUsersAllocation)
+              val updatedAllocations = oldState.calculated
+                .focus(_.allocations)
+                .replace(updatedUsersAllocation)
 
-                oldState.focus(_.calculated).replace(updatedAllocations)
-              }
-          }
+              oldState.focus(_.calculated).replace(updatedAllocations)
+            }
         }
       }
 

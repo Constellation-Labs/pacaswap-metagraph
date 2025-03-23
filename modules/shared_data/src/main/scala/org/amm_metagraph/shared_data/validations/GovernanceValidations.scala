@@ -16,7 +16,7 @@ import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWe
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateHasSingleSignature
+import org.amm_metagraph.shared_data.validations.SharedValidations._
 
 object GovernanceValidations {
   def rewardAllocationValidationsL1[F[_]: Async](
@@ -35,9 +35,9 @@ object GovernanceValidations {
     val liquidityPools = getLiquidityPoolCalculatedState(state)
 
     for {
-      sourceAddress <- rewardAllocationVoteUpdate.proofs.head.id.toAddress
+      signatures <- signatureValidations(rewardAllocationVoteUpdate, rewardAllocationVoteUpdate.source)
+      sourceAddress = rewardAllocationVoteUpdate.source
       lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
-      singleSignatureValidation = validateHasSingleSignature(rewardAllocationVoteUpdate)
       lastTransactionRef = lastTransactionRefValidation(rewardAllocationVoteUpdate, lastUserAllocation)
       dailyLimitAllocation = dailyLimitAllocationValidation(
         lastUserAllocation,
@@ -54,7 +54,7 @@ object GovernanceValidations {
       )
     } yield
       lastTransactionRef
-        .productR(singleSignatureValidation)
+        .productR(signatures)
         .productR(dailyLimitAllocation)
         .productR(walletHasVotingWeight)
         .productR(isValidId)

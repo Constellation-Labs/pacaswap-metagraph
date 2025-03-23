@@ -326,7 +326,7 @@ object SwapCombinerService {
                     swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
                     swapReference <- HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate))
                     swapUpdateHashed <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
-                    sourceAddress <- signedSwapUpdate.proofs.head.id.toAddress
+                    sourceAddress = signedSwapUpdate.source
 
                     response = swapTokenInfo match {
                       case Left(_) => oldState
