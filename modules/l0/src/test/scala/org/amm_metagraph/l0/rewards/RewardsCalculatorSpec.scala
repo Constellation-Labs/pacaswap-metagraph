@@ -2,6 +2,7 @@ package org.amm_metagraph.l0.rewards
 
 import cats.Functor
 import cats.data.EitherT
+import cats.effect.IO
 import cats.syntax.all._
 
 import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
@@ -12,6 +13,7 @@ import io.constellationnetwork.schema.tokenLock._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.all.NonNegLong
 import eu.timepit.refined.types.numeric.PosLong
+import fs2.Stream
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress._
 import org.amm_metagraph.shared_data.types.Governance.{VotingWeight, VotingWeightInfo}
@@ -368,20 +370,33 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("governance rewards should distribute entire annual pool over one year") {
     val initialEpoch = EpochProgress(NonNegLong.unsafeFrom(1000000L))
 
-    val result = (0L until epochProgress1Year).toList.traverse { offset =>
-      val epochNumber = initialEpoch.value.value + offset
-      val progress = EpochProgress(NonNegLong.unsafeFrom(epochNumber))
-      EitherT {
-        createCalculator().calculateEpochRewards(
-          progress,
-          validators,
-          createVotingPowers(progress)
-        )
-      }
+    val result = EitherT {
+      Stream
+        .range(0L, epochProgress1Year)
+        .covary[IO]
+        .evalMap { offset =>
+          val epochNumber = initialEpoch.value.value + offset
+          val progress = EpochProgress(NonNegLong.unsafeFrom(epochNumber))
+
+          createCalculator()
+            .calculateEpochRewards(
+              progress,
+              validators,
+              createVotingPowers(progress)
+            )
+            .map(_.map { rewards =>
+              rewards.governanceRewards.values.map(_.value.value).sum
+            })
+        }
+        .collect { case Right(sum) => sum }
+        .fold(0L)(_ + _)
+        .compile
+        .lastOrError
+        .map(sum => Right(sum))
+        .handleError(err => Left(NegativeValueError(-1L)))
     }
 
-    whenSuccessF(result.value) { rewards =>
-      val totalGovernanceRewards = rewards.flatMap(_.governanceRewards.values).map(_.value.value).sum
+    whenSuccessF(result.value) { totalGovernanceRewards =>
       expect(totalGovernanceRewards == config.governancePool.value.value)
     }
   }
