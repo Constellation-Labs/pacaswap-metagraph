@@ -5,6 +5,8 @@ components:
       type: object
       description: A liquidity pool update
       properties:
+        source:
+          type: string
         tokenAAllowSpend: 
           type: string
         tokenBAllowSpend: 
@@ -22,6 +24,8 @@ components:
     StakingUpdate:
       type: object
       properties:
+        source:
+          type: string
         tokenAAllowSpend: 
           type: string
         tokenBAllowSpend: 
@@ -39,6 +43,8 @@ components:
     WithdrawalUpdate: 
       type: object
       properties:
+        source:
+          type: string
         tokenAId:
           type: string
         tokenBId: 
@@ -52,7 +58,7 @@ components:
     SwapUpdate:
       type: object
       properties:
-        sourceAddress:
+        source:
           type: string
         swapFromPair:
           type: string
@@ -73,7 +79,7 @@ components:
     RewardAllocationVoteUpdate:
       type: object
       properties:
-        address:
+        source:
           type: string
         parent:
           $ref: '#/components/schemas/LastReference'

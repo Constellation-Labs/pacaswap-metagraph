@@ -35,6 +35,7 @@ import weaver.MutableIOSuite
 
 object WithdrawalValidationsTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -130,6 +131,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
@@ -168,6 +170,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           Some(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"))),
           Some(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"))),
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
@@ -218,6 +221,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(2.0)))), // More than owned
@@ -260,6 +264,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
     val withdrawalUpdate = getFakeSignedUpdate(
       WithdrawalUpdate(
+        sourceAddress,
         primaryToken.identifier,
         pairToken.identifier,
         ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),

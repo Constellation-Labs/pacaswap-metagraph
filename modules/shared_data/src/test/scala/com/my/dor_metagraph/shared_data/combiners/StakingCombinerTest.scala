@@ -43,6 +43,7 @@ import weaver.MutableIOSuite
 object StakingCombinerTest extends MutableIOSuite {
 
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
   private val config = ApplicationConfig(
@@ -182,6 +183,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingUpdate = getFakeSignedUpdate(
         StakingUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -215,9 +217,9 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](calculatedStateService)
 
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -320,6 +322,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingUpdate = getFakeSignedUpdate(
         StakingUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -353,8 +356,8 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -447,6 +450,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingUpdate = getFakeSignedUpdate(
         StakingUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -481,8 +485,8 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -558,6 +562,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingUpdate = getFakeSignedUpdate(
         StakingUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -592,8 +597,8 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService <- PricingService.make[IO](calculatedStateService)
-      stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,

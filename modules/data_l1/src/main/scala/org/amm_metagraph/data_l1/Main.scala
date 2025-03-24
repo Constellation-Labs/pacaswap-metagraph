@@ -43,7 +43,8 @@ object Main
     implicit0(hasherSelector: HasherSelector[IO]) = HasherSelector.forSync(hasherBrotli, hasherCurrent)
 
     config <- ApplicationConfigOps.readDefault[IO].asResource
-    validationService <- ValidationService.make[IO](config).asResource
-    l1Service <- DataL1Service.make[IO](validationService, jsonBase64BinaryCodec, jsonBinaryCodec).asResource
+
+    validationService = ValidationService.make[IO](config)
+    l1Service = DataL1Service.make[IO](validationService, jsonBase64BinaryCodec, jsonBinaryCodec)
   } yield l1Service).some
 }

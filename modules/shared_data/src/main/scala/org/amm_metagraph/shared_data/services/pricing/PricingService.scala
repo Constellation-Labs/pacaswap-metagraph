@@ -42,7 +42,7 @@ trait PricingService[F[_]] {
 object PricingService {
   def make[F[_]: Async](
     calculatedStateService: CalculatedStateService[F]
-  ): F[PricingService[F]] = Async[F].delay {
+  ): PricingService[F] =
     new PricingService[F] {
       private def getConfirmedLiquidityPools =
         calculatedStateService.get.map(calculatedState => getLiquidityPoolCalculatedState(calculatedState.state))
@@ -233,5 +233,4 @@ object PricingService {
         }
       } yield result
     }
-  }
 }

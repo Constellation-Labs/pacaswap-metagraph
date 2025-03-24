@@ -51,19 +51,17 @@ object Main
     implicit0(hasherSelector: HasherSelector[IO]) = HasherSelector.forSync(hasherBrotli, hasherCurrent)
     config <- ApplicationConfigOps.readDefault[IO].asResource
     calculatedStateService <- CalculatedStateService.make[IO].asResource
-    validationService <- hasherSelector.withCurrent { implicit hasher =>
-      ValidationService.make[IO](config).asResource
-    }
     globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
-    pricingService <- PricingService.make[IO](calculatedStateService).asResource
 
-    governanceCombinerService <- GovernanceCombinerService.make[IO](config).asResource
-    liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config).asResource
-    stakingCombinerService <- StakingCombinerService.make[IO](config, pricingService).asResource
-    swapCombinerService <- SwapCombinerService.make[IO](config, pricingService).asResource
-    withdrawalCombinerService <- WithdrawalCombinerService.make[IO].asResource
+    validationService = ValidationService.make[IO](config)
+    pricingService = PricingService.make[IO](calculatedStateService)
+    governanceCombinerService = GovernanceCombinerService.make[IO](config)
+    liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+    stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+    swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+    withdrawalCombinerService = WithdrawalCombinerService.make[IO]
 
-    combinerService <- L0CombinerService
+    combinerService = L0CombinerService
       .make[IO](
         globalSnapshotsStorage,
         governanceCombinerService,
@@ -72,9 +70,8 @@ object Main
         swapCombinerService,
         withdrawalCombinerService
       )
-      .asResource
 
-    l0Service <- MetagraphL0Service
+    l0Service = MetagraphL0Service
       .make[IO](
         calculatedStateService,
         validationService,
@@ -84,7 +81,6 @@ object Main
         globalSnapshotsStorage,
         pricingService
       )
-      .asResource
 
   } yield l0Service).some
 

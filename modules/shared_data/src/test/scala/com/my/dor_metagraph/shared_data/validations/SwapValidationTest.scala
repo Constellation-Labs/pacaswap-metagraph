@@ -34,12 +34,14 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.Swap.SwapReference
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
 import weaver.MutableIOSuite
 
 object SwapValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -125,7 +127,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val stakingUpdate = SwapUpdate(
-      ownerAddress,
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,
@@ -133,11 +135,12 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
       none,
-      none
+      none,
+      SwapReference.empty
     )
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(stakingUpdate)
     } yield expect.eql(Valid(()), response)
   }
@@ -182,7 +185,8 @@ object SwapValidationTest extends MutableIOSuite {
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
         EpochProgress.MinValue,
         Some(1000L),
-        Some(20000L)
+        Some(20000L),
+        SwapReference.empty
       )
       fakeSignedUpdate = getFakeSignedUpdate(swapUpdate)
 
@@ -202,7 +206,7 @@ object SwapValidationTest extends MutableIOSuite {
         ownerAddress
       )
 
-      validationService <- ValidationService.make[IO](config)
+      validationService = ValidationService.make[IO](config)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -219,7 +223,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
-      ownerAddress,
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,
@@ -227,12 +231,13 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
       none,
-      none
+      none,
+      SwapReference.empty
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -273,7 +278,7 @@ object SwapValidationTest extends MutableIOSuite {
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
-      ownerAddress,
+      sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
       Hash.empty,
@@ -281,12 +286,13 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
       Some(1000L),
-      Some(20000L)
+      Some(20000L),
+      SwapReference.empty
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,

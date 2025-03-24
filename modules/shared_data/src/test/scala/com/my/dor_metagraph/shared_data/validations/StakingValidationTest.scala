@@ -41,6 +41,7 @@ import weaver.MutableIOSuite
 
 object StakingValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -127,6 +128,7 @@ object StakingValidationTest extends MutableIOSuite {
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
 
     val stakingUpdate = StakingUpdate(
+      sourceAddress,
       Hash.empty,
       Hash.empty,
       primaryToken.identifier,
@@ -136,8 +138,8 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       response <- validationService.validateUpdate(stakingUpdate)
     } yield expect.eql(Valid(()), response)
   }
@@ -187,6 +189,7 @@ object StakingValidationTest extends MutableIOSuite {
         .flatMap(_.toHashed[IO])
 
       stakingUpdate = StakingUpdate(
+        sourceAddress,
         signedAllowSpendA.hash,
         signedAllowSpendB.hash,
         primaryToken.identifier,
@@ -217,7 +220,7 @@ object StakingValidationTest extends MutableIOSuite {
         ownerAddress
       )
 
-      validationService <- ValidationService.make[IO](config)
+      validationService = ValidationService.make[IO](config)
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -234,6 +237,7 @@ object StakingValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val stakingUpdate = StakingUpdate(
+      sourceAddress,
       Hash.empty,
       Hash.empty,
       primaryToken.identifier,
@@ -244,8 +248,9 @@ object StakingValidationTest extends MutableIOSuite {
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
+
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
@@ -302,6 +307,7 @@ object StakingValidationTest extends MutableIOSuite {
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = StakingUpdate(
+      sourceAddress,
       Hash.empty,
       Hash.empty,
       primaryToken.identifier,
@@ -313,8 +319,8 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
+    val validationService = ValidationService.make[IO](config)
     for {
-      validationService <- ValidationService.make[IO](config)
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,

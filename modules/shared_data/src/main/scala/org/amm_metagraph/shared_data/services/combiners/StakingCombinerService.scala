@@ -59,7 +59,7 @@ object StakingCombinerService {
   def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig,
     pricingService: PricingService[F]
-  ): F[StakingCombinerService[F]] = Async[F].delay {
+  ): StakingCombinerService[F] =
     new StakingCombinerService[F] {
 
       private def updateLiquidityPool(
@@ -110,7 +110,14 @@ object StakingCombinerService {
         } else {
           (maybeTokenInformation, maybeAllowSpendTokenA, maybeAllowSpendTokenB).mapN {
             (tokenInformation, allowSpendTokenA, allowSpendTokenB) =>
-              val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currency) {
+              val expireEpochProgress = EpochProgress(
+                NonNegLong
+                  .from(
+                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+                  )
+                  .getOrElse(NonNegLong.MinValue)
+              )
+              val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currencyId) {
                 (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
               } else {
                 (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
@@ -118,33 +125,25 @@ object StakingCombinerService {
               if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
                 FailedCalculatedState(
                   AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
-                  EpochProgress(
-                    NonNegLong.unsafeFrom(
-                      lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                    )
-                  ),
+                  expireEpochProgress,
                   signedUpdate
                 ).some
               } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
                 FailedCalculatedState(
                   AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
-                  EpochProgress(
-                    NonNegLong.unsafeFrom(
-                      lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                    )
-                  ),
+                  expireEpochProgress,
                   signedUpdate
                 ).some
               } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
                 FailedCalculatedState(
                   AllowSpendExpired(allowSpendTokenA.signed.value),
-                  EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+                  expireEpochProgress,
                   signedUpdate
                 ).some
               } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
                 FailedCalculatedState(
                   AllowSpendExpired(allowSpendTokenB.signed.value),
-                  EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+                  expireEpochProgress,
                   signedUpdate
                 ).some
               } else {
@@ -351,16 +350,16 @@ object StakingCombinerService {
                   oldState.pure
                 } else {
                   for {
-                    signerAddress <- signedStakingUpdate.proofs.head.id.toAddress
                     poolId <- buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
                     liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
                     stakingReference <- HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
+                    sourceAddress = signedStakingUpdate.source
 
                     stakingTokenInfo <- pricingService.getStakingTokenInfo(stakingUpdate, poolId)
                     response = stakingTokenInfo match {
                       case Left(_) => oldState
                       case Right(updatedTokenInformation) =>
-                        val liquidityPoolUpdated = updateLiquidityPool(liquidityPool, signerAddress, updatedTokenInformation)
+                        val liquidityPoolUpdated = updateLiquidityPool(liquidityPool, sourceAddress, updatedTokenInformation)
                         val stakingCalculatedStateAddress =
                           StakingCalculatedStateAddress(
                             stakingUpdate.tokenAAllowSpend,
@@ -375,7 +374,7 @@ object StakingCombinerService {
                           stakingCalculatedState
                             .focus(_.confirmed.value)
                             .modify(current =>
-                              current.updatedWith(signerAddress) {
+                              current.updatedWith(sourceAddress) {
                                 case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
                                 case None                 => Some(Set(stakingCalculatedStateAddress))
                               }
@@ -402,8 +401,6 @@ object StakingCombinerService {
                 }
             } yield updatedState
         }
-
       }
     }
-  }
 }

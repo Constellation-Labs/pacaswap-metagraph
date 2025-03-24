@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { BaseConfig, buildLiquidityPoolUniqueIdentifier, createAccount, createSignedAllowSpend, createStakingUpdate, createTokenConfig, delay, getBalance, getCalculatedState, getLiquidityPool, log, retry, sendDataUpdate, sendSignedAllowSpend, throwInContext, TokenConfig, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfBalanceChanged, validateIfHasEnoughBalanceForAllowSpend, validateIfSyncedToGlobalOrdinal, validateLiquidityPoolAmountChanged, validateStakingCreated } from "../../shared";
-import { getCurrentEpochProgress, getCurrentOrdinal } from "../../shared/api/snapshot";
 import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global-snapshot-increasing";
 
 const InputsSchema = z

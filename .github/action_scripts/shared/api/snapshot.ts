@@ -17,9 +17,12 @@ type CurrencySnapshot = Snapshot & {
 }
 
 type SnapshotInfo = {
-    value: {
-        activeAllowSpends: {
-            [key: string]: string[];
+    activeAllowSpends: {
+        [key: string]: string[];
+    };
+    tokenLockBalances: {
+        [key: string]: {
+            [key: string]: number;
         };
     };
 }

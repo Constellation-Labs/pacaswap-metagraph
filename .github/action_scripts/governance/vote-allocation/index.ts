@@ -1,6 +1,6 @@
 import { dag4 } from "@stardust-collective/dag4";
 import axios from "axios";
-import { delay, getPublicKey, log, retry, BaseAmmMetagraphCliArgsSchema, serializeBase64 } from "../../shared";
+import { delay, getPublicKey, log, retry, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate } from "../../shared";
 import { z } from 'zod';
 
 const voteAllocations = [{
@@ -41,13 +41,13 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
 
     log(`Fetching last reference for wallet: ${address} ${`${ammMl0Url}/v1/addresses/${address}/vote-info/last-reference`}`);
     const { data: lastRef } = await axios.get(`${ammMl0Url}/v1/addresses/${address}/vote-info/last-reference`);
-    const { hash, ordinal } = lastRef;
+    const { hash, ordinal } = lastRef.data;
     const parsedAllocations = allocations.map(allocation => [allocation.key, allocation.amount])
 
     const body = {
         RewardAllocationVoteUpdate: {
-            address,
             allocations: parsedAllocations,
+            source: address,
             parent: {
                 hash,
                 ordinal
@@ -68,19 +68,6 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
         proofs: [{ id: publicKey, signature }],
     };
 };
-
-const sendSignedVoteAllocation = async (config, signedVoteAllocation) => {
-    const { ammDl1Url } = config;
-    try {
-        log("Sending signed vote allocation...");
-        await axios.post(`${ammDl1Url}/data`, signedVoteAllocation);
-        log("Signed vote allocation sent successfully.");
-    } catch (error) {
-        log(`Error sending signed vote allocation: ${error.message}`, "ERROR");
-        throw error;
-    }
-};
-
 
 const validateVoteAllocations = async (
     config: ReturnType<typeof createConfig>,
@@ -149,21 +136,20 @@ const voteAllocationTests = async (argsObject: object) => {
         const { address } = voteAllocationInfo;
 
         const signedVoteAllocation = await getSignedVoteAllocation(config, voteAllocationInfo);
-        await sendSignedVoteAllocation(config, signedVoteAllocation);
+        await sendDataUpdate(config.ammDl1Url, signedVoteAllocation);
+
         await retry('Validate voting weight')(async (logger) => {
             await validateVoteAllocations(config, address, logger)
         })
+
         await delay(10000)
     }
 
-    log(`Waiting 2 minutes to check if the allocations were clear and the rewards filled`)
-    await delay(120 * 1000)
-
-    await retry('Validate allocations rewards')(async (logger) => {
+    await retry('Validate allocations rewards', { delayMs: 5000, maxAttempts: 24 })(async (logger) => {
         await validateAllocationsRewards(config, logger)
     })
 
-    log("All vote allocations validated successfully.");
+    log("All vote allocations validated successfully.", "SUCCESS");
 };
 
 export { voteAllocationTests }

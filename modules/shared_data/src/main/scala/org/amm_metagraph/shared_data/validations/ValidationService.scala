@@ -34,7 +34,7 @@ trait ValidationService[F[_]] {
 object ValidationService {
   def make[F[_]: Async: SecurityProvider: HasherSelector](
     applicationConfig: ApplicationConfig
-  ): F[ValidationService[F]] = Async[F].delay {
+  ): ValidationService[F] =
     new ValidationService[F] {
       private def validateL1(update: AmmUpdate): F[DataApplicationValidationErrorOr[Unit]] = update match {
         case stakingUpdate: StakingUpdate                           => stakingValidationsL1(stakingUpdate)
@@ -54,10 +54,11 @@ object ValidationService {
             new IllegalStateException("lastSyncGlobalSnapshot unavailable")
           )
           result <- signedUpdate.value match {
-            case stakingUpdate: StakingUpdate             => stakingValidationsL0(Signed(stakingUpdate, signedUpdate.proofs), state)
-            case withdrawalUpdate: WithdrawalUpdate       => withdrawalValidationsL0(Signed(withdrawalUpdate, signedUpdate.proofs), state)
-            case liquidityPoolUpdate: LiquidityPoolUpdate => liquidityPoolValidationsL0(liquidityPoolUpdate, state)
-            case swapUpdate: SwapUpdate                   => swapValidationsL0(swapUpdate, state)
+            case stakingUpdate: StakingUpdate       => stakingValidationsL0(Signed(stakingUpdate, signedUpdate.proofs), state)
+            case withdrawalUpdate: WithdrawalUpdate => withdrawalValidationsL0(Signed(withdrawalUpdate, signedUpdate.proofs), state)
+            case liquidityPoolUpdate: LiquidityPoolUpdate =>
+              liquidityPoolValidationsL0(Signed(liquidityPoolUpdate, signedUpdate.proofs), state)
+            case swapUpdate: SwapUpdate => swapValidationsL0(Signed(swapUpdate, signedUpdate.proofs), state)
             case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
               rewardAllocationValidationsL0(
                 applicationConfig,
@@ -80,5 +81,4 @@ object ValidationService {
         .traverse(validateL0(_, state.calculated))
         .map(_.combineAll)
     }
-  }
 }

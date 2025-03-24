@@ -51,7 +51,7 @@ object SpendTransactions {
       NonEmptyList.of(
         SpendTransaction(
           hashedAllowSpend.hash.some,
-          hashedAllowSpend.currency,
+          hashedAllowSpend.currencyId,
           hashedAllowSpend.amount,
           hashedAllowSpend.source,
           hashedAllowSpend.destination
@@ -74,14 +74,14 @@ object SpendTransactions {
       NonEmptyList.of(
         SpendTransaction(
           hashedAllowSpendA.hash.some,
-          hashedAllowSpendA.currency,
+          hashedAllowSpendA.currencyId,
           hashedAllowSpendA.amount,
           hashedAllowSpendA.source,
           hashedAllowSpendA.destination
         ),
         SpendTransaction(
           hashedAllowSpendB.hash.some,
-          hashedAllowSpendB.currency,
+          hashedAllowSpendB.currencyId,
           hashedAllowSpendB.amount,
           hashedAllowSpendB.source,
           hashedAllowSpendB.destination

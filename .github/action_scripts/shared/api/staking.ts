@@ -7,6 +7,7 @@ import { LastRef, Signed } from "./data-update";
 import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
 
 type StakingUpdate = {
+    source: string
     tokenAAllowSpend: string
     tokenBAllowSpend: string
     tokenAId: string | null
@@ -45,15 +46,17 @@ const createStakingUpdate = async (
 ): Promise<Signed<StakingUpdateBody>> => {
     log(`Fetching last staking reference for wallet: ${account.address}`, "INFO", context);
 
-    const { data: lastRef } = await axios.get(
+    const { data } = await axios.get(
         `${l0Url}/v1/addresses/${account.address}/stakings/last-reference`
     );
 
+    const lastRef = data.data
     log(`Last staking reference for wallet: ${account.address}: ${JSON.stringify(lastRef, null, 2)}`, "INFO", context);
 
     const body: StakingUpdateBody = {
         StakingUpdate: {
             maxValidGsEpochProgress: 1000,
+            source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount: tokenAAllowSpendAmount,
             tokenAId,

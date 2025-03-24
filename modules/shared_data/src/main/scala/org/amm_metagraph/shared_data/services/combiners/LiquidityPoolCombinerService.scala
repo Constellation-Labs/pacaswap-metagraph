@@ -24,7 +24,7 @@ import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAccept
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate, RewardAllocationVoteUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
@@ -60,7 +60,7 @@ trait LiquidityPoolCombinerService[F[_]] {
 object LiquidityPoolCombinerService {
   def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig
-  ): F[LiquidityPoolCombinerService[F]] = Async[F].delay {
+  ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("LiquidityPoolCombinerService")
       private def validateUpdate(
@@ -78,37 +78,37 @@ object LiquidityPoolCombinerService {
           ).some
         } else {
           (maybeAllowSpendTokenA, maybeAllowSpendTokenB).mapN { (allowSpendTokenA, allowSpendTokenB) =>
+            val expireEpochProgress = EpochProgress(
+              NonNegLong
+                .from(
+                  lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+                )
+                .getOrElse(NonNegLong.MinValue)
+            )
+
             val update = signedUpdate.value
             if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
               FailedCalculatedState(
                 AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
-                EpochProgress(
-                  NonNegLong.unsafeFrom(
-                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                  )
-                ),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
               FailedCalculatedState(
                 AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
-                EpochProgress(
-                  NonNegLong.unsafeFrom(
-                    lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                  )
-                ),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
               FailedCalculatedState(
                 AllowSpendExpired(allowSpendTokenA.signed.value),
-                EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
               FailedCalculatedState(
                 AllowSpendExpired(allowSpendTokenB.signed.value),
-                EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+                expireEpochProgress,
                 signedUpdate
               ).some
             } else {
@@ -295,10 +295,10 @@ object LiquidityPoolCombinerService {
           case Some(value) => handleFailedUpdate(updates, oldState, value, liquidityPoolsCalculatedState).pure
           case None =>
             for {
-              signerAddress <- signedLiquidityPoolUpdate.proofs.head.id.toAddress
               metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
                 Hasher[F].hash(pendingSpendAction.generatedSpendAction)
               )
+              sourceAddress = liquidityPoolUpdate.source
               globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
               allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
               updatedState <-
@@ -321,11 +321,11 @@ object LiquidityPoolCombinerService {
                         liquidityPoolUpdate.tokenBId,
                         liquidityPoolUpdate.tokenBAmount
                       ),
-                      signerAddress,
+                      sourceAddress,
                       BigInt(amountA) * BigInt(amountB),
                       PoolShares(
                         poolTotalShares,
-                        Map(signerAddress -> ShareAmount(Amount(poolTotalShares)))
+                        Map(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
                       )
                     )
 
@@ -350,7 +350,5 @@ object LiquidityPoolCombinerService {
             } yield updatedState
         }
       }
-
     }
-  }
 }

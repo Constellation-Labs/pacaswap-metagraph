@@ -41,6 +41,7 @@ import weaver.MutableIOSuite
 object LiquidityPoolCombinerTest extends MutableIOSuite {
 
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
   private val config = ApplicationConfig(
@@ -138,6 +139,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -170,7 +172,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
         state,
@@ -251,6 +253,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -283,7 +286,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -375,6 +378,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -407,7 +411,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -483,6 +487,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           primaryToken.identifier,
@@ -514,7 +519,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
-      liquidityPoolCombinerService <- LiquidityPoolCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,

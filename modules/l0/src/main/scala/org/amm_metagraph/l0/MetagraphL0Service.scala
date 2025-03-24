@@ -10,9 +10,9 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApp
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.routes.internal.ExternalUrlPrefix
 import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo, SnapshotOrdinal}
-import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
 import eu.timepit.refined.auto._
 import io.circe.{Decoder, Encoder}
@@ -24,14 +24,14 @@ import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.DataUpdateCodec._
-import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.ValidationService
 import org.http4s.circe.CirceEntityCodec.circeEntityDecoder
 import org.http4s.{EntityDecoder, HttpRoutes}
 
 object MetagraphL0Service {
 
-  def make[F[+_]: Async](
+  def make[F[+_]: Async: HasherSelector](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
     combinerService: L0CombinerService[F],
@@ -39,7 +39,7 @@ object MetagraphL0Service {
     jsonSerializer: JsonSerializer[F],
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     pricingService: PricingService[F]
-  ): F[BaseDataApplicationL0Service[F]] = Async[F].delay {
+  ): BaseDataApplicationL0Service[F] =
     makeBaseDataApplicationL0Service(
       calculatedStateService,
       validationService,
@@ -49,9 +49,8 @@ object MetagraphL0Service {
       globalSnapshotsStorage,
       pricingService
     )
-  }
 
-  private def makeBaseDataApplicationL0Service[F[+_]: Async](
+  private def makeBaseDataApplicationL0Service[F[+_]: Async: HasherSelector](
     calculatedStateService: CalculatedStateService[F],
     validationService: ValidationService[F],
     combinerService: L0CombinerService[F],
@@ -135,8 +134,10 @@ object MetagraphL0Service {
       )(implicit context: L0NodeContext[F]): F[Hash] =
         calculatedStateService.hash(state)
 
-      override def routes(implicit context: L0NodeContext[F]): HttpRoutes[F] =
-        CustomRoutes[F](calculatedStateService, pricingService).public
+      override def routes(implicit context: L0NodeContext[F]): HttpRoutes[F] = {
+        implicit val sp = context.securityProvider
+        CustomRoutes[F](calculatedStateService, pricingService, dataUpdateCodec).public
+      }
 
       override def serializeCalculatedState(
         state: AmmCalculatedState
