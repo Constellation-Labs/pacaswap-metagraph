@@ -32,14 +32,12 @@ object SwapValidations {
     val swapUpdate = signedSwapUpdate.value
 
     for {
-      sourceAddress <- signedSwapUpdate.proofs.head.id.toAddress
-
       liquidityPoolExists <- validateIfLiquidityPoolExists(
         swapUpdate,
         liquidityPoolsCalculatedState
       )
-
-      singleSignatureValidation = validateHasSingleSignature(signedSwapUpdate)
+      sourceAddress = signedSwapUpdate.source
+      signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
 
       poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
         swapUpdate,
@@ -55,7 +53,7 @@ object SwapValidations {
       lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
     } yield
       swapValidationsL1
-        .productR(singleSignatureValidation)
+        .productR(signatures)
         .productR(liquidityPoolExists)
         .productR(poolHaveEnoughTokens)
         .productR(allowSpendIsDuplicated)

@@ -12,7 +12,7 @@ import { Logger } from "../retry";
 type AllowSpend = {
     amount: number;
     approvers: string[];
-    currency: string | null;
+    currencyId: string | null;
     destination: string;
     fee: number;
     lastValidEpochProgress: number;
@@ -66,7 +66,7 @@ const createSignedAllowSpend = async (
     const body: AllowSpend = {
         amount: tokenConf.allowSpendAmount,
         approvers: [ammMetagraphId],
-        currency: tokenConf.tokenId,
+        currencyId: tokenConf.tokenId,
         destination: ammMetagraphId,
         fee: 1,
         lastValidEpochProgress: currentEpochProgress! + EPOCH_PROGRESS_VALIDITY,

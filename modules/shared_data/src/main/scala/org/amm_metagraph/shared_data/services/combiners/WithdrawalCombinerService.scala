@@ -136,7 +136,7 @@ object WithdrawalCombinerService {
           poolId <- buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
           liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
           liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
-          sourceAddress <- signedUpdate.proofs.head.id.toAddress
+          sourceAddress = signedUpdate.source
 
           result <- calculateWithdrawalAmounts(liquidityPool, withdrawalUpdate.shareToWithdraw, sourceAddress) match {
             case Some(withdrawalAmounts) =>

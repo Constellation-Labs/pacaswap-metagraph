@@ -20,6 +20,7 @@ type LiquidityPool = {
 }
 
 type LiquidityPoolUpdate = {
+    source: string
     tokenAAllowSpend: string
     tokenBAllowSpend: string
     tokenAId?: string | null
@@ -51,6 +52,7 @@ const createLiquidityPoolUpdate = async (
     const body: LiquidityUpdateBody = {
         LiquidityPoolUpdate: {
             maxValidGsEpochProgress: 1000,
+            source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount: tokenAAllowSpendAmount,
             tokenAId,

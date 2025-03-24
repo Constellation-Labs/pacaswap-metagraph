@@ -34,6 +34,7 @@ import weaver.MutableIOSuite
 
 object WithdrawalCombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -122,6 +123,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       // Withdraw 0.5 shares = 50000000 in fixed-point
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
@@ -206,6 +208,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
@@ -307,6 +310,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           Some(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"))),
           Some(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"))),
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
@@ -374,6 +378,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       // Try to withdraw 0.0000001 shares (1 in fixed-point)
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(1L))),
@@ -442,6 +447,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       // Withdraw all shares (1.0)
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))),
@@ -508,6 +514,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),

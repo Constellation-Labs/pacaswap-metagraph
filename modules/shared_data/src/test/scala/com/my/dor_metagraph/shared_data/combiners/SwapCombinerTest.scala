@@ -41,6 +41,7 @@ import weaver.MutableIOSuite
 
 object SwapCombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -166,6 +167,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -221,7 +223,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(ownerAddress).head
+      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).head
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -284,6 +286,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -339,7 +342,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(ownerAddress).head
+      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).head
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -403,6 +406,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -501,6 +505,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -599,6 +604,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -689,6 +695,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -771,6 +778,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
+          sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,

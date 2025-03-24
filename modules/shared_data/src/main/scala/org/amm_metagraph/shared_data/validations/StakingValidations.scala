@@ -14,7 +14,11 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLi
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SharedValidations.{validateHasSingleSignature, validateIfAllowSpendsAreDuplicated}
+import org.amm_metagraph.shared_data.validations.SharedValidations.{
+  signatureValidations,
+  validateHasSingleSignature,
+  validateIfAllowSpendsAreDuplicated
+}
 
 object StakingValidations {
   def stakingValidationsL1[F[_]: Async](
@@ -26,7 +30,6 @@ object StakingValidations {
     signedStakingUpdate: Signed[StakingUpdate],
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = {
-    val singleSignatureValidation = validateHasSingleSignature(signedStakingUpdate)
     val stakingUpdate = signedStakingUpdate.value
 
     val stakingCalculatedState = getStakingCalculatedState(state)
@@ -40,7 +43,8 @@ object StakingValidations {
     )
 
     for {
-      sourceAddress <- signedStakingUpdate.proofs.head.id.toAddress
+      signatures <- signatureValidations(signedStakingUpdate, signedStakingUpdate.source)
+      sourceAddress = signedStakingUpdate.source
 
       confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
         stakingUpdate,
@@ -63,7 +67,7 @@ object StakingValidations {
       lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)
 
     } yield
-      singleSignatureValidation
+      signatures
         .productR(confirmedTransactionAlreadyExists)
         .productR(pendingTransactionAlreadyExists)
         .productR(liquidityPoolExists)

@@ -40,6 +40,7 @@ import weaver.MutableIOSuite
 
 object CombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
+  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -167,6 +168,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -309,6 +311,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
@@ -440,6 +443,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
           tokenAId,
