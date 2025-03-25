@@ -61,7 +61,7 @@ object SpendTransactions {
           metagraphGeneratedCurrencyId,
           SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
           ammMetagraphId,
-          hashedAllowSpend.destination
+          hashedAllowSpend.source
         )
       )
     )
