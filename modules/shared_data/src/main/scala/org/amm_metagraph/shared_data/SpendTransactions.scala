@@ -16,27 +16,29 @@ import eu.timepit.refined.types.numeric.PosLong
 
 object SpendTransactions {
 
-  def generateSpendActionWithoutInput(
-    token: Option[CurrencyId],
-    amount: SwapAmount,
-    destination: Address,
-    ammMetagraphId: Address
+  def generateSpendActionWithoutAllowSpends(
+    fromTokenAId: Option[CurrencyId],
+    amountA: SwapAmount,
+    fromTokenBId: Option[CurrencyId],
+    amountB: SwapAmount,
+    toDestination: Address,
+    ammMetagraphId: CurrencyId
   ): SpendAction =
     SpendAction(
       NonEmptyList.of(
         SpendTransaction(
           none,
-          token,
-          amount,
-          ammMetagraphId,
-          destination
+          fromTokenAId,
+          amountA,
+          ammMetagraphId.value,
+          toDestination
         ),
         SpendTransaction(
           none,
-          token,
-          amount,
-          ammMetagraphId,
-          destination
+          fromTokenBId,
+          amountB,
+          ammMetagraphId.value,
+          toDestination
         )
       )
     )
@@ -61,28 +63,30 @@ object SpendTransactions {
           metagraphGeneratedCurrencyId,
           SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
           ammMetagraphId,
-          hashedAllowSpend.destination
+          hashedAllowSpend.source
         )
       )
     )
 
   def generateSpendAction(
     hashedAllowSpendA: Hashed[AllowSpend],
-    hashedAllowSpendB: Hashed[AllowSpend]
+    tokenAAmount: SwapAmount,
+    hashedAllowSpendB: Hashed[AllowSpend],
+    tokenBAmount: SwapAmount
   ): SpendAction =
     SpendAction(
       NonEmptyList.of(
         SpendTransaction(
           hashedAllowSpendA.hash.some,
           hashedAllowSpendA.currencyId,
-          hashedAllowSpendA.amount,
+          tokenAAmount,
           hashedAllowSpendA.source,
           hashedAllowSpendA.destination
         ),
         SpendTransaction(
           hashedAllowSpendB.hash.some,
           hashedAllowSpendB.currencyId,
-          hashedAllowSpendB.amount,
+          tokenBAmount,
           hashedAllowSpendB.source,
           hashedAllowSpendB.destination
         )

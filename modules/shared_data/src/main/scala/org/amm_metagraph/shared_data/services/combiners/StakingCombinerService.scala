@@ -12,7 +12,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
@@ -288,7 +288,12 @@ object StakingCombinerService {
                         case Some(failedCalculatedState) =>
                           handleFailedUpdate(updates, oldState, failedCalculatedState, stakingCalculatedState)
                         case None =>
-                          val spendAction = generateSpendAction(allowSpendTokenA, allowSpendTokenB)
+                          val spendAction = generateSpendAction(
+                            allowSpendTokenA,
+                            SwapAmount(updatedTokenInformation.primaryTokenInformation.amount),
+                            allowSpendTokenB,
+                            SwapAmount(updatedTokenInformation.pairTokenInformation.amount)
+                          )
 
                           val updatedPendingAllowSpendCalculatedState =
                             removePendingAllowSpend(stakingCalculatedState, pendingSignedUpdate)

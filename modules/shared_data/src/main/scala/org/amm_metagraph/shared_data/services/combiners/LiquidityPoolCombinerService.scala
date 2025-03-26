@@ -12,7 +12,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
@@ -245,7 +245,12 @@ object LiquidityPoolCombinerService {
                   case Some(failedCalculatedState) =>
                     handleFailedUpdate(updates, oldState, failedCalculatedState, liquidityPoolsCalculatedState).pure
                   case None =>
-                    val spendAction = generateSpendAction(allowSpendTokenA, allowSpendTokenB)
+                    val spendAction = generateSpendAction(
+                      allowSpendTokenA,
+                      SwapAmount(liquidityPoolUpdate.tokenAAmount),
+                      allowSpendTokenB,
+                      SwapAmount(liquidityPoolUpdate.tokenBAmount)
+                    )
 
                     val updatedPendingAllowSpendCalculatedState =
                       removePendingAllowSpend(liquidityPoolsCalculatedState, signedUpdate)

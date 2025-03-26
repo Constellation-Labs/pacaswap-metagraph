@@ -18,7 +18,7 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.SpendTransactions.generateSpendActionWithoutInput
+import org.amm_metagraph.shared_data.SpendTransactions.generateSpendActionWithoutAllowSpends
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -105,22 +105,6 @@ object WithdrawalCombinerService {
         )
       }
 
-      private def generateSpendTransactions(
-        tokenA: Option[CurrencyId],
-        tokenAAmount: SwapAmount,
-        tokenB: Option[CurrencyId],
-        tokenBAmount: SwapAmount,
-        destination: Address,
-        ammMetagraphId: CurrencyId
-      ): SortedSet[SharedArtifact] = {
-        val spendTransactionTokenA = generateSpendActionWithoutInput(tokenA, tokenAAmount, ammMetagraphId.value, destination)
-        val spendTransactionTokenB = generateSpendActionWithoutInput(tokenB, tokenBAmount, ammMetagraphId.value, destination)
-        SortedSet[SharedArtifact](
-          spendTransactionTokenA,
-          spendTransactionTokenB
-        )
-      }
-
       def combineNew(
         signedUpdate: Signed[WithdrawalUpdate],
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
@@ -171,12 +155,12 @@ object WithdrawalCombinerService {
                   .focus(_.confirmed.value)
                   .modify(_.updated(poolId.value, liquidityPoolUpdated))
 
-              val spendTransactions = generateSpendTransactions(
-                withdrawalUpdate.tokenAId,
+              val spendAction = generateSpendActionWithoutAllowSpends(
+                signedUpdate.tokenAId,
                 SwapAmount(withdrawalAmounts.tokenAAmount),
-                withdrawalUpdate.tokenBId,
+                signedUpdate.tokenBId,
                 SwapAmount(withdrawalAmounts.tokenBAmount),
-                sourceAddress,
+                signedUpdate.source,
                 currencyId
               )
 
@@ -186,10 +170,12 @@ object WithdrawalCombinerService {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
+              val updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](spendAction)
+
               DataState[AmmOnChainState, AmmCalculatedState](
                 AmmOnChainState(updates),
                 updatedCalculatedState,
-                spendTransactions
+                updatedSharedArtifacts
               ).pure[F]
 
             case None =>

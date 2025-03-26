@@ -78,7 +78,9 @@ object DataUpdates {
   }
 
   @derive(decoder, encoder)
-  case class ResetCalculatedState() extends AmmUpdate
+  case class ResetCalculatedState(
+    source: Address
+  ) extends AmmUpdate
 
   @derive(decoder, encoder)
   case class RewardAllocationVoteUpdate(
