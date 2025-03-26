@@ -9,6 +9,8 @@ import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.checkerframework.checker.units.qual.Current
+import io.constellationnetwork.schema.swap.CurrencyId
 
 object SharedValidations {
   private def isSignedExclusivelyBySourceValidation[F[_]: Async: SecurityProvider, A](
@@ -31,6 +33,12 @@ object SharedValidations {
   } yield
     singleSignatureValidation
       .productR(exclusivelySignedBySourceAddress)
+
+  def validateIfTokenIdsAreTheSame(
+    tokenAId: Option[CurrencyId],
+    tokenBId: Option[CurrencyId]
+  ): DataApplicationValidationErrorOr[Unit] =
+    TokenIdsAreTheSame.whenA(tokenAId === tokenBId)
 
   def validateIfAllowSpendsAreDuplicated(
     allowSpendRef: Hash,

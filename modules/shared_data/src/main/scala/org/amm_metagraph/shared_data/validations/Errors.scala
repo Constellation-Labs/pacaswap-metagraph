@@ -121,4 +121,8 @@ object Errors {
   case object DuplicatedOperation extends DataApplicationValidationError {
     val message = "Duplicated operation"
   }
+
+  case object TokenIdsAreTheSame extends DataApplicationValidationError {
+    val message = "Token ids are the same but should be different"
+  }
 }

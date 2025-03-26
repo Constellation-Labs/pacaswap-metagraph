@@ -20,8 +20,11 @@ import org.amm_metagraph.shared_data.validations.SharedValidations._
 object WithdrawalValidations {
   def withdrawalValidationsL1[F[_]: Async](
     withdrawalUpdate: WithdrawalUpdate
-  ): F[DataApplicationValidationErrorOr[Unit]] =
-    valid.pure
+  ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
+    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
+
+    tokenIdsAreTheSame
+  }
 
   def withdrawalValidationsL0[F[_]: Async: HasherSelector](
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
@@ -33,6 +36,8 @@ object WithdrawalValidations {
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
+
+    tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
 
     liquidityPoolExists <- validateIfLiquidityPoolExists(
       withdrawalUpdate,
@@ -56,6 +61,7 @@ object WithdrawalValidations {
 
   } yield
     signatures
+      .productR(tokenIdsAreTheSame)
       .productR(liquidityPoolExists)
       .productR(hasEnoughShares)
       .productR(withdrawalNotPending)

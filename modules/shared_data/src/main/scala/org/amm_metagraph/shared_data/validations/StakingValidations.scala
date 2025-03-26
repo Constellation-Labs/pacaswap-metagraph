@@ -16,15 +16,18 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations.{
   signatureValidations,
-  validateHasSingleSignature,
-  validateIfAllowSpendsAreDuplicated
+  validateIfAllowSpendsAreDuplicated,
+  validateIfTokenIdsAreTheSame
 }
 
 object StakingValidations {
   def stakingValidationsL1[F[_]: Async](
     stakingUpdate: StakingUpdate
-  ): F[DataApplicationValidationErrorOr[Unit]] =
-    valid.pure
+  ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
+    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+
+    tokenIdsAreTheSame
+  }
 
   def stakingValidationsL0[F[_]: Async](
     signedStakingUpdate: Signed[StakingUpdate],
@@ -37,14 +40,16 @@ object StakingValidations {
 
     val liquidityPoolsCalculatedState = getLiquidityPools(state)
 
-    val pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
-      stakingUpdate,
-      pendingStaking
-    )
-
     for {
       signatures <- signatureValidations(signedStakingUpdate, signedStakingUpdate.source)
       sourceAddress = signedStakingUpdate.source
+
+      pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
+        stakingUpdate,
+        pendingStaking
+      )
+
+      tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
 
       confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
         stakingUpdate,
@@ -68,6 +73,7 @@ object StakingValidations {
 
     } yield
       signatures
+        .productR(tokenIdsAreTheSame)
         .productR(confirmedTransactionAlreadyExists)
         .productR(pendingTransactionAlreadyExists)
         .productR(liquidityPoolExists)

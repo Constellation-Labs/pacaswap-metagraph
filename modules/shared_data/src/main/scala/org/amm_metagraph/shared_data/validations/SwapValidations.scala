@@ -19,9 +19,11 @@ import org.amm_metagraph.shared_data.validations.SharedValidations._
 
 object SwapValidations {
   def swapValidationsL1[F[_]: Async](
-    stakingUpdate: SwapUpdate
+    swapUpdate: SwapUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    valid
+    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+
+    tokenIdsAreTheSame
   }
 
   def swapValidationsL0[F[_]: Async: SecurityProvider](
@@ -38,7 +40,7 @@ object SwapValidations {
       )
       sourceAddress = signedSwapUpdate.source
       signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
-
+      tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
       poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
         swapUpdate,
         liquidityPoolsCalculatedState
@@ -54,6 +56,7 @@ object SwapValidations {
     } yield
       swapValidationsL1
         .productR(signatures)
+        .productR(tokenIdsAreTheSame)
         .productR(liquidityPoolExists)
         .productR(poolHaveEnoughTokens)
         .productR(allowSpendIsDuplicated)
