@@ -29,8 +29,7 @@ object Withdrawal {
     tokenAId: Option[CurrencyId],
     tokenBId: Option[CurrencyId],
     shareToWithdraw: ShareAmount,
-    parent: WithdrawalReference,
-    ordinal: WithdrawalOrdinal
+    parent: WithdrawalReference
   )
 
   @derive(decoder, encoder, order, ordering)
@@ -63,13 +62,6 @@ object Withdrawal {
       .get(OperationType.Withdrawal)
       .collect { case t: WithdrawalCalculatedState => t }
       .getOrElse(WithdrawalCalculatedState.empty)
-
-  def getPendingAllowSpendsWithdrawalUpdates(
-    state: AmmCalculatedState
-  ): Set[Signed[WithdrawalUpdate]] =
-    getWithdrawalCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[WithdrawalUpdate]) => signedUpdate
-    }
 
   def getPendingSpendActionWithdrawalUpdates(
     state: AmmCalculatedState

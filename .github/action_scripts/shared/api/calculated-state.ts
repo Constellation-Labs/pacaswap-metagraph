@@ -2,8 +2,9 @@ import axios from "axios";
 import { throwInContext } from "../log";
 import { Logger } from "../retry";
 import { Signed } from "./signed";
-import { ConfirmedLiquidityPoolCalculatedState, LiquidityPool, LiquidityPoolUpdate } from "./liquidity-pool";
+import { ConfirmedLiquidityPoolCalculatedState, LiquidityPoolUpdate } from "./liquidity-pool";
 import { ConfirmedStakingCalculatedState, StakingUpdate } from "./staking";
+import { ConfirmedWithdrawalCalculatedState, WithdrawalUpdate } from "./withdrawal";
 
 type OperationCalculatedState<C, U> = {
     confirmed: C
@@ -24,6 +25,9 @@ type CalculatedState = {
         };
         Staking: {
             StakingCalculatedState: OperationCalculatedState<ConfirmedStakingCalculatedState, StakingUpdate>
+        };
+        Withdrawal: {
+            WithdrawalCalculatedState: OperationCalculatedState<ConfirmedWithdrawalCalculatedState, WithdrawalUpdate>
         };
     }
 }

@@ -3,6 +3,7 @@ package org.amm_metagraph.l0.custom_routes
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.ext.http4s.AddressVar
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.CurrencyId
 
@@ -11,9 +12,10 @@ import derevo.derive
 import io.circe.generic.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPoolCalculatedState}
+import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.ember.core.Shared
 import org.http4s.{HttpRoutes, Response}
 
 object LiquidityPoolRoutes {
@@ -45,6 +47,18 @@ object LiquidityPoolRoutes {
         k = pool.k,
         totalShared = pool.poolShares.totalShares.value
       )
+  }
+
+  @derive(encoder, decoder)
+  case class LiquidityPoolSharesResponse(
+    poolId: PoolId,
+    address: Address,
+    shares: ShareAmount
+  )
+
+  object LiquidityPoolSharesResponse {
+    def from(pool: LiquidityPool, address: Address): Option[LiquidityPoolSharesResponse] =
+      pool.poolShares.addressShares.get(address).map(shares => LiquidityPoolSharesResponse(pool.poolId, address, shares))
   }
 }
 
@@ -87,19 +101,9 @@ case class LiquidityPoolRoutes[F[_]: Async](
 
   private def getLiquidityPoolByPoolId(
     poolId: String
-  ): F[Option[LiquidityPoolResponse]] =
-    calculatedStateService.get.flatMap { calculatedState =>
-      val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state)
-
-      liquidityPoolCalculatedState.confirmed.value.get(poolId).traverseFilter { lp =>
-        pricingService
-          .getLiquidityPoolPrices(lp.poolId)
-          .map {
-            case Right((tokenAPrice, tokenBPrice)) if tokenAPrice > 0 && tokenBPrice > 0 =>
-              Some(LiquidityPoolResponse.from(lp, tokenAPrice, tokenBPrice))
-            case _ => None
-          }
-      }
+  ): F[Option[LiquidityPool]] =
+    calculatedStateService.get.map { calculatedState =>
+      getLiquidityPoolCalculatedState(calculatedState.state).confirmed.value.get(poolId)
     }
 
   private def handleGetLiquidityPools(
@@ -117,10 +121,32 @@ case class LiquidityPoolRoutes[F[_]: Async](
   private def handleGetLiquidityPoolByPoolId(
     poolId: String
   ): F[Response[F]] =
-    getLiquidityPoolByPoolId(poolId).flatMap { maybeLiquidityPool =>
-      maybeLiquidityPool.fold(NotFound()) { liquidityPool =>
-        Ok(SingleResponse(liquidityPool))
-      }
+    getLiquidityPoolByPoolId(poolId).flatMap {
+      case Some(pool) =>
+        pricingService
+          .getLiquidityPoolPrices(pool.poolId)
+          .flatMap {
+            case Right((tokenAPrice, tokenBPrice)) if tokenAPrice > 0 && tokenBPrice > 0 =>
+              Ok(SingleResponse(LiquidityPoolResponse.from(pool, tokenAPrice, tokenBPrice)))
+            case _ =>
+              NotFound()
+          }
+      case None =>
+        NotFound()
+    }
+
+  private def handleGetLiquidityPoolShares(
+    poolId: String,
+    address: Address
+  ): F[Response[F]] =
+    getLiquidityPoolByPoolId(poolId).flatMap {
+      case Some(pool) =>
+        LiquidityPoolSharesResponse.from(pool, address) match {
+          case Some(shares) => Ok(SingleResponse(shares))
+          case None         => Ok(SingleResponse(LiquidityPoolSharesResponse(pool.poolId, address, ShareAmount.empty)))
+        }
+      case None =>
+        NotFound()
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
@@ -132,6 +158,11 @@ case class LiquidityPoolRoutes[F[_]: Async](
     case GET -> Root / "liquidity-pools" / poolId =>
       handleGetLiquidityPoolByPoolId(
         poolId
+      )
+    case GET -> Root / "liquidity-pools" / poolId / "shares" / AddressVar(address) =>
+      handleGetLiquidityPoolShares(
+        poolId,
+        address
       )
   }
 }

@@ -2,11 +2,6 @@ import axios from "axios"
 import { log, throwInContext } from "../log"
 import { Signed } from "./signed";
 
-type LastRef = {
-    ordinal: number
-    hash: string
-}
-
 const sendDataUpdate = async <T>(
     dataL1Url: string,
     update: Signed<T>,
@@ -21,4 +16,4 @@ const sendDataUpdate = async <T>(
     }
 }
 
-export { sendDataUpdate, type Signed, type LastRef }
+export { sendDataUpdate }

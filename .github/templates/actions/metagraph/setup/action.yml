@@ -31,9 +31,16 @@ runs:
       shell: bash
       run: |
         if [ -n "${{ inputs.TEMPLATE_NAME }}" ]; then
-          HASH=${{ hashFiles('.github/templates/metagraphs/**') }}
+          echo "Using template: ${{ inputs.TEMPLATE_NAME }}"
+          TEMPLATE_PATH=".github/templates/metagraphs/${{ inputs.TEMPLATE_NAME }}"
+          echo "Template path: $TEMPLATE_PATH"
+          ls -la $TEMPLATE_PATH || echo "Template directory not found"
+          # Use the bash variable directly in the hashFiles function
+          HASH=${{ hashFiles(format('.github/templates/metagraphs/{0}/**', inputs.TEMPLATE_NAME)) }}
+          echo "Template hash: $HASH"
         else
           HASH=${{ hashFiles('modules/**', 'project/**', 'build.sbt', 'version.sbt') }}
+          echo "Project hash: $HASH"
         fi
         echo "hash=$HASH" >> $GITHUB_OUTPUT
 

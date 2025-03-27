@@ -11,7 +11,7 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.signature.Signed
 
-import derevo.cats.eqv
+import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
@@ -31,9 +31,13 @@ object LiquidityPool {
     amount: PosLong
   )
 
-  @derive(encoder, decoder)
+  @derive(eqv, encoder, decoder)
   @newtype
   case class ShareAmount(value: Amount)
+
+  object ShareAmount {
+    val empty: ShareAmount = ShareAmount(Amount.empty)
+  }
 
   @derive(encoder, decoder)
   case class PoolShares(

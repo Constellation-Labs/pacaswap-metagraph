@@ -4,8 +4,8 @@ import { createAccount, getPublicKey } from "./account";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
 import { z } from "zod";
-import { Signed } from "./data-update";
 import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
+import { Signed } from "./signed";
 
 type LiquidityPool = {
     poolId: string
@@ -87,6 +87,26 @@ const buildLiquidityPoolUniqueIdentifier = (tokenAId: string | null, tokenBId: s
         .join('-');
 };
 
+const getLiquidityPoolShares = async (
+    ammL0Url: string,
+    poolId: string,
+    address: string,
+    logger: (message: string, level: string, context: string) => void
+) => {
+    const liquidityPoolSharesResponseSchema = z.object({
+        data: z.object({
+            poolId: z.string(),
+            address: z.string(),
+            shares: z.number()
+        })
+    });
+    const { data } = await axios.get(
+        `${ammL0Url}/v1/liquidity-pools/${poolId}/shares/${address}`
+    );
+    logger(`Liquidity pool shares received for ${poolId}`, "INFO", 'AMM');
+    return liquidityPoolSharesResponseSchema.parse(data);
+}
+
 const getLiquidityPool = async (
     ammL0Url: string,
     poolId: string,
@@ -100,7 +120,6 @@ const getLiquidityPool = async (
             `${ammL0Url}/v1/liquidity-pools/${poolId}`
         );
         logger(`Liquidity pool data received for ${poolId}`, "INFO", 'AMM');
-        logObject(data, "AMM");
 
         const TokenInfoResponseSchema = z.object({
             id: z.string().nullable(),
@@ -205,6 +224,7 @@ export {
     type LiquidityPoolUpdate,
     getLiquidityPool,
     validateLiquidityPoolAmountChanged,
+    getLiquidityPoolShares,
     buildLiquidityPoolUniqueIdentifier,
     type ConfirmedLiquidityPoolCalculatedState
 }

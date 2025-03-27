@@ -1,4 +1,4 @@
-name: Liquidity Pool Tests
+name: AMM Operations Tests
 
 on:
   workflow_call:
@@ -6,9 +6,18 @@ on:
       tessellation_version:
         required: true
         type: string
+      amm_metagraph_hash:
+        required: true
+        type: string
+      currency_metagraph_1_hash:
+        required: true
+        type: string
+      currency_metagraph_2_hash:
+        required: true
+        type: string
 
 jobs:
-  liquidity-pool-tests:
+  amm-operations-tests:
     runs-on: Ubuntu-22-64-core
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: amm-metagraph-${{ runner.os }}-${{ inputs.tessellation_version }}
+          name: amm-metagraph-${{ runner.os }}-${{ inputs.amm_metagraph_hash }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/amm-metagraph
 
       - name: Download Token A Metagraph Artifact
@@ -59,7 +68,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: currency-metagraph-1-${{ runner.os }}-${{ inputs.tessellation_version }}
+          name: currency-metagraph-1-${{ runner.os }}-${{ inputs.currency_metagraph_1_hash }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/currency-metagraph-1
 
       - name: Download Token B Metagraph Artifact
@@ -67,7 +76,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: currency-metagraph-2-${{ runner.os }}-${{ inputs.tessellation_version }}
+          name: currency-metagraph-2-${{ runner.os }}-${{ inputs.currency_metagraph_2_hash }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/currency-metagraph-2
 
       - name: Start Hypergraph
@@ -113,7 +122,7 @@ jobs:
           MAX_RETRIES: 60
           PHRASE: "No enough last N global snapshots present"
 
-      - name: Start liquidity pool tests
+      - name: Start AMM operations tests
         shell: bash
         env:
           GL0_URL: ${{ secrets.GL0_URL || 'http://localhost:9000' }}
@@ -151,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: node-log-files-${{ runner.os }}-${{ inputs.tessellation_version }}
+          name: node-log-files-${{ runner.os }}-${{ inputs.amm_metagraph_hash }}-${{ inputs.tessellation_version }}
           path: .github/code/**/*.log
           if-no-files-found: warn
           retention-days: 3

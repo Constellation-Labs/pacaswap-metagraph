@@ -6,6 +6,9 @@ on:
       tessellation_version:
         required: true
         type: string
+      amm_metagraph_hash:
+        required: true
+        type: string
 
 jobs:
   governance-tests:
@@ -50,7 +53,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: amm-metagraph-${{ runner.os }}-${{ inputs.tessellation_version }}
+          name: amm-metagraph-${{ runner.os }}-${{ inputs.amm_metagraph_hash }}-${{ inputs.tessellation_version }}
           path: .github/code/metagraphs/amm-metagraph
 
       - name: Start Hypergraph

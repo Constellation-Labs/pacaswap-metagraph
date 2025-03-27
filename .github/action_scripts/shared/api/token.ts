@@ -2,25 +2,26 @@ import { log } from "../log";
 import { createAccount } from "./account";
 import { getBalance } from "./balances";
 
-type TokenConfig = {
+type TokenConfig<T extends object = {}> = {
     account: ReturnType<typeof createAccount>;
     l1Url: string;
     l0Url: string;
     context: string;
     tokenId: string | null;
-    allowSpendAmount: number;
     isCurrency: boolean;
-}
+} & T
 
-const createTokenConfig = async (
+type TokenConfigWithAllowSpend = TokenConfig<{ allowSpendAmount: number }>
+
+const createTokenConfig = async <T extends object = {}>(
     privateKey: string,
     l0Url: string,
     l1Url: string,
     context: string,
     tokenId: string | null,
     isCurrency: boolean,
-    allowSpendAmount: number
-): Promise<TokenConfig> => {
+    custom: T = {} as T
+): Promise<TokenConfig<T>> => {
     const account = createAccount(privateKey, l0Url, l1Url);
     log(`Created token account`, "INFO", context);
 
@@ -30,9 +31,9 @@ const createTokenConfig = async (
         l0Url,
         context,
         tokenId,
-        allowSpendAmount,
-        isCurrency
+        isCurrency,
+        ...custom
     };
 }
 
-export { createTokenConfig, type TokenConfig };
+export { createTokenConfig, type TokenConfig, type TokenConfigWithAllowSpend };

@@ -13,11 +13,12 @@ import {
     TokenConfig, validateIfAllowSpendAcceptedOnCL1,
     validateIfAllowSpendAcceptedOnGL0,
     validateIfAllowSpendAcceptedOnML0,
-    validateIfBalanceChanged,
+    validateIfBalanceChangedByAllowSpend,
     validateIfHasEnoughBalanceForAllowSpend,
     validateIfSyncedToGlobalOrdinal,
     validateLiquidityPoolCreated,
-    getBalance
+    getBalance,
+    TokenConfigWithAllowSpend
 } from "../../shared";
 import { delay, retry } from "../../shared/retry";
 import { lastGlobalSnapshotIncreasingTest } from '../../shared/tests/last-global-snapshot-increasing';
@@ -46,15 +47,15 @@ const createConfig = (baseConfig: BaseConfig): LiquidityPoolConfig => {
 
 const processLiquidityPoolCreation = async (
     config: LiquidityPoolConfig,
-    tokenA: TokenConfig,
-    tokenB: TokenConfig,
+    tokenA: TokenConfigWithAllowSpend,
+    tokenB: TokenConfigWithAllowSpend,
 ) => {
     const privateKey = config.inputs.privateKey;
     const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
 
-    const initialBalanceA = await getBalance(tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context);
+    const initialBalanceA = await getBalance(tokenA);
     log(`Initial balance: ${initialBalanceA}`, "INFO", tokenA.context);
-    const initialBalanceB = await getBalance(tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context);
+    const initialBalanceB = await getBalance(tokenB);
     log(`Initial balance: ${initialBalanceB}`, "INFO", tokenB.context);
 
     log("Created LP provider account", "INFO", 'AMM');
@@ -136,8 +137,8 @@ const processLiquidityPoolCreation = async (
     });
 
     await retry('Validate if balance changed')(async (logger) => {
-        await validateIfBalanceChanged(initialBalanceA, signedAllowSpendA, tokenA.account, tokenA.l0Url, tokenA.isCurrency, tokenA.context, logger);
-        await validateIfBalanceChanged(initialBalanceB, signedAllowSpendB, tokenB.account, tokenB.l0Url, tokenB.isCurrency, tokenB.context, logger);
+        await validateIfBalanceChangedByAllowSpend(initialBalanceA, signedAllowSpendA, tokenA, logger);
+        await validateIfBalanceChangedByAllowSpend(initialBalanceB, signedAllowSpendB, tokenB, logger);
     });
 }
 
@@ -151,7 +152,7 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         'A',
         config.tokenAId,
         true,
-        config.inputs.tokenAAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
     );
 
     const tokenB = await createTokenConfig(
@@ -161,7 +162,7 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         'B',
         config.tokenBId,
         true,
-        config.inputs.tokenBAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
     await processLiquidityPoolCreation(config, tokenA, tokenB);
@@ -177,7 +178,7 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         'DAG',
         null,
         false,
-        config.inputs.tokenAAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
     );
 
     const tokenB = await createTokenConfig(
@@ -187,7 +188,7 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         'B',
         config.tokenBId,
         true,
-        config.inputs.tokenBAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
     await processLiquidityPoolCreation(config, tokenA, tokenB);
@@ -203,7 +204,7 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
         'DAG',
         null,
         false,
-        config.inputs.tokenAAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
     );
 
     const tokenB = await createTokenConfig(
@@ -213,7 +214,7 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
         'DAG',
         null,
         false,
-        config.inputs.tokenBAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
     try {
@@ -234,7 +235,7 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
         'A',
         config.tokenAId,
         true,
-        config.inputs.tokenAAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
     );
 
     const tokenB = await createTokenConfig(
@@ -244,7 +245,7 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
         'A',
         config.tokenAId,
         true,
-        config.inputs.tokenBAllowSpendAmount
+        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
     try {

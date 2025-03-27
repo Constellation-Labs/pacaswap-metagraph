@@ -23,6 +23,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
+import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -63,12 +64,14 @@ object L0CombinerService {
       ): (
         Set[PendingSpendAction[LiquidityPoolUpdate]],
         Set[PendingSpendAction[StakingUpdate]],
-        Set[PendingSpendAction[SwapUpdate]]
+        Set[PendingSpendAction[SwapUpdate]],
+        Set[PendingSpendAction[WithdrawalUpdate]]
       ) =
         (
           getPendingSpendActionLiquidityPoolUpdates(state),
           getPendingSpendActionStakingUpdates(state),
-          getPendingSpendActionSwapUpdates(state)
+          getPendingSpendActionSwapUpdates(state),
+          getPendingSpendActionWithdrawalUpdates(state)
         )
 
       private def combineIncomingUpdates(
@@ -194,6 +197,7 @@ object L0CombinerService {
         currencySnapshotOrdinal: SnapshotOrdinal,
         pendingSpendActionLiquidityPool: Set[PendingSpendAction[LiquidityPoolUpdate]],
         pendingSpendActionStaking: Set[PendingSpendAction[StakingUpdate]],
+        pendingSpendActionWithdrawals: Set[PendingSpendAction[WithdrawalUpdate]],
         pendingSpendActionSwap: Set[PendingSpendAction[SwapUpdate]],
         stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState]
       )(implicit context: L0NodeContext[F]) =
@@ -223,8 +227,19 @@ object L0CombinerService {
                     currencySnapshotOrdinal
                   )
               }
+            stateUpdatedByWithdrawals <- pendingSpendActionWithdrawals.toList
+              .foldLeftM(stateUpdatedByStaking) { (acc, pendingWithdrawal) =>
+                logger.info(s"Trying to combine pending spend actions Withdrawal: $pendingWithdrawal") >>
+                  withdrawalCombinerService.combinePendingSpendAction(
+                    pendingWithdrawal,
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal
+                  )
+              }
             stateUpdatedBySwap <- pendingSpendActionSwap.toList
-              .foldLeftM(stateUpdatedByStaking) { (acc, pendingSwap) =>
+              .foldLeftM(stateUpdatedByWithdrawals) { (acc, pendingSwap) =>
                 logger.info(s"Trying to combine pending spend actions Swap: $pendingSwap") >>
                   swapCombinerService.combinePendingSpendAction(
                     pendingSwap,
@@ -273,7 +288,7 @@ object L0CombinerService {
           (pendingAllowSpendLiquidityPool, pendingAllowSpendStaking, pendingAllowSpendSwap) =
             getPendingAllowSpendsUpdates(newState.calculated)
 
-          (pendingSpendActionLiquidityPool, pendingSpendActionStaking, pendingSpendActionSwap) =
+          (pendingSpendActionLiquidityPool, pendingSpendActionStaking, pendingSpendActionSwap, pendingSpendActionWithdrawals) =
             getPendingSpendActionsUpdates(newState.calculated)
 
           updatedVotingWeights = governanceCombinerService.updateVotingWeights(
@@ -319,6 +334,7 @@ object L0CombinerService {
               currentSnapshotOrdinal,
               pendingSpendActionLiquidityPool,
               pendingSpendActionStaking,
+              pendingSpendActionWithdrawals,
               pendingSpendActionSwap,
               stateCombinedByPendingAllowSpendUpdates
             )

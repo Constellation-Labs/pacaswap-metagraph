@@ -2,11 +2,13 @@ package org.amm_metagraph.shared_data.validations
 
 import cats.effect.Async
 import cats.syntax.all._
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
+
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.validations.Errors._
 

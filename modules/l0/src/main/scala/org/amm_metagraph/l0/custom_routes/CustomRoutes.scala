@@ -46,6 +46,7 @@ case class CustomRoutes[F[_]: Async: HasherSelector: SecurityProvider](
     val governanceRoutes = GovernanceRoutes(calculatedStateService)
     val voteRoutes = VoteRoutes(calculatedStateService)
     val stakingRoutes = StakingRoutes(calculatedStateService)
+    val withdrawalRoutes = WithdrawalRoutes(calculatedStateService)
 
     CORS.policy
       .withAllowCredentials(false)
@@ -55,7 +56,8 @@ case class CustomRoutes[F[_]: Async: HasherSelector: SecurityProvider](
           swapRoutes.routes <+>
           governanceRoutes.routes <+>
           voteRoutes.routes <+>
-          stakingRoutes.routes
+          stakingRoutes.routes <+>
+          withdrawalRoutes.routes
       )
   }
 
