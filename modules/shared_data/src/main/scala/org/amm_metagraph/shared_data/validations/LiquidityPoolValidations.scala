@@ -17,7 +17,10 @@ object LiquidityPoolValidations {
   def liquidityPoolValidationsL1[F[_]: Async](
     liquidityPoolUpdate: LiquidityPoolUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    LiquidityPoolValidations.validateIfTokensArePresent(liquidityPoolUpdate)
+    val tokensArePresent = validateIfTokensArePresent(liquidityPoolUpdate)
+    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
+
+    tokensArePresent.productR(tokenIdsAreTheSame)
   }
 
   def liquidityPoolValidationsL0[F[_]: Async: SecurityProvider](
@@ -31,6 +34,7 @@ object LiquidityPoolValidations {
 
       calculatedState = getLiquidityPools(state)
       liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(state)
+      tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
       poolAlreadyExists <- validateIfPoolAlreadyExists(
         liquidityPoolUpdate,
         calculatedState
@@ -46,6 +50,7 @@ object LiquidityPoolValidations {
     } yield
       liquidityPoolValidationsL1
         .productR(signatures)
+        .productR(tokenIdsAreTheSame)
         .productR(poolAlreadyExists)
         .productR(tokenAAllowSpendIsDuplicated)
         .productR(tokenBAllowSpendIsDuplicated)
