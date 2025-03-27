@@ -86,13 +86,23 @@ object StakingValidations {
     stakingUpdate: StakingUpdate,
     maybeConfirmedStaking: Option[Set[StakingCalculatedStateAddress]]
   ): DataApplicationValidationErrorOr[Unit] =
-    StakingTransactionAlreadyExists.whenA(maybeConfirmedStaking.exists(_.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend)))
+    StakingTransactionAlreadyExists.whenA(
+      maybeConfirmedStaking.exists(
+        _.exists(staking =>
+          staking.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+        )
+      )
+    )
 
   private def validateIfPendingTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,
     maybePendingStaking: Set[Signed[StakingUpdate]]
   ): DataApplicationValidationErrorOr[Unit] =
-    StakingTransactionAlreadyExists.whenA(maybePendingStaking.exists(_.tokenAAllowSpend == stakingUpdate.tokenBAllowSpend))
+    StakingTransactionAlreadyExists.whenA(
+      maybePendingStaking.exists(staking =>
+        staking.value.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+      )
+    )
 
   private def validateIfLiquidityPoolExists[F[_]: Async](
     stakingUpdate: StakingUpdate,
