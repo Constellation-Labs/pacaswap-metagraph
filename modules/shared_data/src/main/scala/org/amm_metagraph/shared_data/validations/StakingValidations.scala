@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data.validations
 
+import cats.data.Validated.Invalid
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -107,14 +108,15 @@ object StakingValidations {
     signedStaking: Signed[StakingUpdate],
     address: Address
   ): DataApplicationValidationErrorOr[Unit] = {
-    val lastConfirmedOrdinal: Option[StakingOrdinal] = stakingCalculatedState.confirmed.value
+    val lastConfirmed: Option[StakingReference] = stakingCalculatedState.confirmed.value
       .get(address)
       .flatMap(_.maxByOption(_.parent.ordinal))
-      .map(_.parent.ordinal)
+      .map(_.parent)
 
-    lastConfirmedOrdinal match {
-      case Some(last) if last.value >= signedStaking.ordinal.value => StakingOrdinalLowerThanLastConfirmed.invalid
-      case _                                                       => valid
+    lastConfirmed match {
+      case Some(last) if signedStaking.ordinal =!= last.ordinal.next || signedStaking.parent =!= last =>
+        InvalidStakingParent.invalid
+      case _ => valid
     }
   }
 }

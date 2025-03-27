@@ -12,7 +12,7 @@ import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalReference, getWithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
@@ -116,14 +116,15 @@ object WithdrawalValidations {
     signedWithdrawal: Signed[WithdrawalUpdate],
     address: Address
   ): DataApplicationValidationErrorOr[Unit] = {
-    val lastConfirmedOrdinal: Option[WithdrawalOrdinal] = withdrawalCalculatedState.confirmed.value
+    val lastConfirmed: Option[WithdrawalReference] = withdrawalCalculatedState.confirmed.value
       .get(address)
       .flatMap(_.maxByOption(_.parent.ordinal))
-      .map(_.parent.ordinal)
+      .map(_.parent)
 
-    lastConfirmedOrdinal match {
-      case Some(last) if last.value >= signedWithdrawal.ordinal.value => WithdrawalOrdinalLowerThanLastConfirmed.invalid
-      case _                                                          => valid
+    lastConfirmed match {
+      case Some(last) if signedWithdrawal.ordinal =!= last.ordinal.next || signedWithdrawal.parent =!= last =>
+        InvalidWithdrawalParent.invalid
+      case _ => valid
     }
   }
 

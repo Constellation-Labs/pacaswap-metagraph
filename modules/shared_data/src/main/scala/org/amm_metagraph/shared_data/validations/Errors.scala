@@ -74,8 +74,8 @@ object Errors {
     val message = "Different allow spend destination"
   }
 
-  case object StakingOrdinalLowerThanLastConfirmed extends DataApplicationValidationError {
-    val message: String = "Staking ordinal lower than last confirmed"
+  case object InvalidStakingParent extends DataApplicationValidationError {
+    val message: String = "Staking parent does not match last confirmed"
   }
 
   case object WithdrawalInsufficientShares extends DataApplicationValidationError {
@@ -90,8 +90,8 @@ object Errors {
     val message: String = "Withdrawal already pending for this pool"
   }
 
-  case object WithdrawalOrdinalLowerThanLastConfirmed extends DataApplicationValidationError {
-    val message: String = "Withdrawal ordinal lower than last confirmed"
+  case object InvalidWithdrawalParent extends DataApplicationValidationError {
+    val message: String = "Withdrawal parent does not match last confirmed"
   }
 
   case object LiquidityPoolNotEnoughInformation extends DataApplicationValidationError {
