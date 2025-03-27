@@ -6,7 +6,7 @@ import cats.syntax.all._
 
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
@@ -27,7 +27,9 @@ object Withdrawal {
   @derive(encoder, decoder)
   case class WithdrawalCalculatedStateAddress(
     tokenAId: Option[CurrencyId],
+    tokenAAmount: SwapAmount,
     tokenBId: Option[CurrencyId],
+    tokenBAmount: SwapAmount,
     shareToWithdraw: ShareAmount,
     parent: WithdrawalReference
   )

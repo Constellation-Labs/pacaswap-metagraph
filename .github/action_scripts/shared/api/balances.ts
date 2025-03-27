@@ -7,8 +7,6 @@ import { AllowSpend } from "./allow-spends";
 import { TokenConfig } from "./token";
 
 const getBalance = async (tokenConfig: TokenConfig) => {
-    log(`Getting balance for account: ${tokenConfig.account.address} `, "INFO", tokenConfig.context);
-
     try {
         const snapshotUrl = tokenConfig.isCurrency
             ? `${tokenConfig.l0Url}/snapshots/latest/combined`
@@ -32,17 +30,6 @@ const getBalance = async (tokenConfig: TokenConfig) => {
     }
 }
 
-
-const validateIfBalanceChangedByAllowSpend = async (
-    initialBalance: number,
-    tokenAllowSpend: Signed<AllowSpend>,
-    tokenConfig: TokenConfig,
-    logger: Logger
-) => {
-    const expectedBalance = initialBalance - tokenAllowSpend.value.amount - tokenAllowSpend.value.fee;
-    await validateIfBalanceChanged(initialBalance, expectedBalance, tokenConfig, logger);
-}
-
 const validateIfBalanceChanged = async (
     initialBalance: number,
     expectedBalance: number,
@@ -52,10 +39,8 @@ const validateIfBalanceChanged = async (
     const balance = await getBalance(tokenConfig);
     if (balance !== expectedBalance) {
         const msg = `Balance different than expected. Actual: ${balance} (Δ ${balance - initialBalance}). Expected: ${expectedBalance} (Δ ${expectedBalance - initialBalance})`;
-        logger(msg, "ERROR", tokenConfig.context);
         throwInContext(tokenConfig.context)(msg);
     }
-    logger(`Balance change validated!`, "INFO", tokenConfig.context);
 }
 
-export { getBalance, validateIfBalanceChangedByAllowSpend, validateIfBalanceChanged };
+export { getBalance, validateIfBalanceChanged };

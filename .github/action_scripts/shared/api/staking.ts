@@ -1,9 +1,9 @@
 import axios from "axios";
 import { createAccount, getPublicKey } from "./account";
-import { log, throwInContext } from "../log";
+import { log, Logger, logObject, throwInContext } from "../log";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
-import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
+import { getCalculatedState, isPendingAllowSpend, isPendingSpendAction, TokenInformation } from "./calculated-state";
 import { LastRef, lastRefSchema } from "./last-ref";
 import { Signed } from "./signed";
 import { singleResponseSchema } from "./response";
@@ -49,7 +49,7 @@ const createStakingUpdate = async (
     tokenBAllowSpendHash: string,
     tokenAId: string | null,
     tokenBId: string | null,
-    tokenAAllowSpendAmount: number,
+    tokenAAmount: number,
     account: ReturnType<typeof createAccount>,
     privateKey: string,
     l0Url: string,
@@ -66,7 +66,7 @@ const createStakingUpdate = async (
             maxValidGsEpochProgress: 1000,
             source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
-            tokenAAmount: tokenAAllowSpendAmount,
+            tokenAAmount,
             tokenAId,
             tokenBAllowSpend: tokenBAllowSpendHash,
             tokenBId,
@@ -99,7 +99,7 @@ const validateStakingCreated = async (
     tokenAAllowSpendHash: string,
     tokenBAllowSpendHash: string,
     account: ReturnType<typeof createAccount>,
-    logger: (message: string, type?: string, context?: string) => void = log
+    logger: Logger = log
 ) => {
 
     const calculatedState = await getCalculatedState(ammL0Url);
@@ -113,7 +113,7 @@ const validateStakingCreated = async (
 
     log(`Looking for confirmed stakings for wallet: ${account.address}`, "INFO", 'AMM')
 
-    const isConfirmedStaking = (confirmedStakings[account.address] || []).some(
+    const confirmedStaking = (confirmedStakings[account.address] || []).find(
         (staking) =>
             staking.tokenA.identifier === tokenAId
             && staking.tokenB.identifier === tokenBId
@@ -121,13 +121,19 @@ const validateStakingCreated = async (
             && staking.tokenBAllowSpend === tokenBAllowSpendHash
     );
 
-    const isPendingStaking = pendingStakings.some(
+    const isPendingAllowSpendStaking = pendingStakings.some(
         (pendingAction) => {
-            const updateValue = isPendingAllowSpend(pendingAction)
-                ? pendingAction.PendingAllowSpend.update.value
-                : pendingAction.PendingSpendAction.update.value;
+            return isPendingAllowSpend(pendingAction)
+                && pendingAction.PendingAllowSpend.update.value.tokenAId === tokenAId
+                && pendingAction.PendingAllowSpend.update.value.tokenBId === tokenBId
+        }
+    );
 
-            return updateValue.tokenAId === tokenAId && updateValue.tokenBId === tokenBId;
+    const isPendingSpendActionStaking = pendingStakings.some(
+        (pendingAction) => {
+            return isPendingSpendAction(pendingAction)
+                && pendingAction.PendingSpendAction.update.value.tokenAId === tokenAId
+                && pendingAction.PendingSpendAction.update.value.tokenBId === tokenBId
         }
     );
 
@@ -138,10 +144,13 @@ const validateStakingCreated = async (
 
     if (isFailedStaking) {
         throwInContext('AMM')("Staking creation failed.");
-    } else if (isPendingStaking) {
-        throwInContext('AMM')("Staking creation is pending.");
-    } else if (isConfirmedStaking) {
+    } else if (isPendingAllowSpendStaking) {
+        throwInContext('AMM')("Staking creation is pending (allow spend).");
+    } else if (isPendingSpendActionStaking) {
+        throwInContext('AMM')("Staking creation is pending (spend action).");
+    } else if (confirmedStaking) {
         logger("Staking creation validated!", "INFO", 'AMM')
+        return confirmedStaking
     } else {
         throwInContext('AMM')("Staking not found.");
     }

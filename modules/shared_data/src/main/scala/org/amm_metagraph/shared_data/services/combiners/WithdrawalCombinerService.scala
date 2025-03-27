@@ -50,8 +50,8 @@ object WithdrawalCombinerService {
     new WithdrawalCombinerService[F] {
 
       private case class WithdrawalTokenAmounts(
-        tokenAAmount: PosLong,
-        tokenBAmount: PosLong
+        tokenAAmount: SwapAmount,
+        tokenBAmount: SwapAmount
       )
 
       private def getExpireEpochProgress(lastSyncGlobalEpochProgress: EpochProgress): EpochProgress = EpochProgress(
@@ -135,7 +135,7 @@ object WithdrawalCombinerService {
               signedUpdate
             )
           )
-        } yield WithdrawalTokenAmounts(tokenAAmount, tokenBAmount)
+        } yield WithdrawalTokenAmounts(SwapAmount(tokenAAmount), SwapAmount(tokenBAmount))
       }
 
       private def handleFailedUpdate(
@@ -276,9 +276,9 @@ object WithdrawalCombinerService {
           withdrawalAmounts <- EitherT.fromEither[F](calculateWithdrawalAmounts(signedUpdate, liquidityPool, globalEpochProgress))
           spendAction = generateSpendActionWithoutAllowSpends(
             signedUpdate.tokenAId,
-            SwapAmount(withdrawalAmounts.tokenAAmount),
+            withdrawalAmounts.tokenAAmount,
             signedUpdate.tokenBId,
-            SwapAmount(withdrawalAmounts.tokenBAmount),
+            withdrawalAmounts.tokenBAmount,
             signedUpdate.source,
             currencyId
           )
@@ -350,7 +350,9 @@ object WithdrawalCombinerService {
                 )
                 withdrawalCalculatedStateAddress = WithdrawalCalculatedStateAddress(
                   withdrawalUpdate.tokenAId,
+                  withdrawalAmounts.tokenAAmount,
                   withdrawalUpdate.tokenBId,
+                  withdrawalAmounts.tokenBAmount,
                   withdrawalUpdate.shareToWithdraw,
                   withdrawalReference
                 )

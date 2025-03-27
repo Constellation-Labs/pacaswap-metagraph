@@ -70,21 +70,23 @@ object SpendTransactions {
 
   def generateSpendAction(
     hashedAllowSpendA: Hashed[AllowSpend],
-    hashedAllowSpendB: Hashed[AllowSpend]
+    amountToSpendA: SwapAmount,
+    hashedAllowSpendB: Hashed[AllowSpend],
+    amountToSpendB: SwapAmount
   ): SpendAction =
     SpendAction(
       NonEmptyList.of(
         SpendTransaction(
           hashedAllowSpendA.hash.some,
           hashedAllowSpendA.currencyId,
-          hashedAllowSpendA.amount,
+          amountToSpendA,
           hashedAllowSpendA.source,
           hashedAllowSpendA.destination
         ),
         SpendTransaction(
           hashedAllowSpendB.hash.some,
           hashedAllowSpendB.currencyId,
-          hashedAllowSpendB.amount,
+          amountToSpendB,
           hashedAllowSpendB.source,
           hashedAllowSpendB.destination
         )

@@ -5,7 +5,6 @@ import {
     createAccount,
     createLiquidityPoolUpdate,
     createSignedAllowSpend, createTokenConfig,
-    getCalculatedState,
     log,
     sendDataUpdate,
     sendSignedAllowSpend,
@@ -13,14 +12,14 @@ import {
     TokenConfig, validateIfAllowSpendAcceptedOnCL1,
     validateIfAllowSpendAcceptedOnGL0,
     validateIfAllowSpendAcceptedOnML0,
-    validateIfBalanceChangedByAllowSpend,
     validateIfHasEnoughBalanceForAllowSpend,
     validateIfSyncedToGlobalOrdinal,
     validateLiquidityPoolCreated,
     getBalance,
-    TokenConfigWithAllowSpend
+    validateLiquidityPoolAmountChanged,
+    validateIfAmountHasBeenSpentCorrectly
 } from "../../shared";
-import { delay, retry } from "../../shared/retry";
+import { retry } from "../../shared/retry";
 import { lastGlobalSnapshotIncreasingTest } from '../../shared/tests/last-global-snapshot-increasing';
 
 const InputsSchema = z
@@ -28,12 +27,24 @@ const InputsSchema = z
         privateKey: z.string().min(1, "key cannot be empty"),
         tokenAAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenBAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
+        tokenAToSpend: z.number().min(1, "amount must be greater than 0"),
+        tokenBToSpend: z.number().min(1, "amount must be greater than 0"),
+    })
+    .refine(({ tokenAToSpend, tokenAAllowSpendAmount }) => tokenAToSpend <= tokenAAllowSpendAmount, {
+        message: `Amount to spend on token A cannot exceed the allowed spend amount`,
+        path: ["tokenAToSpend"]
+    })
+    .refine(({ tokenBToSpend, tokenBAllowSpendAmount }) => tokenBToSpend <= tokenBAllowSpendAmount, {
+        message: `Amount to spend on token B cannot exceed the allowed spend amount`,
+        path: ["tokenBToSpend"]
     })
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
     tokenAAllowSpendAmount: 100,
     tokenBAllowSpendAmount: 200,
+    tokenAToSpend: 50,
+    tokenBToSpend: 100,
 });
 
 type LiquidityPoolConfig = BaseConfig & {
@@ -47,8 +58,14 @@ const createConfig = (baseConfig: BaseConfig): LiquidityPoolConfig => {
 
 const processLiquidityPoolCreation = async (
     config: LiquidityPoolConfig,
-    tokenA: TokenConfigWithAllowSpend,
-    tokenB: TokenConfigWithAllowSpend,
+    tokenA: TokenConfig<{
+        allowSpendAmount: number;
+        amountToSpend: number;
+    }>,
+    tokenB: TokenConfig<{
+        allowSpendAmount: number;
+        amountToSpend: number;
+    }>,
 ) => {
     const privateKey = config.inputs.privateKey;
     const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
@@ -94,11 +111,10 @@ const processLiquidityPoolCreation = async (
         tokenBAllowSpendHash,
         tokenA.tokenId,
         tokenB.tokenId,
-        tokenA.allowSpendAmount,
-        tokenB.allowSpendAmount,
+        tokenA.amountToSpend,
+        tokenB.amountToSpend,
         privateKey,
         lpProviderAccount,
-        config.ammMl0Url
     );
 
     await sendDataUpdate(config.ammDl1Url, update);
@@ -133,12 +149,44 @@ const processLiquidityPoolCreation = async (
     const maxAttempts = tokenA.tokenId === tokenB.tokenId ? 1 : 60;
 
     await retry('Validate if liquidity pool created', { maxAttempts, delayMs: 5000 })(async (logger) => {
-        await validateLiquidityPoolCreated(config.ammMl0Url, lpProviderAccount, tokenA.tokenId, tokenB.tokenId, logger);
+        await validateLiquidityPoolCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, logger);
     });
 
-    await retry('Validate if balance changed')(async (logger) => {
-        await validateIfBalanceChangedByAllowSpend(initialBalanceA, signedAllowSpendA, tokenA, logger);
-        await validateIfBalanceChangedByAllowSpend(initialBalanceB, signedAllowSpendB, tokenB, logger);
+    await retry('Validate if liquidity pool amount changed', { maxAttempts: 1 })(async (logger) => {
+        const poolId = buildLiquidityPoolUniqueIdentifier(tokenA.tokenId, tokenB.tokenId);
+        await validateLiquidityPoolAmountChanged(
+            config.ammMl0Url,
+            poolId,
+            0,
+            0,
+            tokenA.amountToSpend,
+            tokenB.amountToSpend,
+            logger
+        );
+    });
+
+    await retry('Validate if LP owner balance changed', { delayMs: 5000 })(async (logger) => {
+        const results = await Promise.allSettled([
+            validateIfAmountHasBeenSpentCorrectly(
+                initialBalanceA,
+                tokenA.amountToSpend,
+                signedAllowSpendA,
+                tokenA,
+                logger
+            ),
+            validateIfAmountHasBeenSpentCorrectly(
+                initialBalanceB,
+                tokenB.amountToSpend,
+                signedAllowSpendB,
+                tokenB,
+                logger
+            )
+        ]);
+
+        const failedResults = results.filter(result => result.status === 'rejected');
+        if (failedResults.length > 0) {
+            throwInContext('AMM')(`Balance validation failed! Checking if whole allow spends have been spent...`);
+        }
     });
 }
 
@@ -152,7 +200,10 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAToSpend
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -162,7 +213,10 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         'B',
         config.tokenBId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+            amountToSpend: config.inputs.tokenBToSpend
+        }
     );
 
     await processLiquidityPoolCreation(config, tokenA, tokenB);
@@ -178,7 +232,10 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAToSpend
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -188,7 +245,10 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         'B',
         config.tokenBId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+            amountToSpend: config.inputs.tokenBToSpend
+        }
     );
 
     await processLiquidityPoolCreation(config, tokenA, tokenB);
@@ -204,7 +264,10 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAToSpend
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -214,7 +277,10 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+            amountToSpend: config.inputs.tokenBToSpend
+        }
     );
 
     try {
@@ -235,7 +301,10 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAToSpend
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -245,7 +314,10 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+            amountToSpend: config.inputs.tokenBToSpend
+        }
     );
 
     try {

@@ -1,6 +1,6 @@
 import axios from "axios";
 import { createAccount, getPublicKey } from "./account";
-import { log, logObject, throwInContext } from "../log";
+import { log, Logger, logObject, throwInContext } from "../log";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
 import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
@@ -21,7 +21,9 @@ type WithdrawalUpdate = {
 
 type WithdrawalCalculatedStateAddress = {
     tokenAId: string | null
+    tokenAAmount: number
     tokenBId: string | null
+    tokenBAmount: number
     shareToWithdraw: number
     parent: LastRef
 }
@@ -93,7 +95,7 @@ const validateWithdrawalCreated = async (
     tokenBId: string | null,
     shareToWithdraw: number,
     account: ReturnType<typeof createAccount>,
-    logger: (message: string, type?: string, context?: string) => void = log
+    logger: Logger = log
 ) => {
 
     const calculatedState = await getCalculatedState(ammL0Url);
@@ -107,7 +109,7 @@ const validateWithdrawalCreated = async (
 
     log(`Looking for confirmed withdrawals for wallet: ${account.address}`, "INFO", 'AMM')
 
-    const isConfirmedWithdrawal = (confirmedWithdrawals[account.address] || []).some(
+    const confirmedWithdrawal = (confirmedWithdrawals[account.address] || []).find(
         (withdrawal) =>
             withdrawal.tokenAId === tokenAId
             && withdrawal.tokenBId === tokenBId
@@ -133,8 +135,9 @@ const validateWithdrawalCreated = async (
         throwInContext('AMM')("Withdrawal creation failed.");
     } else if (isPendingWithdrawal) {
         throwInContext('AMM')("Withdrawal creation is pending.");
-    } else if (isConfirmedWithdrawal) {
+    } else if (confirmedWithdrawal) {
         logger("Withdrawal creation validated!", "INFO", 'AMM')
+        return confirmedWithdrawal
     } else {
         throwInContext('AMM')("Withdrawal not found.");
     }

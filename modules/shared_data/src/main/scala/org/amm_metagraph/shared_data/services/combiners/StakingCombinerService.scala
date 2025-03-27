@@ -4,7 +4,6 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.tools.nsc.tasty.SafeEq
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
@@ -12,7 +11,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
@@ -288,7 +287,25 @@ object StakingCombinerService {
                         case Some(failedCalculatedState) =>
                           handleFailedUpdate(updates, oldState, failedCalculatedState, stakingCalculatedState)
                         case None =>
-                          val spendAction = generateSpendAction(allowSpendTokenA, allowSpendTokenB)
+                          val (amountToSpendA, amountToSpendB) =
+                            if (stakingUpdate.tokenAId === updatedTokenInformation.primaryTokenInformation.identifier) {
+                              (
+                                SwapAmount(updatedTokenInformation.primaryTokenInformation.amount),
+                                SwapAmount(updatedTokenInformation.pairTokenInformation.amount)
+                              )
+                            } else {
+                              (
+                                SwapAmount(updatedTokenInformation.pairTokenInformation.amount),
+                                SwapAmount(updatedTokenInformation.primaryTokenInformation.amount)
+                              )
+                            }
+
+                          val spendAction = generateSpendAction(
+                            allowSpendTokenA,
+                            amountToSpendA,
+                            allowSpendTokenB,
+                            amountToSpendB
+                          )
 
                           val updatedPendingAllowSpendCalculatedState =
                             removePendingAllowSpend(stakingCalculatedState, pendingSignedUpdate)
