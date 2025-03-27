@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BaseConfig, buildLiquidityPoolUniqueIdentifier, createAccount, createSignedAllowSpend, createStakingUpdate, createTokenConfig, delay, getBalance, getCalculatedState, getLiquidityPool, log, retry, sendDataUpdate, sendSignedAllowSpend, throwInContext, TokenConfig, TokenConfigWithAllowSpend, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfBalanceChangedByAllowSpend, validateIfHasEnoughBalanceForAllowSpend, validateIfSyncedToGlobalOrdinal, validateLiquidityPoolAmountChanged, validateStakingCreated } from "../../shared";
+import { BaseConfig, buildLiquidityPoolUniqueIdentifier, createAccount, createSignedAllowSpend, createStakingUpdate, createTokenConfig, delay, getBalance, getCalculatedState, getLiquidityPool, log, retry, sendDataUpdate, sendSignedAllowSpend, StakingCalculatedStateAddress, throwInContext, TokenConfig, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfAmountHasBeenSpentCorrectly, validateIfHasEnoughBalanceForAllowSpend, validateIfSyncedToGlobalOrdinal, validateLiquidityPoolAmountChanged, validateStakingCreated } from "../../shared";
 import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global-snapshot-increasing";
 
 const InputsSchema = z
@@ -7,12 +7,18 @@ const InputsSchema = z
         privateKey: z.string().min(1, "key cannot be empty"),
         tokenAAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenBAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
+        tokenAAmountToStake: z.number().min(1, "amount must be greater than 0"),
+    })
+    .refine(({ tokenAAmountToStake, tokenAAllowSpendAmount }) => tokenAAmountToStake <= tokenAAllowSpendAmount, {
+        message: `Amount to stake on token A cannot exceed the allowed spend amount`,
+        path: ["tokenAAmountToStake"]
     })
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
     tokenAAllowSpendAmount: 50,
     tokenBAllowSpendAmount: 100,
+    tokenAAmountToStake: 25,
 });
 
 type StakingConfig = BaseConfig & {
@@ -25,8 +31,13 @@ const createConfig = (baseConfig: BaseConfig): StakingConfig => {
 
 const processStakingCreation = async (
     config: StakingConfig,
-    tokenA: TokenConfigWithAllowSpend,
-    tokenB: TokenConfigWithAllowSpend,
+    tokenA: TokenConfig<{
+        allowSpendAmount: number;
+        amountToSpend: number;
+    }>,
+    tokenB: TokenConfig<{
+        allowSpendAmount: number;
+    }>,
 ) => {
     const privateKey = config.inputs.privateKey;
     const stakingProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
@@ -82,7 +93,7 @@ const processStakingCreation = async (
         tokenBAllowSpendHash,
         tokenA.tokenId,
         tokenB.tokenId,
-        tokenA.allowSpendAmount,
+        tokenA.amountToSpend,
         stakingProviderAccount,
         privateKey,
         config.ammMl0Url,
@@ -118,19 +129,46 @@ const processStakingCreation = async (
         await validateIfSyncedToGlobalOrdinal(config.ammMl0Url, globalOrdinal, logger);
     });
 
-    await retry('Validate if staking created', { delayMs: 5000 })(async (logger) => {
-        await validateStakingCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, tokenAAllowSpendHash, tokenBAllowSpendHash, stakingProviderAccount, logger);
+    const confirmedStaking = await retry<StakingCalculatedStateAddress>('Validate if staking created', { delayMs: 5000 })(async (logger) => {
+        const confirmed = await validateStakingCreated(
+            config.ammMl0Url,
+            tokenA.tokenId,
+            tokenB.tokenId,
+            tokenAAllowSpendHash,
+            tokenBAllowSpendHash,
+            stakingProviderAccount,
+            logger
+        );
+        return confirmed!
     });
 
     await retry('Validate if balance changed')(async (logger) => {
-        await validateIfBalanceChangedByAllowSpend(initialBalanceA, signedAllowSpendA, tokenA, logger);
-        await validateIfBalanceChangedByAllowSpend(initialBalanceB, signedAllowSpendB, tokenB, logger);
+        const results = await Promise.allSettled([
+            validateIfAmountHasBeenSpentCorrectly(
+                initialBalanceA,
+                tokenA.amountToSpend,
+                signedAllowSpendA,
+                tokenA,
+                logger
+            ),
+            validateIfAmountHasBeenSpentCorrectly(
+                initialBalanceB,
+                confirmedStaking.tokenB.amount,
+                signedAllowSpendB,
+                tokenB,
+                logger
+            )
+        ]);
+
+        const failedResults = results.filter(result => result.status === 'rejected');
+        if (failedResults.length > 0) {
+            throwInContext('AMM')(`Balance validation failed! Checking if whole allow spends have been spent...`);
+        }
     });
 
     await retry('Validate if liquidity pool token amount changed')(async (logger) => {
-        const tokenBPrice = signedAllowSpendB.value.amount / signedAllowSpendA.value.amount;
-        const expectedTokenABalance = tokenAPoolBalance + signedAllowSpendA.value.amount
-        const expectedTokenBBalance = tokenBPoolBalance + signedAllowSpendA.value.amount * tokenBPrice;
+        const expectedTokenABalance = tokenAPoolBalance + tokenA.amountToSpend
+        const expectedTokenBBalance = tokenBPoolBalance + confirmedStaking.tokenB.amount
 
         await validateLiquidityPoolAmountChanged(
             config.ammMl0Url,
@@ -154,7 +192,10 @@ const stakingCurrencyToCurrencyTest = async (config: StakingConfig) => {
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAAmountToStake
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -164,7 +205,9 @@ const stakingCurrencyToCurrencyTest = async (config: StakingConfig) => {
         'B',
         config.tokenBId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+        }
     );
 
     await processStakingCreation(config, tokenA, tokenB);
@@ -180,7 +223,10 @@ const stakingDagToCurrencyTest = async (config: StakingConfig) => {
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAAmountToStake
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -190,7 +236,9 @@ const stakingDagToCurrencyTest = async (config: StakingConfig) => {
         'B',
         config.tokenBId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+        }
     );
 
     await processStakingCreation(config, tokenA, tokenB);
@@ -206,7 +254,10 @@ const stakingDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAAmountToStake
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -216,7 +267,9 @@ const stakingDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
         'DAG',
         null,
         false,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+        }
     );
 
     try {
@@ -237,7 +290,10 @@ const stakingSameCurrencyTest = async (config: ReturnType<typeof createConfig>) 
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAAmountToStake
+        }
     );
 
     const tokenB = await createTokenConfig(
@@ -247,7 +303,9 @@ const stakingSameCurrencyTest = async (config: ReturnType<typeof createConfig>) 
         'A',
         config.tokenAId,
         true,
-        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+        }
     );
 
     try {

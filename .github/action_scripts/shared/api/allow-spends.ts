@@ -3,11 +3,12 @@ import { getPublicKey } from "./account";
 import { log, throwInContext } from "../log";
 import { getHash, serializeBrotli } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
-import { TokenConfig, TokenConfigWithAllowSpend } from "./token";
+import { TokenConfig } from "./token";
 import { getCurrencySnapshotCombined, getCurrentEpochProgress, getGlobalSnapshotCombined } from "./snapshot";
 import { getBalance } from "./balances";
 import { Signed } from "./signed";
 import { Logger } from "../retry";
+import { validateIfBalanceChanged } from "./balances";
 
 type AllowSpend = {
     amount: number;
@@ -40,7 +41,9 @@ const getAllowSpendHash = async (allowSpend: AllowSpend) => {
 
 const createSignedAllowSpend = async (
     privateKey: string,
-    tokenConf: TokenConfigWithAllowSpend,
+    tokenConf: TokenConfig<{
+        allowSpendAmount: number;
+    }>,
     ammMetagraphId: string,
     parent?: Signed<AllowSpend>
 ): Promise<Signed<AllowSpend>> => {
@@ -115,7 +118,7 @@ const validateIfAllowSpendAcceptedOnGL0 = async (
     tokenAllowSpendHash: string,
     tokenId: string | null,
     context: string,
-    logger: (message: string, type?: string, context?: string) => void
+    logger: Logger
 ) => {
     logger(`Validating allow spend with hash ${tokenAllowSpendHash} in GL0`, "INFO", context);
     try {
@@ -132,7 +135,7 @@ const validateIfAllowSpendAcceptedOnML0 = async (
     tokenAllowSpendHash: string,
     tokenId: string | null,
     context: string,
-    logger: (message: string, type?: string, context?: string) => void
+    logger: Logger
 ) => {
     logger(`Validating allow spend with hash ${tokenAllowSpendHash} in ML0...`, "INFO", context);
     try {
@@ -207,7 +210,7 @@ const validateIfAllowSpendAcceptedOnCL1 = async (
     l1Url: string,
     tokenAllowSpendHash: string,
     context: string,
-    logger: (message: string, type?: string, context?: string) => void
+    logger: Logger
 ) => {
     logger(`Validating allow spend with hash ${tokenAllowSpendHash} in CL1...`, "INFO", context);
 
@@ -224,4 +227,27 @@ const validateIfAllowSpendAcceptedOnCL1 = async (
     }
 }
 
-export { createSignedAllowSpend, sendSignedAllowSpend, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfAllowSpendAcceptedinSnapshot, validateIfHasEnoughBalanceForAllowSpend, type AllowSpend };
+const validateIfAmountHasBeenSpentCorrectly = async (
+    initialBalance: number,
+    amountToSpend: number,
+    signedAllowSpend: Signed<AllowSpend>,
+    tokenConfig: TokenConfig,
+    logger: Logger = log
+) => {
+    const { fee, amount } = signedAllowSpend.value;
+    const expectedBalance = initialBalance - amountToSpend - fee;
+    const unspentAmount = amount - amountToSpend;
+
+    await validateIfBalanceChanged(initialBalance, expectedBalance, tokenConfig, logger);
+
+    logger(
+        `Balance has changed to ${expectedBalance} (Δ ${expectedBalance - initialBalance}).${unspentAmount > 0 ? ` Unspent amount returned to address (${unspentAmount})` : "Whole allow spend has been spent"
+        }`,
+        "INFO",
+        tokenConfig.context
+    );
+
+    return { expectedBalance, unspentAmount };
+};
+
+export { createSignedAllowSpend, sendSignedAllowSpend, validateIfAllowSpendAcceptedOnCL1, validateIfAllowSpendAcceptedOnGL0, validateIfAllowSpendAcceptedOnML0, validateIfAllowSpendAcceptedinSnapshot, validateIfHasEnoughBalanceForAllowSpend, validateIfAmountHasBeenSpentCorrectly, type AllowSpend };

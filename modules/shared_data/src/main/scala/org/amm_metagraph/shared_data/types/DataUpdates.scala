@@ -36,7 +36,7 @@ object DataUpdates {
     maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate
 
-  @derive(decoder, encoder)
+  @derive(eqv, decoder, encoder)
   case class StakingUpdate(
     source: Address,
     tokenAAllowSpend: Hash,

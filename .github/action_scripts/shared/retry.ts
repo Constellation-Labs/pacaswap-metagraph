@@ -1,15 +1,7 @@
-import { log } from "./log";
+import { createIndentedLogger, log, Logger } from "./log";
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-type Severity = "INFO" | "WARN" | "ERROR" | "EMPTY" | "SUCCESS";
-type Logger = (message: string, type?: string | undefined, context?: string | undefined, indent?: number) => void;
-
-
-const createIndentedLogger = (logger: Logger, indent: number): Logger =>
-    (message: string, type?: string, context?: string) => {
-        logger(message, type, context, indent);
-    };
 
 type RetryFunction<T> = (logger: Logger) => Promise<T>;
 
@@ -46,4 +38,4 @@ const retry = <T>(context: string, config: Partial<RetryConfig> = defaultRetryCo
     throw new Error("Unreachable - loop will always either return or throw");
 }
 
-export { delay, retry, Logger, Severity };
+export { delay, retry, Logger };

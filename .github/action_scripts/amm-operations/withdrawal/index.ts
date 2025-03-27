@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BaseConfig, buildLiquidityPoolUniqueIdentifier, createAccount, createTokenConfig, getBalance, getLiquidityPool, getLiquidityPoolShares, log, retry, sendDataUpdate, throwInContext, TokenConfig, validateIfBalanceChanged, validateLiquidityPoolAmountChanged } from "../../shared";
 import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global-snapshot-increasing";
-import { createWithdrawalUpdate, validateWithdrawalCreated } from "../../shared/api/withdrawal";
+import { createWithdrawalUpdate, validateWithdrawalCreated, WithdrawalCalculatedStateAddress } from "../../shared/api/withdrawal";
 
 const InputsSchema = z
     .object({
@@ -32,7 +32,7 @@ const processWithdrawal = async (
     const createdLiquidityPool = await getLiquidityPool(config.ammMl0Url, poolId, log);
 
     if (!createdLiquidityPool) {
-        throwInContext('AMM')("Liquidity pool not found.");
+        throwInContext('AMM')(`Error getting liquidity pool data for ${poolId}`);
         return
     }
 
@@ -53,9 +53,9 @@ const processWithdrawal = async (
         return;
     }
 
-    const percentageToWithdraw = 50; // NOTE: Withdraw half of the shares
+    const percentageToWithdraw = 0.5; // NOTE: Withdraw half of the shares
 
-    const sharesToWithdraw = Math.round(addressShares * (percentageToWithdraw / 100));
+    const sharesToWithdraw = Math.round(addressShares * percentageToWithdraw);
 
     const withdrawalUpdate = await createWithdrawalUpdate(
         tokenA.tokenId,
@@ -69,13 +69,14 @@ const processWithdrawal = async (
 
     await sendDataUpdate(config.ammDl1Url, withdrawalUpdate);
 
-    await retry('Validate if withdrawal created', { delayMs: 5000 })(async (logger) => {
-        await validateWithdrawalCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, sharesToWithdraw, withdrawalAccount, logger);
+    const confirmedWithdrawal = await retry<WithdrawalCalculatedStateAddress>('Validate if withdrawal created', { delayMs: 5000 })(async (logger) => {
+        const confirmed = await validateWithdrawalCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, sharesToWithdraw, withdrawalAccount, logger);
+        return confirmed!
     });
 
     await retry('Validate if liquidity pool token amount changed')(async (logger) => {
-        const expectedTokenAPoolBalance = initialTokenAPoolBalance - (initialTokenAPoolBalance * (percentageToWithdraw / 100));
-        const expectedTokenBPoolBalance = initialTokenBPoolBalance - (initialTokenBPoolBalance * (percentageToWithdraw / 100));
+        const expectedTokenAPoolBalance = initialTokenAPoolBalance - confirmedWithdrawal.tokenAAmount;
+        const expectedTokenBPoolBalance = initialTokenBPoolBalance - confirmedWithdrawal.tokenBAmount;
 
         await validateLiquidityPoolAmountChanged(
             config.ammMl0Url,
@@ -89,8 +90,8 @@ const processWithdrawal = async (
     });
 
     await retry('Validate if balance changed')(async (logger) => {
-        const expectedBalanceA = initialBalanceA + (initialTokenAPoolBalance * (percentageToWithdraw / 100));
-        const expectedBalanceB = initialBalanceB + (initialTokenBPoolBalance * (percentageToWithdraw / 100));
+        const expectedBalanceA = initialBalanceA + confirmedWithdrawal.tokenAAmount;
+        const expectedBalanceB = initialBalanceB + confirmedWithdrawal.tokenBAmount;
         const results = await Promise.allSettled([
             validateIfBalanceChanged(initialBalanceA, expectedBalanceA, tokenA, logger),
             validateIfBalanceChanged(initialBalanceB, expectedBalanceB, tokenB, logger),

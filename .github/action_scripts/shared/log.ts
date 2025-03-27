@@ -9,8 +9,10 @@ const colors = {
     white: "\x1b[37m",
 };
 
+type LogType = "INFO" | "WARN" | "ERROR" | "EMPTY" | "SUCCESS";
+
 // Color mapping for different log types
-const typeColors = {
+const typeColors: Record<LogType, string> = {
     "INFO": colors.white,
     "WARN": colors.yellow,
     "ERROR": colors.red,
@@ -18,7 +20,9 @@ const typeColors = {
     "SUCCESS": colors.green,
 };
 
-const log = (message: string, type = "INFO", context?: string, indent?: number) => {
+type Logger = (message: string, type?: LogType, context?: string, indent?: number) => void;
+
+const log: Logger = (message: string, type: LogType = "INFO", context?: string, indent?: number) => {
     const timestamp = new Date().toISOString();
     const indentStr = indent ? ' '.repeat(indent) : '';
 
@@ -36,7 +40,7 @@ const log = (message: string, type = "INFO", context?: string, indent?: number) 
     }
 };
 
-const logObject = (object: any, context?: string, indent?: number) => {
+const logObject = (object: any) => {
     console.log('\n' + JSON.stringify(object, null, 2))
 }
 
@@ -44,4 +48,9 @@ const throwInContext = (context: string) => (message: string) => {
     throw new Error(`[${context}] ${message}`);
 }
 
-export { log, logObject, throwInContext };
+const createIndentedLogger = (logger: Logger, indent: number): Logger =>
+    (message: string, type?: LogType, context?: string) => {
+        logger(message, type, context, indent);
+    };
+
+export { log, logObject, throwInContext, createIndentedLogger, type Logger };

@@ -1,7 +1,7 @@
 import { dag4 } from "@stardust-collective/dag4";
 import jsSha256 from "js-sha256";
 import axios from "axios";
-import { BaseAmmMetagraphCliArgsSchema, delay, getGlobalSnapshotCombined, getPublicKey, log, retry, serializeBrotli, validateIfSyncedToGlobalOrdinal } from "../../shared";
+import { BaseAmmMetagraphCliArgsSchema, delay, getGlobalSnapshotCombined, getPublicKey, log, Logger, retry, serializeBrotli, validateIfSyncedToGlobalOrdinal } from "../../shared";
 import { z } from 'zod';
 
 const tokenLocks = [
@@ -99,7 +99,7 @@ const sendSignedTokenLock = async (config, signedTokenLock) => {
 const validateTokenLockInGL0 = async (
     config: ReturnType<typeof createConfig>,
     walletAddress: string,
-    logger: (message: string, type?: string, context?: string) => void = log
+    logger: Logger = log
 ) => {
     const { gl0Url, metagraphId } = config;
 

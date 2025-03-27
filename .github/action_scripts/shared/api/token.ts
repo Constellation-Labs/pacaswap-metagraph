@@ -11,8 +11,6 @@ type TokenConfig<T extends object = {}> = {
     isCurrency: boolean;
 } & T
 
-type TokenConfigWithAllowSpend = TokenConfig<{ allowSpendAmount: number }>
-
 const createTokenConfig = async <T extends object = {}>(
     privateKey: string,
     l0Url: string,
@@ -36,4 +34,4 @@ const createTokenConfig = async <T extends object = {}>(
     };
 }
 
-export { createTokenConfig, type TokenConfig, type TokenConfigWithAllowSpend };
+export { createTokenConfig, type TokenConfig };

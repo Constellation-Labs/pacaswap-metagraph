@@ -1,10 +1,10 @@
 import axios from "axios";
-import { log, logObject, throwInContext } from "../log";
+import { log, Logger, logObject, throwInContext } from "../log";
 import { createAccount, getPublicKey } from "./account";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
 import { z } from "zod";
-import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
+import { getCalculatedState, isPendingAllowSpend, isPendingSpendAction, TokenInformation } from "./calculated-state";
 import { Signed } from "./signed";
 
 type LiquidityPool = {
@@ -43,21 +43,20 @@ const createLiquidityPoolUpdate = async (
     tokenBAllowSpendHash: string,
     tokenAId: string | null,
     tokenBId: string | null,
-    tokenAAllowSpendAmount: number,
-    tokenBAllowSpendAmount: number,
+    tokenAAmount: number,
+    tokenBAmount: number,
     privateKey: string,
     account: ReturnType<typeof createAccount>,
-    ammMl0Url: string,
 ): Promise<Signed<LiquidityUpdateBody>> => {
     const body: LiquidityUpdateBody = {
         LiquidityPoolUpdate: {
             maxValidGsEpochProgress: 1000,
             source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
-            tokenAAmount: tokenAAllowSpendAmount,
+            tokenAAmount,
             tokenAId,
             tokenBAllowSpend: tokenBAllowSpendHash,
-            tokenBAmount: tokenBAllowSpendAmount,
+            tokenBAmount,
             tokenBId,
         }
     };
@@ -91,7 +90,7 @@ const getLiquidityPoolShares = async (
     ammL0Url: string,
     poolId: string,
     address: string,
-    logger: (message: string, level: string, context: string) => void
+    logger: Logger
 ) => {
     const liquidityPoolSharesResponseSchema = z.object({
         data: z.object({
@@ -110,7 +109,7 @@ const getLiquidityPoolShares = async (
 const getLiquidityPool = async (
     ammL0Url: string,
     poolId: string,
-    logger: (message: string, level: string, context: string) => void
+    logger: Logger
 ) => {
     logger(`Getting liquidity pool data for ${poolId}`, "INFO", 'AMM');
 
@@ -147,10 +146,9 @@ const getLiquidityPool = async (
 
 const validateLiquidityPoolCreated = async (
     ammL0Url: string,
-    account: ReturnType<typeof createAccount>,
     tokenAId: string | null,
     tokenBId: string | null,
-    logger: (message: string, type?: string, context?: string) => void
+    logger: Logger
 ) => {
 
     const calculatedState = await getCalculatedState(ammL0Url);
@@ -165,13 +163,19 @@ const validateLiquidityPoolCreated = async (
         (liquidityPool) => liquidityPool.tokenA.identifier === tokenAId && liquidityPool.tokenB.identifier === tokenBId
     );
 
-    const isPendingLiquidityPool = pendingLiquidityPool.some(
+    const isPendingAllowSpendLiquidityPool = pendingLiquidityPool.some(
         (pendingAction) => {
-            const updateValue = isPendingAllowSpend(pendingAction)
-                ? pendingAction.PendingAllowSpend.update.value
-                : pendingAction.PendingSpendAction.update.value;
+            return isPendingAllowSpend(pendingAction)
+                && pendingAction.PendingAllowSpend.update.value.tokenAId === tokenAId
+                && pendingAction.PendingAllowSpend.update.value.tokenBId === tokenBId
+        }
+    );
 
-            return updateValue.tokenAId === tokenAId && updateValue.tokenBId === tokenBId
+    const isPendingSpendActionLiquidityPool = pendingLiquidityPool.some(
+        (pendingAction) => {
+            return isPendingSpendAction(pendingAction)
+                && pendingAction.PendingSpendAction.update.value.tokenAId === tokenAId
+                && pendingAction.PendingSpendAction.update.value.tokenBId === tokenBId
         }
     );
 
@@ -183,8 +187,10 @@ const validateLiquidityPoolCreated = async (
 
     if (isFailedLiquidityPool) {
         throwInContext('AMM')("Liquidity pool creation failed.");
-    } else if (isPendingLiquidityPool) {
-        throwInContext('AMM')("Liquidity pool creation is pending.");
+    } else if (isPendingAllowSpendLiquidityPool) {
+        throwInContext('AMM')("Liquidity pool creation is pending (allow spend).");
+    } else if (isPendingSpendActionLiquidityPool) {
+        throwInContext('AMM')("Liquidity pool creation is pending (spend action).");
     } else if (isConfirmedLiquidityPool) {
         logger("Liquidity pool creation validated!", "INFO", 'AMM')
     } else {
@@ -199,7 +205,7 @@ const validateLiquidityPoolAmountChanged = async (
     initialTokenBBalance: number,
     expectedTokenABalance: number,
     expectedTokenBBalance: number,
-    logger: (message: string, level: string, context: string) => void
+    logger: Logger
 ) => {
     const liquidityPool = await getLiquidityPool(ammMl0Url, poolId, logger);
     if (!liquidityPool) {
@@ -209,11 +215,14 @@ const validateLiquidityPoolAmountChanged = async (
     const tokenAPoolBalance = liquidityPool.data.tokenA.amount;
     const tokenBPoolBalance = liquidityPool.data.tokenB.amount;
 
-    if (tokenAPoolBalance === expectedTokenABalance && tokenBPoolBalance === expectedTokenBBalance) {
-        logger(`Liquidity pool token A amount changed from ${initialTokenABalance} to ${tokenAPoolBalance}`, "INFO", 'AMM');
-        logger(`Liquidity pool token B amount changed from ${initialTokenBBalance} to ${tokenBPoolBalance}`, "INFO", 'AMM');
-    } else {
-        throwInContext('AMM')(`Liquidity pool token amount did not change.`);
+    if (tokenAPoolBalance !== expectedTokenABalance) {
+        const msg = `Liquidity pool token A amount did not change. Actual: ${tokenAPoolBalance} (Δ ${tokenAPoolBalance - initialTokenABalance}). Expected: ${expectedTokenABalance} (Δ ${expectedTokenABalance - initialTokenABalance})`;
+        throwInContext('AMM')(msg);
+    }
+
+    if (tokenBPoolBalance !== expectedTokenBBalance) {
+        const msg = `Liquidity pool token B amount did not change. Actual: ${tokenBPoolBalance} (Δ ${tokenBPoolBalance - initialTokenABalance}). Expected: ${expectedTokenBBalance} (Δ ${expectedTokenBBalance - initialTokenBBalance})`;
+        throwInContext('AMM')(msg);
     }
 }
 
