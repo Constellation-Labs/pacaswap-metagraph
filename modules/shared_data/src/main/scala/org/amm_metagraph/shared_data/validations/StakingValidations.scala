@@ -42,6 +42,7 @@ object StakingValidations {
     val liquidityPoolsCalculatedState = getLiquidityPools(state)
 
     for {
+      l1Validations <- stakingValidationsL1(stakingUpdate)
       signatures <- signatureValidations(signedStakingUpdate, signedStakingUpdate.source)
       sourceAddress = signedStakingUpdate.source
 
@@ -49,8 +50,6 @@ object StakingValidations {
         stakingUpdate,
         pendingStaking
       )
-
-      tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
 
       confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
         stakingUpdate,
@@ -73,8 +72,8 @@ object StakingValidations {
       lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)
 
     } yield
-      signatures
-        .productR(tokenIdsAreTheSame)
+      l1Validations
+        .productR(signatures)
         .productR(confirmedTransactionAlreadyExists)
         .productR(pendingTransactionAlreadyExists)
         .productR(liquidityPoolExists)
@@ -90,7 +89,7 @@ object StakingValidations {
     StakingTransactionAlreadyExists.whenA(
       maybeConfirmedStaking.exists(
         _.exists(staking =>
-          staking.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+          staking.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
         )
       )
     )
@@ -101,7 +100,7 @@ object StakingValidations {
   ): DataApplicationValidationErrorOr[Unit] =
     StakingTransactionAlreadyExists.whenA(
       maybePendingStaking.exists(staking =>
-        staking.value.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+        staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
       )
     )
 

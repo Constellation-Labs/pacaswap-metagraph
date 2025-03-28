@@ -29,7 +29,7 @@ object LiquidityPoolValidations {
   ): F[DataApplicationValidationErrorOr[Unit]] = {
     val liquidityPoolUpdate = signedLiquidityPoolUpdate.value
     for {
-      liquidityPoolValidationsL1 <- liquidityPoolValidationsL1(liquidityPoolUpdate)
+      l1Validations <- liquidityPoolValidationsL1(liquidityPoolUpdate)
       signatures <- signatureValidations(signedLiquidityPoolUpdate, signedLiquidityPoolUpdate.source)
 
       calculatedState = getLiquidityPools(state)
@@ -48,7 +48,7 @@ object LiquidityPoolValidations {
         liquidityPoolCalculatedState.getPendingUpdates
       )
     } yield
-      liquidityPoolValidationsL1
+      l1Validations
         .productR(signatures)
         .productR(tokenIdsAreTheSame)
         .productR(poolAlreadyExists)
