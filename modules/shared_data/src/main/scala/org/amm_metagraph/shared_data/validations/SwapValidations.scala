@@ -9,6 +9,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.cats.refTypeEq
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
@@ -22,7 +23,6 @@ object SwapValidations {
     swapUpdate: SwapUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
     val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-
     tokenIdsAreTheSame
   }
 
@@ -34,19 +34,18 @@ object SwapValidations {
     val swapUpdate = signedSwapUpdate.value
 
     for {
+      l1Validations <- swapValidationsL1(swapUpdate)
+      signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
       liquidityPoolExists <- validateIfLiquidityPoolExists(
         swapUpdate,
         liquidityPoolsCalculatedState
       )
       sourceAddress = signedSwapUpdate.source
-      signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
-      tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
       poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
         swapUpdate,
         liquidityPoolsCalculatedState
       )
       swapCalculatedState = getSwapCalculatedState(state)
-      swapValidationsL1 <- swapValidationsL1(swapUpdate)
       allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         swapUpdate.allowSpendReference,
         swapCalculatedState.getPendingUpdates
@@ -54,9 +53,8 @@ object SwapValidations {
 
       lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
     } yield
-      swapValidationsL1
+      l1Validations
         .productR(signatures)
-        .productR(tokenIdsAreTheSame)
         .productR(liquidityPoolExists)
         .productR(poolHaveEnoughTokens)
         .productR(allowSpendIsDuplicated)

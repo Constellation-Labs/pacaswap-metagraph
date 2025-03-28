@@ -35,6 +35,7 @@ object GovernanceValidations {
     val liquidityPools = getLiquidityPoolCalculatedState(state)
 
     for {
+      l1Validations <- rewardAllocationValidationsL1(rewardAllocationVoteUpdate.value)
       signatures <- signatureValidations(rewardAllocationVoteUpdate, rewardAllocationVoteUpdate.source)
       sourceAddress = rewardAllocationVoteUpdate.source
       lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
@@ -53,8 +54,9 @@ object GovernanceValidations {
         liquidityPools
       )
     } yield
-      lastTransactionRef
+      l1Validations
         .productR(signatures)
+        .productR(lastTransactionRef)
         .productR(dailyLimitAllocation)
         .productR(walletHasVotingWeight)
         .productR(isValidId)

@@ -29,14 +29,13 @@ object WithdrawalValidations {
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
+    l1Validation <- withdrawalValidationsL1(signedWithdrawalUpdate.value)
     signatures <- signatureValidations(signedWithdrawalUpdate, signedWithdrawalUpdate.source)
     sourceAddress = signedWithdrawalUpdate.source
     withdrawalUpdate = signedWithdrawalUpdate.value
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
     liquidityPoolsCalculatedState = getLiquidityPools(state)
-
-    tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
 
     liquidityPoolExists <- validateIfLiquidityPoolExists(
       withdrawalUpdate,
@@ -63,7 +62,7 @@ object WithdrawalValidations {
 
   } yield
     signatures
-      .productR(tokenIdsAreTheSame)
+      .productR(l1Validation)
       .productR(liquidityPoolExists)
       .productR(hasEnoughShares)
       .productR(withdrawsAllLPShares)
