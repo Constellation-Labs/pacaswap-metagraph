@@ -1,6 +1,5 @@
 package org.amm_metagraph.shared_data.validations
 
-import cats.data.Validated.Invalid
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -9,7 +8,6 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
@@ -90,7 +88,7 @@ object StakingValidations {
     StakingTransactionAlreadyExists.whenA(
       maybeConfirmedStaking.exists(
         _.exists(staking =>
-          staking.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+          staking.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
         )
       )
     )
@@ -101,7 +99,7 @@ object StakingValidations {
   ): DataApplicationValidationErrorOr[Unit] =
     StakingTransactionAlreadyExists.whenA(
       maybePendingStaking.exists(staking =>
-        staking.value.tokenAAllowSpend == stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend == stakingUpdate.tokenBAllowSpend
+        staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
       )
     )
 

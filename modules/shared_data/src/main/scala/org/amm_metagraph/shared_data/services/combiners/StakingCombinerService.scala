@@ -4,7 +4,6 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.tools.nsc.tasty.SafeEq
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
@@ -191,8 +190,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update) if update == signedStakingUpdate => true
-          case _                                                          => false
+          case PendingAllowSpend(update) if update === signedStakingUpdate => true
+          case _                                                           => false
         }
 
       private def removePendingSpendAction(
@@ -200,8 +199,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _) if update == signedStakingUpdate => true
-          case _                                                              => false
+          case PendingSpendAction(update, _) if update === signedStakingUpdate => true
+          case _                                                               => false
         }
 
       def combineNew(

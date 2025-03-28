@@ -83,7 +83,7 @@ object Governance {
 
     implicit val encoder: Encoder[AllocationCategory] = Encoder.encodeString.contramap(_.value)
     implicit val decoder: Decoder[AllocationCategory] = Decoder.decodeString.emap { str =>
-      values.find(_.value == str).toRight(s"Invalid AllocationCategory value: $str")
+      values.find(_.value === str).toRight(s"Invalid AllocationCategory value: $str")
     }
   }
 

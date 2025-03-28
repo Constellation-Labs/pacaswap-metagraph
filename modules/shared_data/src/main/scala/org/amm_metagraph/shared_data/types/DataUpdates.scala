@@ -8,7 +8,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 
-import derevo.cats.{eqv, show}
+import derevo.cats.eqv
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
@@ -24,7 +24,7 @@ object DataUpdates {
     val source: Address
   }
 
-  @derive(decoder, encoder)
+  @derive(eqv, decoder, encoder)
   case class LiquidityPoolUpdate(
     source: Address,
     tokenAAllowSpend: Hash,
@@ -36,7 +36,7 @@ object DataUpdates {
     maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate
 
-  @derive(decoder, encoder)
+  @derive(eqv, decoder, encoder)
   case class StakingUpdate(
     source: Address,
     tokenAAllowSpend: Hash,
@@ -62,7 +62,7 @@ object DataUpdates {
     val ordinal: WithdrawalOrdinal = parent.ordinal.next
   }
 
-  @derive(decoder, encoder)
+  @derive(eqv, decoder, encoder)
   case class SwapUpdate(
     source: Address,
     swapFromPair: Option[CurrencyId],

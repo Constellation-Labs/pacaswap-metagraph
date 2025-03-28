@@ -65,7 +65,7 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
 
   private def isLastEpochInYear(currentEpoch: EpochProgress): Boolean = {
     val epochsSinceStart = currentEpoch.value.value - config.initialEpoch.value.value
-    (epochsSinceStart + 1) % epochProgress1Year == 0
+    (epochsSinceStart + 1) % epochProgress1Year === 0
   }
 
   private def calculateValidatorShare(
@@ -139,7 +139,7 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
              for {
                random <- EitherT.liftF(Random.scalaUtilRandomSeedLong(currentProgress.value.value))
                maxPower = votingPowers.map(_.power.total.value).max
-               highestPowerVoters = votingPowers.filter(_.power.total.value == maxPower)
+               highestPowerVoters = votingPowers.filter(_.power.total.value === maxPower)
                shuffled <- EitherT.liftF(random.shuffleList(highestPowerVoters))
                luckyVoter = shuffled.head
                updatedAmount = baseDistribution(luckyVoter.address).value.value + remainder
