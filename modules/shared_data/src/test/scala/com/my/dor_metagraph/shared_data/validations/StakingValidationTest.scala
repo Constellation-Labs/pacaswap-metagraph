@@ -291,8 +291,8 @@ object StakingValidationTest extends MutableIOSuite {
             Map(
               signerAddress -> Set(
                 StakingCalculatedStateAddress(
-                  Hash.empty,
-                  Hash.empty,
+                  Hash("allowSpendA"),
+                  Hash("allowSpendB"),
                   primaryToken,
                   pairToken,
                   StakingReference.empty
@@ -308,8 +308,8 @@ object StakingValidationTest extends MutableIOSuite {
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = StakingUpdate(
       sourceAddress,
-      Hash.empty,
-      Hash.empty,
+      Hash("allowSpendA"),
+      Hash("allowSpendB"),
       primaryToken.identifier,
       100L.toPosLongUnsafe,
       pairToken.identifier,
