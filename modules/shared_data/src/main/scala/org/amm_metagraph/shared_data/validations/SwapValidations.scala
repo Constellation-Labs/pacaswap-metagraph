@@ -79,7 +79,7 @@ object SwapValidations {
         case Some(value) if lp.tokenA.identifier.contains(value) => lp.tokenA.some
         case Some(value)                                         => Option.when(lp.tokenB.identifier.contains(value))(lp.tokenB)
       }
-      maybeToken.exists(_.amount.value > swapUpdate.maxAmount.value.value)
+      maybeToken.exists(_.amount.value > swapUpdate.amountIn.value.value)
     }
 
     buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)

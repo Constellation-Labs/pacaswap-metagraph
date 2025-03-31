@@ -318,11 +318,9 @@ object PricingTest extends SimpleIOSuite {
           primaryToken.identifier,
           pairToken.identifier,
           Hash.empty,
-          SwapAmount(PosLong.unsafeFrom(toFixedPoint(45.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(45.0))),
           EpochProgress.MaxValue,
-          PosLong.unsafeFrom(toFixedPoint(0.4)).some,
-          PosLong.unsafeFrom(toFixedPoint(0.6)).some,
           SwapReference.empty
         )
       )
@@ -335,7 +333,6 @@ object PricingTest extends SimpleIOSuite {
     } yield
       expect.all(
         swapTokenInfo.isRight,
-        swapTokenInfo.toOption.get.effectivePrice.value.value === 95238095L,
         swapTokenInfo.toOption.get.receivedAmount.value.value === 4761904762L
       )
   }

@@ -45,8 +45,9 @@ object SpendTransactions {
 
   def generateSpendAction(
     hashedAllowSpend: Hashed[AllowSpend],
-    metagraphGeneratedCurrencyId: Option[CurrencyId],
-    metagraphGeneratedAmount: Amount,
+    primarySpendAmount: SwapAmount,
+    pairGeneratedCurrencyId: Option[CurrencyId],
+    pairGeneratedAmount: SwapAmount,
     ammMetagraphId: Address
   ): SpendAction =
     SpendAction(
@@ -54,14 +55,14 @@ object SpendTransactions {
         SpendTransaction(
           hashedAllowSpend.hash.some,
           hashedAllowSpend.currencyId,
-          hashedAllowSpend.amount,
+          primarySpendAmount,
           hashedAllowSpend.source,
           hashedAllowSpend.destination
         ),
         SpendTransaction(
           none,
-          metagraphGeneratedCurrencyId,
-          SwapAmount(PosLong.from(metagraphGeneratedAmount.value.value).getOrElse(PosLong.MinValue)),
+          pairGeneratedCurrencyId,
+          pairGeneratedAmount,
           ammMetagraphId,
           hashedAllowSpend.source
         )

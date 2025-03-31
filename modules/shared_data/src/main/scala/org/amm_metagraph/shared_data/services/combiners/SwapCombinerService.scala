@@ -14,6 +14,7 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
+import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
@@ -95,25 +96,13 @@ object SwapCombinerService {
                 .getOrElse(NonNegLong.MinValue)
             )
 
-            if (updatedTokenInformation.receivedAmount.value.value < signedUpdate.minAmount.value.value) {
+            if (updatedTokenInformation.receivedAmount < signedUpdate.amountOutMinimum) {
               FailedCalculatedState(
                 SwapLessThanMinAmount(),
                 expireEpochProgress,
                 signedUpdate
               ).some
-            } else if (signedUpdate.minPrice.exists(p => updatedTokenInformation.effectivePrice.value.value < p.value)) {
-              FailedCalculatedState(
-                SwapPriceBelowAcceptableMinPrice(),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (signedUpdate.maxPrice.exists(p => updatedTokenInformation.effectivePrice.value.value > p.value)) {
-              FailedCalculatedState(
-                SwapPriceExceedsAcceptableMaxPrice(),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (allowSpend.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+            } else if (allowSpend.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
               FailedCalculatedState(
                 AllowSpendExpired(allowSpend.signed.value),
                 expireEpochProgress,
@@ -256,6 +245,7 @@ object SwapCombinerService {
                         case None =>
                           val spendActionToken = generateSpendAction(
                             allowSpendToken,
+                            swapUpdate.amountIn,
                             updatedTokenInformation.pairTokenInformation.identifier,
                             updatedTokenInformation.receivedAmount,
                             currencyId.value
@@ -343,12 +333,10 @@ object SwapCombinerService {
                           updatedTokenInformation.primaryTokenInformation,
                           updatedTokenInformation.pairTokenInformation,
                           swapUpdate.allowSpendReference,
-                          swapUpdate.minAmount,
-                          swapUpdate.maxAmount,
+                          swapUpdate.amountIn,
+                          swapUpdate.amountOutMinimum,
                           swapUpdate.maxValidGsEpochProgress,
                           poolId.some,
-                          swapUpdate.minPrice,
-                          swapUpdate.maxPrice,
                           currentSnapshotOrdinal,
                           swapReference
                         )

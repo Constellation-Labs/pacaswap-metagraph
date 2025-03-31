@@ -67,8 +67,8 @@ object SwapRoutes {
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
     allowSpendReference: Hash,
-    minAmount: SwapAmount,
-    maxAmount: SwapAmount,
+    amountIn: SwapAmount,
+    amountOutMinimum: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
     state: SwapState
   )
@@ -154,8 +154,8 @@ case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
             swapFromPair = swap.swapFromPair,
             swapToPair = swap.swapToPair,
             allowSpendReference = swap.allowSpendReference,
-            minAmount = swap.minAmount,
-            maxAmount = swap.maxAmount,
+            amountIn = swap.amountIn,
+            amountOutMinimum = swap.amountOutMinimum,
             maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
             state = SwapState.Pending
           )
@@ -171,8 +171,8 @@ case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
             swapFromPair = swap.fromToken.identifier,
             swapToPair = swap.toToken.identifier,
             allowSpendReference = swap.allowSpendReference,
-            minAmount = swap.minAmount,
-            maxAmount = swap.maxAmount,
+            amountIn = swap.amountIn,
+            amountOutMinimum = swap.amountOutMinimum,
             maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
             state = SwapState.Confirmed
           )
