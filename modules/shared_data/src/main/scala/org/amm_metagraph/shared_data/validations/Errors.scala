@@ -5,9 +5,6 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.DataApplicationValidationError
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 
-import derevo.cats.eqv
-import derevo.derive
-
 object Errors {
   private type DataApplicationValidationType = DataApplicationValidationErrorOr[Unit]
 
@@ -107,6 +104,22 @@ object Errors {
 
   case object LiquidityPoolDoesNotExists extends DataApplicationValidationError {
     val message = "Liquidity pool does not exists"
+  }
+
+  case object SwapMinAmountGreaterThanMaxAmount extends DataApplicationValidationError {
+    val message = "Swap min amount greater than max amount"
+  }
+
+  case object SwapMinPriceGreaterThanMaxPrice extends DataApplicationValidationError {
+    val message = "Swap min price greater than max price"
+  }
+
+  case object SwapMinPriceNotPresent extends DataApplicationValidationError {
+    val message = "Swap min price not present"
+  }
+
+  case object SwapMaxPriceNotPresent extends DataApplicationValidationError {
+    val message = "Swap max price not present"
   }
 
   case object SwapLiquidityPoolDoesNotExists extends DataApplicationValidationError {

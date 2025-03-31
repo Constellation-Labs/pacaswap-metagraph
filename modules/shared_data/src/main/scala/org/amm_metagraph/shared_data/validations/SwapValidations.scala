@@ -23,7 +23,11 @@ object SwapValidations {
     swapUpdate: SwapUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
     val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+    val priceBounds = validatePriceBounds(swapUpdate)
+    val amountBounds = validateAmountBounds(swapUpdate)
     tokenIdsAreTheSame
+      .productR(priceBounds)
+      .productR(amountBounds)
   }
 
   def swapValidationsL0[F[_]: Async: SecurityProvider](
@@ -60,6 +64,26 @@ object SwapValidations {
         .productR(allowSpendIsDuplicated)
         .productR(lastRef)
   }
+
+  private def validateAmountBounds(swapUpdate: SwapUpdate): DataApplicationValidationErrorOr[Unit] =
+    if (swapUpdate.minAmount.value > swapUpdate.maxAmount.value) {
+      SwapMinAmountGreaterThanMaxAmount.invalid
+    } else {
+      valid
+    }
+
+  private def validatePriceBounds(swapUpdate: SwapUpdate): DataApplicationValidationErrorOr[Unit] =
+    (swapUpdate.minPrice, swapUpdate.maxPrice) match {
+      case (Some(min), Some(max)) if min.value <= max.value =>
+        valid
+      case (Some(min), Some(max)) if min.value > max.value =>
+        SwapMinPriceGreaterThanMaxPrice.invalid
+      case (Some(_), None) =>
+        SwapMaxPriceNotPresent.invalid
+      case (None, Some(_)) =>
+        SwapMinPriceNotPresent.invalid
+      case _ => valid
+    }
 
   private def validateIfLiquidityPoolExists[F[_]: Async](
     swapUpdate: SwapUpdate,

@@ -317,4 +317,136 @@ object SwapValidationTest extends MutableIOSuite {
       expect(expectedError)
     }
   }
+
+  test("Validate update fail - Min amount greater than max amount") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      none,
+      none,
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isInvalid)
+  }
+
+  test("Validate update fail - Min price greater than max price") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      minPrice = Some(2000L),
+      maxPrice = Some(1000L),
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isInvalid)
+  }
+
+  test("Validate update fail - Only min price present") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      minPrice = Some(1000L),
+      maxPrice = None,
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isInvalid)
+  }
+
+  test("Validate update fail - Only max price present") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      minPrice = None,
+      maxPrice = Some(1000L),
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isInvalid)
+  }
+
+  test("Validate update successfully with valid price bounds") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      minPrice = Some(1000L),
+      maxPrice = Some(2000L),
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isValid)
+  }
+
+  test("Validate update successfully with no price bounds") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val swapUpdate = SwapUpdate(
+      sourceAddress,
+      primaryToken.identifier,
+      pairToken.identifier,
+      Hash.empty,
+      minAmount = SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      maxAmount = SwapAmount(200000L.toTokenAmountFormat.toPosLongUnsafe),
+      EpochProgress.MinValue,
+      minPrice = None,
+      maxPrice = None,
+      SwapReference.empty
+    )
+
+    val validationService = ValidationService.make[IO](config)
+    validationService.validateUpdate(swapUpdate).map(response => response.isValid)
+  }
 }
