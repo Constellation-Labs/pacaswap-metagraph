@@ -47,10 +47,10 @@ object SharedValidations {
     existingPendingUpdates: Set[_ <: Signed[AmmUpdate]]
   ): DataApplicationValidationErrorOr[Unit] = {
     val updateAlreadyExists = existingPendingUpdates.exists(_.value match {
-      case lpUpdate: LiquidityPoolUpdate => lpUpdate.tokenAAllowSpend == allowSpendRef || lpUpdate.tokenBAllowSpend == allowSpendRef
+      case lpUpdate: LiquidityPoolUpdate => lpUpdate.tokenAAllowSpend === allowSpendRef || lpUpdate.tokenBAllowSpend === allowSpendRef
       case stakingUpdate: StakingUpdate =>
-        stakingUpdate.tokenAAllowSpend == allowSpendRef || stakingUpdate.tokenBAllowSpend == allowSpendRef
-      case swapUpdate: SwapUpdate => swapUpdate.allowSpendReference == allowSpendRef
+        stakingUpdate.tokenAAllowSpend === allowSpendRef || stakingUpdate.tokenBAllowSpend === allowSpendRef
+      case swapUpdate: SwapUpdate => swapUpdate.allowSpendReference === allowSpendRef
       case _                      => false
     })
 

@@ -162,8 +162,8 @@ object SwapCombinerService {
         signedSwapUpdate: Signed[SwapUpdate]
       ) =
         swapCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update) if update == signedSwapUpdate => true
-          case _                                                       => false
+          case PendingAllowSpend(update) if update === signedSwapUpdate => true
+          case _                                                        => false
         }
 
       private def removePendingSpendAction(
@@ -171,8 +171,8 @@ object SwapCombinerService {
         signedSwapUpdate: Signed[SwapUpdate]
       ) =
         swapCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _) if update == signedSwapUpdate => true
-          case _                                                           => false
+          case PendingSpendAction(update, _) if update === signedSwapUpdate => true
+          case _                                                            => false
         }
 
       def combineNew(
@@ -191,7 +191,7 @@ object SwapCombinerService {
           case None =>
             val updatedPendingSwapsCalculatedState = if (swapUpdate.maxValidGsEpochProgress < globalEpochProgress) {
               removePendingAllowSpend(swapCalculatedState, signedUpdate)
-            } else if (!swapCalculatedStatePendingAllowSpend.exists(_.update == signedUpdate)) {
+            } else if (!swapCalculatedStatePendingAllowSpend.exists(_.update === signedUpdate)) {
               swapCalculatedStatePendingAllowSpend + PendingAllowSpend(signedUpdate)
             } else {
               swapCalculatedStatePendingAllowSpend

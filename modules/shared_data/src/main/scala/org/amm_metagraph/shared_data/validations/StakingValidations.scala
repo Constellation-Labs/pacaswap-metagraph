@@ -1,6 +1,5 @@
 package org.amm_metagraph.shared_data.validations
 
-import cats.data.Validated.Invalid
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -9,7 +8,6 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._

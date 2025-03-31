@@ -96,7 +96,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
           rewards.daoRewards._2.value.value +
           rewards.votingRewards.values.map(_.value.value).sum
 
-      expect(totalRewards == expectedPerEpoch)
+      expect(totalRewards === expectedPerEpoch)
     }
   }
 
@@ -111,8 +111,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val allValidatorsGetSameAmount = rewards.validatorRewards.values.toSet.size == 1
-      val allValidatorsAreRewarded = rewards.validatorRewards.size == validators.length
+      val allValidatorsGetSameAmount = rewards.validatorRewards.values.toSet.size === 1
+      val allValidatorsAreRewarded = rewards.validatorRewards.size === validators.length
 
       expect.all(
         allValidatorsGetSameAmount,
@@ -162,7 +162,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      expect(rewards.votingRewards.keySet == Set(voterA))
+      expect(rewards.votingRewards.keySet === Set(voterA))
     }
   }
 
@@ -185,7 +185,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
       expect(actualDAOReward > baseDAOShare) &&
       expect(remainderPortion > 0L) &&
-      expect(actualDAOReward == baseDAOShare + remainderPortion)
+      expect(actualDAOReward === baseDAOShare + remainderPortion)
     }
   }
 
@@ -251,7 +251,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       val totalDistributed = totalValidatorRewards + totalDaoRewards + totalVotingRewards
       val annualAmount = config.totalAnnualTokens.value.value
 
-      expect(totalDistributed == annualAmount) &&
+      expect(totalDistributed === annualAmount) &&
       // Base proportions should be maintained for distributable amount (excluding remainders in DAO)
       expect((totalValidatorRewards * 100L / annualAmount - config.validatorWeight.value).abs <= 1) &&
       expect((totalVotingRewards * 100L / annualAmount - config.votingWeight.value).abs <= 1)
@@ -397,7 +397,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { totalGovernanceRewards =>
-      expect(totalGovernanceRewards == config.governancePool.value.value)
+      expect(totalGovernanceRewards === config.governancePool.value.value)
     }
   }
 }

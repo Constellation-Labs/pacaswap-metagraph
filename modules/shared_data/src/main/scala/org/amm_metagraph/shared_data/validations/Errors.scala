@@ -5,6 +5,9 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.DataApplicationValidationError
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 
+import derevo.cats.eqv
+import derevo.derive
+
 object Errors {
   private type DataApplicationValidationType = DataApplicationValidationErrorOr[Unit]
 

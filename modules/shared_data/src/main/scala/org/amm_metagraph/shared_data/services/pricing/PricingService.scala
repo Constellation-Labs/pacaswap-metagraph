@@ -82,7 +82,7 @@ object PricingService {
       ): Either[String, SwapQuote] =
         for {
           (_, newOutputReserve, estimatedReceived) <- calculateReservesAndReceived(pool, fromTokenId, amount)
-          outputToken = if (fromTokenId == pool.tokenA.identifier) pool.tokenB else pool.tokenA
+          outputToken = if (fromTokenId === pool.tokenA.identifier) pool.tokenB else pool.tokenA
 
           _ <- Either.cond(
             outputToken.identifier === toTokenId,
