@@ -201,7 +201,8 @@ object LiquidityPoolCombinerService {
 
             DataState(
               AmmOnChainState(updates),
-              updatedCalculatedState
+              updatedCalculatedState,
+              oldState.sharedArtifacts
             ).pure
 
           case (Some(_), Some(_)) =>
@@ -349,7 +350,8 @@ object LiquidityPoolCombinerService {
 
                     response = DataState(
                       AmmOnChainState(updates),
-                      updatedCalculatedState
+                      updatedCalculatedState,
+                      oldState.sharedArtifacts
                     )
 
                   } yield response

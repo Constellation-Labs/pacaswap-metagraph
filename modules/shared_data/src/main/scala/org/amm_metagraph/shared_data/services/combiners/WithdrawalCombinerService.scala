@@ -377,7 +377,8 @@ object WithdrawalCombinerService {
               } yield
                 DataState[AmmOnChainState, AmmCalculatedState](
                   AmmOnChainState(updates),
-                  updatedCalculatedState
+                  updatedCalculatedState,
+                  oldState.sharedArtifacts
                 )
 
               processingState.valueOr(failedCalculatedState =>

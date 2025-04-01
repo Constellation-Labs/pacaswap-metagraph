@@ -4,6 +4,7 @@ import { Logger } from "../retry";
 import { Signed } from "./signed";
 import { ConfirmedLiquidityPoolCalculatedState, LiquidityPoolUpdate } from "./liquidity-pool";
 import { ConfirmedStakingCalculatedState, StakingUpdate } from "./staking";
+import { ConfirmedSwapCalculatedState, SwapUpdate } from "./swap";
 import { ConfirmedWithdrawalCalculatedState, WithdrawalUpdate } from "./withdrawal";
 
 type OperationCalculatedState<C, U> = {
@@ -28,6 +29,9 @@ type CalculatedState = {
         };
         Withdrawal: {
             WithdrawalCalculatedState: OperationCalculatedState<ConfirmedWithdrawalCalculatedState, WithdrawalUpdate>
+        };
+        Swap: {
+            SwapCalculatedState: OperationCalculatedState<ConfirmedSwapCalculatedState, SwapUpdate>
         };
     }
 }

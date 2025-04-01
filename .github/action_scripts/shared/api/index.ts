@@ -7,3 +7,4 @@ export * from "./data-update";
 export * from "./staking";
 export * from "./calculated-state";
 export * from "./snapshot";
+export * from "./swap";

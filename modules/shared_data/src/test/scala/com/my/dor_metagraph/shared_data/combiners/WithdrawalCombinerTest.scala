@@ -185,7 +185,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
         PendingSpendAction(withdrawalUpdate, spendActions.head),
-        withdrawalResponsePendingSpendActionResponse,
+        withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
         SnapshotOrdinal.MinValue
@@ -290,7 +290,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
         PendingSpendAction(withdrawalUpdate, spendActions.head),
-        withdrawalResponsePendingSpendActionResponse,
+        withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
         SnapshotOrdinal.MinValue

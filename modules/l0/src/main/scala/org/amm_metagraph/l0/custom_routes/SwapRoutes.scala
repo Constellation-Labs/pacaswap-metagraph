@@ -6,7 +6,7 @@ import cats.syntax.all._
 
 import scala.util.Try
 
-import io.constellationnetwork.ext.http4s.HashVar
+import io.constellationnetwork.ext.http4s.{AddressVar, HashVar}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -27,7 +27,7 @@ import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.States.LiquidityPoolCalculatedState
+import org.amm_metagraph.shared_data.types.States.{OperationType, LiquidityPoolCalculatedState, SwapCalculatedState}
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.http4s.circe.CirceEntityCodec._
@@ -233,6 +233,20 @@ case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
         BadRequest(ErrorResponse(errors.toList.mkString(", ")))
     }
 
+  private def getLastSwapReference(address: Address): F[Response[F]] =
+    calculatedStateService.get.flatMap { calculatedState =>
+      calculatedState.state.operations
+        .get(OperationType.Swap)
+        .collect {
+          case swapCalculatedState: SwapCalculatedState =>
+            swapCalculatedState.confirmed.value
+              .get(address)
+              .flatMap(_.maxByOption(_.parent.ordinal))
+              .map(_.parent)
+        }
+        .fold(Ok(SingleResponse(SwapReference.empty)))(lastRef => Ok(SingleResponse(lastRef)))
+    }
+
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "swaps" / HashVar(swapHashString) => getSwapByHash(swapHashString)
     case req @ POST -> Root / "swap" / "quote" =>
@@ -240,5 +254,6 @@ case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
         swapQuoteRequest <- req.as[SwapQuoteRequest]
         response <- handleSwapQuote(swapQuoteRequest)
       } yield response
+    case GET -> Root / "addresses" / AddressVar(address) / "swaps" / "last-reference" => getLastSwapReference(address)
   }
 }
