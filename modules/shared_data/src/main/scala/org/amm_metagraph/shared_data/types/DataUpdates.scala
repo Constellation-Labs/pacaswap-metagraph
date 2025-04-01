@@ -68,11 +68,9 @@ object DataUpdates {
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
     allowSpendReference: Hash,
-    minAmount: SwapAmount,
-    maxAmount: SwapAmount,
+    amountIn: SwapAmount,
+    amountOutMinimum: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
-    minPrice: Option[PosLong],
-    maxPrice: Option[PosLong],
     parent: SwapReference
   ) extends AmmUpdate {
     val ordinal: SwapOrdinal = parent.ordinal.next

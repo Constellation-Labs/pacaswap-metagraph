@@ -38,12 +38,10 @@ object Swap {
     fromToken: TokenInformation,
     toToken: TokenInformation,
     allowSpendReference: Hash,
-    minAmount: SwapAmount,
-    maxAmount: SwapAmount,
+    amountIn: SwapAmount,
+    amountOutMinimum: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
     poolId: Option[PoolId],
-    minPrice: Option[PosLong],
-    maxPrice: Option[PosLong],
     ordinal: SnapshotOrdinal,
     parent: SwapReference
   )
@@ -63,8 +61,7 @@ object Swap {
   case class SwapTokenInfo(
     primaryTokenInformation: TokenInformation,
     pairTokenInformation: TokenInformation,
-    receivedAmount: Amount,
-    effectivePrice: Amount
+    receivedAmount: SwapAmount
   )
 
   @derive(decoder, encoder, order, ordering)

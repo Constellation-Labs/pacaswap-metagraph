@@ -134,8 +134,6 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
-      none,
-      none,
       SwapReference.empty
     )
 
@@ -184,8 +182,6 @@ object SwapValidationTest extends MutableIOSuite {
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
         EpochProgress.MinValue,
-        Some(1000L),
-        Some(20000L),
         SwapReference.empty
       )
       fakeSignedUpdate = getFakeSignedUpdate(swapUpdate)
@@ -230,8 +226,6 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
-      none,
-      none,
       SwapReference.empty
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
@@ -285,8 +279,6 @@ object SwapValidationTest extends MutableIOSuite {
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       EpochProgress.MinValue,
-      Some(1000L),
-      Some(20000L),
       SwapReference.empty
     )
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)

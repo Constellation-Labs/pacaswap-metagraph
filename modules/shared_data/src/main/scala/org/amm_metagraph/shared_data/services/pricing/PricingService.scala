@@ -4,11 +4,9 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.math.BigDecimal.RoundingMode
-
 import io.constellationnetwork.schema.balance.Amount
-import io.constellationnetwork.schema.swap.CurrencyId
-
-import eu.timepit.refined.types.all.NonNegLong
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
@@ -163,7 +161,7 @@ object PricingService {
         result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
           case Left(_) => Left("Liquidity pool does not exist")
           case Right(liquidityPool) =>
-            val calculationResult = calculateReservesAndReceived(liquidityPool, swapUpdate.swapFromPair, swapUpdate.maxAmount)
+            val calculationResult = calculateReservesAndReceived(liquidityPool, swapUpdate.swapFromPair, swapUpdate.amountIn)
 
             calculationResult match {
               case Right((newFromTokenReserve, newToTokenReserve, receivedAmount)) =>
@@ -175,18 +173,10 @@ object PricingService {
                   if (swapUpdate.swapToPair === liquidityPool.tokenA.identifier) liquidityPool.tokenA
                   else liquidityPool.tokenB
 
-                val maxAmountValue = BigDecimal(swapUpdate.maxAmount.value.value)
-                val receivedAmountDecimal = receivedAmount.toBigDecimal
-
-                val effectivePrice = if (maxAmountValue > 0) {
-                  ((receivedAmountDecimal / maxAmountValue) * BigDecimal(1e8)).halfUpToLong
-                } else 0L
-
                 val swapTokenInfo = SwapTokenInfo(
                   fromTokenInfo.copy(amount = newFromTokenReserve.toLong.toPosLongUnsafe),
                   toTokenInfo.copy(amount = newToTokenReserve.toLong.toPosLongUnsafe),
-                  Amount(NonNegLong.unsafeFrom(receivedAmount.toLong)),
-                  Amount(NonNegLong.unsafeFrom(effectivePrice))
+                  SwapAmount(PosLong.unsafeFrom(receivedAmount.toLong))
                 )
                 Right(swapTokenInfo)
               case Left(errorMsg) =>
