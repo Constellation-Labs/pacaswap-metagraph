@@ -1,8 +1,8 @@
 package org.amm_metagraph.shared_data
 
-import scala.math.BigDecimal.RoundingMode
+import cats.{Eq, Order}
 
-import io.constellationnetwork.security.hash.Hash
+import scala.math.BigDecimal.RoundingMode
 
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval
@@ -79,6 +79,9 @@ object refined {
       Decoder.decodeBigDecimal.emap { value =>
         eu.timepit.refined.refineV[PercentageRange](value)
       }
+
+    implicit val percentageEq: Eq[Percentage] = Eq.by(_.value)
+    implicit val percentageOrder: Order[Percentage] = Order.by(_.value)
 
     implicit class PercentageOps(percentage: Percentage) {
       lazy val toDecimal: BigDecimal = percentage.value.setScale(8) / BigDecimal(100)

@@ -5,13 +5,14 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.math.BigDecimal.RoundingMode
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.SnapshotOrdinal
-import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -26,9 +27,13 @@ import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import io.circe.syntax.EncoderOps
+import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.app.ApplicationConfig._
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{Dev, Governance, VotingWeightMultipliers, _}
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
+import org.amm_metagraph.shared_data.refined.Percentage.PercentageOps
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.SwapCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -78,7 +83,8 @@ object SwapCombinerTest extends MutableIOSuite {
     tokenA: TokenInformation,
     tokenB: TokenInformation,
     owner: Address,
-    additionalProvider: Option[(Address, ShareAmount)] = None
+    additionalProvider: Option[(Address, ShareAmount)] = None,
+    fees: FeePercentages = FeeDistributor.empty
   ): (String, LiquidityPoolCalculatedState) = {
     val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
     val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
@@ -86,6 +92,9 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
+    val feeShares = additionalProvider.foldLeft(Map(owner -> 0L.toNonNegLongUnsafe)) {
+      case (acc, (addr, _)) => acc + (addr -> 0L.toNonNegLongUnsafe)
+    }
 
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
 
@@ -95,7 +104,8 @@ object SwapCombinerTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares)
+      PoolShares(totalShares, shares, feeShares),
+      fees
     )
     (
       poolId.value,
@@ -143,6 +153,7 @@ object SwapCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -211,13 +222,15 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
         PendingSpendAction(swapUpdate, spendActions.head),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        metagraphId
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -498,5 +511,168 @@ object SwapCombinerTest extends MutableIOSuite {
     } yield
       expect.eql(none, confirmedSwapResponse) &&
         expect.eql(0, pendingSwapResponse.size)
+  }
+
+  test("Test swap - 0.3% fee correctly applies to the swap") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
+      primaryToken,
+      pairToken,
+      ownerAddress,
+      None,
+      FeeDistributor.standard
+    )
+
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpend = AllowSpend(
+        sourceAddress,
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        Some(CurrencyId(ownerAddress)),
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = getFakeSignedUpdate(
+        SwapUpdate(
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            sourceAddress -> SortedSet(signedAllowSpend.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        Address("DAG3JgDiCr8sUWm1QyxeEShNvyutX6bLsP9Vub6f")
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
+        swapUpdate,
+        state,
+        EpochProgress.MinValue,
+        allowSpends,
+        CurrencyId(ownerAddress)
+      )
+
+      spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      metagraphId <- context.getCurrencyId
+
+      swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
+        PendingSpendAction(swapUpdate, spendActions.head),
+        swapPendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue,
+        metagraphId
+      )
+
+      swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).head
+
+      oldLiquidityPoolCalculatedState = state.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPool = oldLiquidityPoolCalculatedState.confirmed.value(poolId)
+
+      updatedLiquidityPoolCalculatedState: LiquidityPoolCalculatedState = swapConfirmedResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId)
+
+      fromTokenInfo =
+        if (swapUpdate.value.swapFromPair == oldLiquidityPool.tokenA.identifier) oldLiquidityPool.tokenA else oldLiquidityPool.tokenB
+      toTokenInfo =
+        if (swapUpdate.value.swapToPair == oldLiquidityPool.tokenA.identifier) oldLiquidityPool.tokenA else oldLiquidityPool.tokenB
+
+      swapAmount = swapUpdate.amountIn.value.value
+      newFromTokenReserve = BigInt(fromTokenInfo.amount.value) + BigInt(swapAmount)
+      toTokenReserveBeforeFee = (oldLiquidityPool.k / newFromTokenReserve).toLong
+
+      userReceivesAmountBeforeFee = toTokenInfo.amount.value - toTokenReserveBeforeFee
+
+      feeBreakdown = FeeDistributor.calculateFeeAmounts(
+        userReceivesAmountBeforeFee,
+        oldLiquidityPool.poolFees
+      )
+
+      totalFeeAmount = feeBreakdown.total
+      providerFeeAmount = feeBreakdown.providers
+      operatorFeeAmount = feeBreakdown.operators
+      toTokenReserveAfterFee = toTokenReserveBeforeFee + totalFeeAmount
+
+      initialProviderFeeShare = FeeDistributor.getFeeShare(oldLiquidityPool.poolShares.feeShares, ownerAddress).value
+      initialOperatorFeeShare = FeeDistributor.getFeeShare(oldLiquidityPool.poolShares.feeShares, metagraphId.value).value
+
+      expectedUpdatedFeeShares = FeeDistributor.distributeProviderFees(
+        providerFeeAmount,
+        operatorFeeAmount,
+        oldLiquidityPool.poolShares,
+        metagraphId
+      )
+      expectedProviderFinalFeeShare = expectedUpdatedFeeShares(ownerAddress).value
+      expectedOperatorFinalFeeShare = expectedUpdatedFeeShares(metagraphId.value).value
+
+      providerFeeShare = FeeDistributor.getFeeShare(updatedLiquidityPool.poolShares.feeShares, ownerAddress).value
+      operatorFeeShare = FeeDistributor.getFeeShare(updatedLiquidityPool.poolShares.feeShares, metagraphId.value).value
+      totalDistributedFees = providerFeeShare + operatorFeeShare - initialProviderFeeShare - initialOperatorFeeShare
+    } yield
+      expect.all(
+        addressSwapResponse.fromToken.amount.value === swapUpdate.value.amountIn.value.value + oldLiquidityPool.tokenA.amount.value,
+        addressSwapResponse.toToken.amount.value === toTokenReserveAfterFee,
+        updatedLiquidityPool.poolShares.feeShares(ownerAddress).value === expectedProviderFinalFeeShare,
+        updatedLiquidityPool.poolShares.feeShares(metagraphId.value).value === expectedOperatorFinalFeeShare,
+        (totalDistributedFees - totalFeeAmount).abs <= 1
+      )
   }
 }

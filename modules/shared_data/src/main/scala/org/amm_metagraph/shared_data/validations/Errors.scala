@@ -132,4 +132,12 @@ object Errors {
   case object TokenIdsAreTheSame extends DataApplicationValidationError {
     val message = "Token ids are the same but should be different"
   }
+
+  case object FeePercentagesMustEqualTotal extends DataApplicationValidationError {
+    val message = "Fee percentage components must sum to total"
+  }
+
+  case object FeePercentageTotalMustBeGreaterThanZero extends DataApplicationValidationError {
+    val message = "Fee percentage total must be greater than zero"
+  }
 }

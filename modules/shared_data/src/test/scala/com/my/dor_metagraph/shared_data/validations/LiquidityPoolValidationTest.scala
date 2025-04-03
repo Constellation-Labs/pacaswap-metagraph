@@ -2,7 +2,7 @@ package com.my.dor_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.Validated.{Invalid, Valid}
-import cats.data.{NonEmptyList, NonEmptySet}
+import cats.data.{Chain, NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -28,6 +28,7 @@ import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
@@ -85,7 +86,12 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(1L.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
+      PoolShares(
+        1L.toTokenAmountFormat.toPosLongUnsafe,
+        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
+        Map(owner -> 0L.toNonNegLongUnsafe)
+      ),
+      FeeDistributor.empty
     )
     (
       poolId.value,
@@ -132,7 +138,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val validationService = ValidationService.make[IO](config)
@@ -154,7 +161,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val validationService = ValidationService.make[IO](config)
@@ -189,7 +197,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -229,7 +238,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -269,7 +279,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -320,7 +331,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       pairToken.identifier,
       primaryToken.amount,
       pairToken.amount,
-      EpochProgress.MaxValue
+      EpochProgress.MaxValue,
+      None
     )
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
@@ -339,14 +351,71 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
         ownerAddress
       )
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
-    } yield {
-      val expectedError = response match {
-        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.LiquidityPoolAlreadyExists.type]) =>
-          true
-        case _ =>
-          false
-      }
-      expect(expectedError)
-    }
+    } yield expect(response == Errors.LiquidityPoolAlreadyExists.invalidNec)
   }
+
+  test("Validate update fail - fees as 0 on mainnet environment") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val liquidityPoolUpdate = LiquidityPoolUpdate(
+      sourceAddress,
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue,
+      FeeDistributor.empty.some
+    )
+
+    val validationService = ValidationService.make[IO](config.copy(environment = Mainnet))
+    for {
+      response <- validationService.validateUpdate(liquidityPoolUpdate)
+    } yield expect(response == Errors.FeePercentageTotalMustBeGreaterThanZero.invalidNec)
+  }
+
+  test("Validate data fail - fees as 0 on mainnet environment") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val liquidityPoolUpdate = LiquidityPoolUpdate(
+      sourceAddress,
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue,
+      FeeDistributor.empty.some
+    )
+
+    val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
+
+    val validationService = ValidationService.make[IO](config.copy(environment = Mainnet))
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
+    } yield expect(response == Errors.FeePercentageTotalMustBeGreaterThanZero.invalidNec)
+  }
+
 }

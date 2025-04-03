@@ -4,9 +4,12 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.math.BigDecimal.RoundingMode
+
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
-import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+
+import eu.timepit.refined.types.all.PosLong
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
@@ -40,7 +43,16 @@ trait PricingService[F[_]] {
 object PricingService {
   def make[F[_]: Async](
     calculatedStateService: CalculatedStateService[F]
-  ): PricingService[F] =
+  ): PricingService[F] = {
+    case class ReservesAndReceived(
+      newInputReserveBeforeFee: BigInt,
+      newOutputReserveBeforeFee: BigInt,
+      estimatedReceivedBeforeFee: BigInt,
+      newInputReserveAfterFee: BigInt,
+      newOutputReserveAfterFee: BigInt,
+      estimatedReceivedAfterFee: BigInt
+    )
+
     new PricingService[F] {
       private def getConfirmedLiquidityPools =
         calculatedStateService.get.map(calculatedState => getLiquidityPoolCalculatedState(calculatedState.state))
@@ -49,7 +61,7 @@ object PricingService {
         pool: LiquidityPool,
         fromTokenId: Option[CurrencyId],
         amount: Amount
-      ): Either[String, (BigInt, BigInt, BigInt)] =
+      ): Either[String, ReservesAndReceived] =
         for {
           (inputToken, outputToken) <- fromTokenId match {
             case id if id === pool.tokenA.identifier => Right((pool.tokenA, pool.tokenB))
@@ -66,10 +78,23 @@ object PricingService {
             "Insufficient liquidity in the pool"
           )
 
-          newInputReserve = inputReserve + BigInt(amount.value.value)
-          newOutputReserve = pool.k / newInputReserve
-          estimatedReceived = outputReserve - newOutputReserve
-        } yield (newInputReserve, newOutputReserve, estimatedReceived)
+          newInputReserveBeforeFee = inputReserve + BigInt(amount.value.value)
+          newOutputReserveBeforeFee = pool.k / newInputReserveBeforeFee
+          estimatedReceivedBeforeFee = outputReserve - newOutputReserveBeforeFee
+
+          fees = FeeDistributor.calculateFeeAmounts(estimatedReceivedBeforeFee, pool.poolFees)
+          estimatedReceivedAfterFee = estimatedReceivedBeforeFee - fees.total
+          newOutputReserveAfterFee = newOutputReserveBeforeFee + fees.total
+          newInputReserveAfterFee = newInputReserveBeforeFee
+        } yield
+          ReservesAndReceived(
+            newInputReserveBeforeFee,
+            newOutputReserveBeforeFee,
+            estimatedReceivedBeforeFee,
+            newInputReserveAfterFee,
+            newOutputReserveAfterFee,
+            estimatedReceivedAfterFee
+          )
 
       private def calculateSwapQuote(
         pool: LiquidityPool,
@@ -79,7 +104,7 @@ object PricingService {
         slippagePercent: Percentage
       ): Either[String, SwapQuote] =
         for {
-          (_, newOutputReserve, estimatedReceived) <- calculateReservesAndReceived(pool, fromTokenId, amount)
+          reservesAndReceived <- calculateReservesAndReceived(pool, fromTokenId, amount)
           outputToken = if (fromTokenId === pool.tokenA.identifier) pool.tokenB else pool.tokenA
 
           _ <- Either.cond(
@@ -88,7 +113,7 @@ object PricingService {
             "Invalid output token"
           )
 
-          estimatedReceivedDecimal = estimatedReceived.toBigDecimal
+          estimatedReceivedDecimal = reservesAndReceived.estimatedReceivedAfterFee.toBigDecimal
           minimumReceived = (estimatedReceivedDecimal * slippagePercent.toFactor).floorToLong
 
           amountValue = BigDecimal(amount.value.value)
@@ -96,7 +121,7 @@ object PricingService {
 
           outputReserve = BigInt(outputToken.amount.value)
           outputReserveDecimal = outputReserve.toBigDecimal
-          newOutputReserveDecimal = newOutputReserve.toBigDecimal
+          newOutputReserveDecimal = reservesAndReceived.newOutputReserveAfterFee.toBigDecimal
 
           priceImpactPercent =
             if (outputReserve > 0) {
@@ -110,7 +135,7 @@ object PricingService {
             slippagePercent = slippagePercent,
             rate = rate,
             priceImpactPercent = priceImpactPercent.setScale(2, RoundingMode.HALF_UP),
-            estimatedReceived = estimatedReceived,
+            estimatedReceived = reservesAndReceived.estimatedReceivedAfterFee,
             minimumReceived = minimumReceived
           )
 
@@ -164,7 +189,7 @@ object PricingService {
             val calculationResult = calculateReservesAndReceived(liquidityPool, swapUpdate.swapFromPair, swapUpdate.amountIn)
 
             calculationResult match {
-              case Right((newFromTokenReserve, newToTokenReserve, receivedAmount)) =>
+              case Right(reservesAndReceived: ReservesAndReceived) =>
                 val fromTokenInfo =
                   if (swapUpdate.swapFromPair === liquidityPool.tokenA.identifier) liquidityPool.tokenA
                   else liquidityPool.tokenB
@@ -174,9 +199,10 @@ object PricingService {
                   else liquidityPool.tokenB
 
                 val swapTokenInfo = SwapTokenInfo(
-                  fromTokenInfo.copy(amount = newFromTokenReserve.toLong.toPosLongUnsafe),
-                  toTokenInfo.copy(amount = newToTokenReserve.toLong.toPosLongUnsafe),
-                  SwapAmount(PosLong.unsafeFrom(receivedAmount.toLong))
+                  fromTokenInfo.copy(amount = reservesAndReceived.newInputReserveAfterFee.toLong.toPosLongUnsafe),
+                  toTokenInfo.copy(amount = reservesAndReceived.newOutputReserveAfterFee.toLong.toPosLongUnsafe),
+                  SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedBeforeFee.toLong)),
+                  SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedAfterFee.toLong))
                 )
                 Right(swapTokenInfo)
               case Left(errorMsg) =>
@@ -223,4 +249,5 @@ object PricingService {
         }
       } yield result
     }
+  }
 }

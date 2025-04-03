@@ -118,11 +118,11 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
     val yearRemainder = if (isLastEpochInYear(currentProgress)) {
       config.governancePool.value.value % epochProgress1Year
     } else 0L
+    val totalPower = votingPowers.map(_.power.total.value).sum
 
-    (if (votingPowers.isEmpty) {
+    (if (votingPowers.isEmpty || totalPower === 0L) {
        EitherT.pure[F, RewardError](Map.empty[Address, Amount])
      } else {
-       val totalPower = votingPowers.map(_.power.total.value).sum
        val totalForEpoch = basePerEpoch + yearRemainder
 
        for {

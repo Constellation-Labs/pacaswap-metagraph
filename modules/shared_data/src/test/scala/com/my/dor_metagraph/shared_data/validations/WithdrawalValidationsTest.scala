@@ -23,7 +23,8 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.refined.PosLongOps
+import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.refined.{NonNegLongOps, Percentage, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
@@ -58,6 +59,9 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
     val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
+    val rewards = additionalProvider.foldLeft(Map(owner -> 0L.toNonNegLongUnsafe)) {
+      case (acc, (addr, _)) => acc + (addr -> 0L.toNonNegLongUnsafe)
+    }
 
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
 
@@ -67,7 +71,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares)
+      PoolShares(totalShares, shares, rewards),
+      FeeDistributor.empty
     )
     (
       poolId.value,

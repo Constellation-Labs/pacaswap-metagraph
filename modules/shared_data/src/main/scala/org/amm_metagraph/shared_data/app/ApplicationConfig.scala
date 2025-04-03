@@ -18,7 +18,9 @@ object ApplicationConfig {
 
   sealed trait Environment
   case object Dev extends Environment
-  case object Prod extends Environment
+  case object Testnet extends Environment
+  case object Integrationnet extends Environment
+  case object Mainnet extends Environment
 
   case class VotingWeightMultipliers(
     lockForSixMonthsMultiplier: PosDouble,

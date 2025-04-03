@@ -14,9 +14,12 @@ import io.constellationnetwork.security.signature.Signed
 import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.types.numeric.PosLong
+import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
+import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
+import org.amm_metagraph.shared_data.refined.Percentage._
+import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
 import org.amm_metagraph.shared_data.types.States._
 
@@ -42,7 +45,8 @@ object LiquidityPool {
   @derive(encoder, decoder)
   case class PoolShares(
     totalShares: PosLong,
-    addressShares: Map[Address, ShareAmount]
+    addressShares: Map[Address, ShareAmount],
+    feeShares: Map[Address, NonNegLong]
   )
 
   @derive(encoder, decoder)
@@ -52,7 +56,8 @@ object LiquidityPool {
     tokenB: TokenInformation,
     owner: Address,
     k: BigInt,
-    poolShares: PoolShares
+    poolShares: PoolShares,
+    poolFees: FeePercentages
   )
 
   def getLiquidityPools(state: AmmCalculatedState): Map[String, LiquidityPool] =

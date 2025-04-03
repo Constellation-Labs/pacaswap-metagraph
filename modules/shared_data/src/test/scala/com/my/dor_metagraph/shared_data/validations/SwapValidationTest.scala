@@ -28,6 +28,7 @@ import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
@@ -86,7 +87,12 @@ object SwapValidationTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(1.toTokenAmountFormat.toPosLongUnsafe, Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))))
+      PoolShares(
+        1.toTokenAmountFormat.toPosLongUnsafe,
+        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
+        Map(owner -> 0L.toNonNegLongUnsafe)
+      ),
+      FeeDistributor.empty
     )
     (
       poolId.value,

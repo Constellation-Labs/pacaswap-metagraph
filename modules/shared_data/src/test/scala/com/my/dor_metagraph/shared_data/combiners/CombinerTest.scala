@@ -25,6 +25,7 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
+import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
@@ -94,7 +95,8 @@ object CombinerTest extends MutableIOSuite {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares)
+      PoolShares(totalShares, shares, Map.empty),
+      FeeDistributor.empty
     )
     (
       poolId.value,
@@ -175,7 +177,8 @@ object CombinerTest extends MutableIOSuite {
           tokenBId,
           tokenAAmount,
           tokenBAmount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -318,7 +321,8 @@ object CombinerTest extends MutableIOSuite {
           tokenBId,
           tokenAAmount,
           tokenBAmount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -450,7 +454,8 @@ object CombinerTest extends MutableIOSuite {
           tokenBId,
           tokenAAmount,
           tokenBAmount,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 

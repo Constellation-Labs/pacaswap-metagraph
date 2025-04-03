@@ -231,7 +231,8 @@ object WithdrawalCombinerService {
             k = k,
             poolShares = PoolShares(
               totalSharesAmount,
-              updatedAddressShares
+              updatedAddressShares,
+              liquidityPool.poolShares.feeShares
             )
           )
       }

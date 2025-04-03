@@ -19,6 +19,12 @@ type LiquidityPool = {
     }
 }
 
+type PoolFees = {
+    total: number
+    providers: number
+    operators: number
+}
+
 type LiquidityPoolUpdate = {
     source: string
     tokenAAllowSpend: string
@@ -27,7 +33,8 @@ type LiquidityPoolUpdate = {
     tokenBId?: string | null
     tokenAAmount: number
     tokenBAmount: number
-    maxValidGsEpochProgress: number
+    maxValidGsEpochProgress: number,
+    poolFees: PoolFees
 }
 
 type LiquidityUpdateBody = {
@@ -58,6 +65,11 @@ const createLiquidityPoolUpdate = async (
             tokenBAllowSpend: tokenBAllowSpendHash,
             tokenBAmount,
             tokenBId,
+            poolFees: {
+                total: 0.0,
+                providers: 0.0,
+                operators: 0.0
+            }
         }
     };
     const serialized = await serializeBase64(body)
