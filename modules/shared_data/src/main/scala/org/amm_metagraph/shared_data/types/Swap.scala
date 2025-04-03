@@ -39,6 +39,8 @@ object Swap {
     toToken: TokenInformation,
     allowSpendReference: Hash,
     amountIn: SwapAmount,
+    grossReceived: SwapAmount,
+    netReceived: SwapAmount,
     amountOutMinimum: SwapAmount,
     maxValidGsEpochProgress: EpochProgress,
     poolId: Option[PoolId],

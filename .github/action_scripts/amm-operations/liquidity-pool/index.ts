@@ -41,10 +41,10 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
-    tokenAAllowSpendAmount: 100,
-    tokenBAllowSpendAmount: 200,
-    tokenAToSpend: 50,
-    tokenBToSpend: 100,
+    tokenAAllowSpendAmount: 2000 * 1e8,
+    tokenBAllowSpendAmount: 4000 * 1e8,
+    tokenAToSpend: 1000 * 1e8,
+    tokenBToSpend: 2000 * 1e8,
 });
 
 type LiquidityPoolConfig = BaseConfig & {

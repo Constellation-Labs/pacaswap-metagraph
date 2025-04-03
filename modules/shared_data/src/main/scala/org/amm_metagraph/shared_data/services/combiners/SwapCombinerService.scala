@@ -14,6 +14,7 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
+import eu.timepit.refined.cats.refTypeOrder
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
@@ -128,6 +129,15 @@ object SwapCombinerService {
             } else if (allowSpend.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
               FailedCalculatedState(
                 AllowSpendExpired(allowSpend.signed.value),
+                expireEpochProgress,
+                signedUpdate
+              ).some
+            } else if (
+              updatedTokenInformation.primaryTokenInformation.amount < applicationConfig.minTokensLiquidityPool ||
+              updatedTokenInformation.pairTokenInformation.amount < applicationConfig.minTokensLiquidityPool
+            ) {
+              FailedCalculatedState(
+                SwapWouldDrainPoolBalance(),
                 expireEpochProgress,
                 signedUpdate
               ).some
@@ -322,86 +332,76 @@ object SwapCombinerService {
         val signedSwapUpdate = pendingSpendAction.update
         val swapUpdate = pendingSpendAction.update.value
         val updates = swapUpdate :: oldState.onChain.updates
-        validateUpdate(signedSwapUpdate, none, none, globalEpochProgress) match {
-          case Some(value) => handleFailedUpdate(updates, oldState, value, swapCalculatedState).pure
-          case None =>
-            for {
-              metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
-                Hasher[F].hash(pendingSpendAction.generatedSpendAction)
-              )
-              globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
-              allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
-              updatedState <-
-                if (!allSpendActionsAccepted) {
-                  oldState.pure
-                } else {
-                  for {
-                    poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-                    liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
-                    swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
-                    swapReference <- HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate))
-                    swapUpdateHashed <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
-                    sourceAddress = signedSwapUpdate.source
 
-                    response = swapTokenInfo match {
-                      case Left(_) => oldState
-                      case Right(updatedTokenInformation) =>
-                        val liquidityPoolUpdated = updateLiquidityPool(
-                          liquidityPool,
-                          updatedTokenInformation.primaryTokenInformation,
-                          updatedTokenInformation.pairTokenInformation,
-                          updatedTokenInformation.grossReceived,
-                          currencyId
-                        )
+        for {
+          poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+          swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
+          swapReference <- HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate))
+          swapUpdateHashed <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+          sourceAddress = signedSwapUpdate.source
 
-                        val swapCalculatedStateAddress = SwapCalculatedStateAddress(
-                          swapUpdateHashed.hash,
-                          sourceAddress,
-                          updatedTokenInformation.primaryTokenInformation,
-                          updatedTokenInformation.pairTokenInformation,
-                          swapUpdate.allowSpendReference,
-                          swapUpdate.amountIn,
-                          swapUpdate.amountOutMinimum,
-                          swapUpdate.maxValidGsEpochProgress,
-                          poolId.some,
-                          currentSnapshotOrdinal,
-                          swapReference
-                        )
+          response = swapTokenInfo match {
+            case Left(_) => oldState
+            case Right(updatedTokenInformation) =>
+              validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress) match {
+                case Some(value) => handleFailedUpdate(updates, oldState, value, swapCalculatedState)
+                case None =>
+                  val liquidityPoolUpdated = updateLiquidityPool(
+                    liquidityPool,
+                    updatedTokenInformation.primaryTokenInformation,
+                    updatedTokenInformation.pairTokenInformation,
+                    updatedTokenInformation.grossReceived,
+                    currencyId
+                  )
 
-                        val updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
-                        val newSwapState = swapCalculatedState
-                          .focus(_.confirmed.value)
-                          .modify(current =>
-                            current.updatedWith(sourceAddress) {
-                              case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
-                              case None                 => Some(Set(swapCalculatedStateAddress))
-                            }
-                          )
-                          .focus(_.pending)
-                          .replace(updatedPendingCalculatedState)
+                  val swapCalculatedStateAddress = SwapCalculatedStateAddress(
+                    swapUpdateHashed.hash,
+                    sourceAddress,
+                    updatedTokenInformation.primaryTokenInformation,
+                    updatedTokenInformation.pairTokenInformation,
+                    swapUpdate.allowSpendReference,
+                    swapUpdate.amountIn,
+                    updatedTokenInformation.grossReceived,
+                    updatedTokenInformation.netReceived,
+                    swapUpdate.amountOutMinimum,
+                    swapUpdate.maxValidGsEpochProgress,
+                    poolId.some,
+                    currentSnapshotOrdinal,
+                    swapReference
+                  )
 
-                        val newLiquidityPoolState =
-                          liquidityPoolsCalculatedState
-                            .focus(_.confirmed.value)
-                            .modify(_.updated(poolId.value, liquidityPoolUpdated))
+                  val updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
+                  val newSwapState = swapCalculatedState
+                    .focus(_.confirmed.value)
+                    .modify(current =>
+                      current.updatedWith(sourceAddress) {
+                        case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
+                        case None                 => Some(Set(swapCalculatedStateAddress))
+                      }
+                    )
+                    .focus(_.pending)
+                    .replace(updatedPendingCalculatedState)
 
-                        val updatedCalculatedState = oldState.calculated
-                          .focus(_.operations)
-                          .modify(_.updated(OperationType.Swap, newSwapState))
-                          .focus(_.operations)
-                          .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+                  val newLiquidityPoolState =
+                    liquidityPoolsCalculatedState
+                      .focus(_.confirmed.value)
+                      .modify(_.updated(poolId.value, liquidityPoolUpdated))
 
-                        DataState(
-                          AmmOnChainState(updates),
-                          updatedCalculatedState,
-                          oldState.sharedArtifacts
-                        )
-                    }
+                  val updatedCalculatedState = oldState.calculated
+                    .focus(_.operations)
+                    .modify(_.updated(OperationType.Swap, newSwapState))
+                    .focus(_.operations)
+                    .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
-                  } yield response
-                }
-            } yield updatedState
-        }
+                  DataState(
+                    AmmOnChainState(updates),
+                    updatedCalculatedState,
+                    oldState.sharedArtifacts
+                  )
+              }
+          }
+        } yield response
       }
     }
 }

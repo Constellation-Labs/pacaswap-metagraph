@@ -12,7 +12,7 @@ import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.{SpendAction, SpendTransaction}
+import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
@@ -67,7 +67,8 @@ object StakingCombinerTest extends MutableIOSuite {
       NonNegLong.MinValue,
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
-    )
+    ),
+    PosLong.unsafeFrom((100 * 1e8).toLong)
   )
 
   override def sharedResource: Resource[IO, Res] = for {
@@ -260,8 +261,8 @@ object StakingCombinerTest extends MutableIOSuite {
         oldLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1),
         updatedLiquidityPool.tokenA.amount.value === toFixedPoint(200.0),
         updatedLiquidityPool.tokenB.amount.value === toFixedPoint(100.0),
-        updatedLiquidityPool.poolShares.totalShares.value === toFixedPoint(1.5),
-        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.5),
+        updatedLiquidityPool.poolShares.totalShares.value === toFixedPoint(2.0),
+        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(2.0),
         stakingSpendAction.size === 1
       )
   }
@@ -392,7 +393,7 @@ object StakingCombinerTest extends MutableIOSuite {
         oldLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(1.0),
         oldLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0),
         updatedLiquidityPool.poolShares.addressShares.size === 2,
-        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(2.0),
+        updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(3.0),
         updatedLiquidityPool.poolShares.addressShares(secondProviderAddress).value.value.value === toFixedPoint(1.0)
       )
   }

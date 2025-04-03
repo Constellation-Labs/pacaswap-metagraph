@@ -60,7 +60,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       NonNegLong.MinValue,
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
-    )
+    ),
+    PosLong.unsafeFrom((1 * 1e8).toLong)
   )
 
   override def sharedResource: Resource[IO, Res] = for {
@@ -383,7 +384,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(
       CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
-      PosLong.unsafeFrom(toFixedPoint(100.0))
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
     )
     val pairToken = TokenInformation(
       CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,

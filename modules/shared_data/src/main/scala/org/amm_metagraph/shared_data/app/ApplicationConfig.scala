@@ -4,14 +4,15 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
-import eu.timepit.refined.types.numeric.{NonNegLong, PosDouble}
+import eu.timepit.refined.types.numeric.{NonNegLong, PosDouble, PosLong}
 
 case class ApplicationConfig(
   failedOperationsExpirationEpochProgresses: EpochProgress,
   nodeValidatorsGovernanceAllocationId: String,
   environment: ApplicationConfig.Environment,
   governance: ApplicationConfig.Governance,
-  rewards: ApplicationConfig.Rewards
+  rewards: ApplicationConfig.Rewards,
+  minTokensLiquidityPool: PosLong
 )
 
 object ApplicationConfig {
