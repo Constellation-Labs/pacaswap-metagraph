@@ -9,12 +9,11 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import eu.timepit.refined.cats.refTypeEq
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.{SwapReference, getSwapCalculatedState}
+import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, SwapReference, getSwapCalculatedState}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
@@ -30,7 +29,7 @@ object SwapValidations {
     signedSwapUpdate: Signed[SwapUpdate],
     state: AmmCalculatedState
   ): F[DataApplicationValidationErrorOr[Unit]] = {
-    val liquidityPoolsCalculatedState = getLiquidityPools(state)
+    val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
     val swapUpdate = signedSwapUpdate.value
 
     for {
@@ -50,7 +49,11 @@ object SwapValidations {
         swapUpdate.allowSpendReference,
         swapCalculatedState.getPendingUpdates
       )
-
+      transactionAlreadyExists = validateIfTransactionAlreadyExists(
+        swapUpdate,
+        swapCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
+        swapCalculatedState.getPendingUpdates
+      )
       lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
     } yield
       l1Validations
@@ -58,6 +61,7 @@ object SwapValidations {
         .productR(liquidityPoolExists)
         .productR(poolHaveEnoughTokens)
         .productR(allowSpendIsDuplicated)
+        .productR(transactionAlreadyExists)
         .productR(lastRef)
   }
 
@@ -102,4 +106,14 @@ object SwapValidations {
       case _ => valid
     }
   }
+
+  private def validateIfTransactionAlreadyExists(
+    swapUpdate: SwapUpdate,
+    confirmedSwaps: Set[SwapCalculatedStateAddress],
+    pendingSwaps: Set[Signed[SwapUpdate]]
+  ): DataApplicationValidationErrorOr[Unit] =
+    SwapTransactionAlreadyExists.whenA(
+      confirmedSwaps.exists(swap => swap.allowSpendReference === swapUpdate.allowSpendReference) ||
+        pendingSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference)
+    )
 }

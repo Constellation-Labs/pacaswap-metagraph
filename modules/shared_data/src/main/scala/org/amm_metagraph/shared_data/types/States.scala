@@ -57,7 +57,7 @@ object States {
     value: Map[Address, Set[WithdrawalCalculatedStateAddress]]
   ) extends ConfirmedCalculatedState
 
-  object ConfirmedWithdrawalCalculatedState {
+  private object ConfirmedWithdrawalCalculatedState {
     def empty: ConfirmedWithdrawalCalculatedState = ConfirmedWithdrawalCalculatedState(Map.empty)
   }
 
@@ -66,7 +66,7 @@ object States {
     value: Map[Address, Set[SwapCalculatedStateAddress]]
   ) extends ConfirmedCalculatedState
 
-  object ConfirmedSwapCalculatedState {
+  private object ConfirmedSwapCalculatedState {
     def empty: ConfirmedSwapCalculatedState = ConfirmedSwapCalculatedState(Map.empty)
   }
 
@@ -205,4 +205,9 @@ object States {
   case class ArithmeticError(message: String) extends FailedCalculatedStateReason
   case class SwapWouldDrainPoolBalance() extends FailedCalculatedStateReason
   case class WithdrawalWouldDrainPoolBalance() extends FailedCalculatedStateReason
+  case class InvalidLiquidityPool() extends FailedCalculatedStateReason
+  case class InvalidSwapTokenInfo(message: String) extends FailedCalculatedStateReason
+  case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedStakingRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedSwapRequest(update: AmmUpdate) extends FailedCalculatedStateReason
 }

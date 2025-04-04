@@ -9,7 +9,7 @@ import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.validations.Errors._
@@ -35,23 +35,17 @@ object StakingValidations {
     val stakingUpdate = signedStakingUpdate.value
 
     val stakingCalculatedState = getStakingCalculatedState(state)
-    val pendingStaking = getPendingAllowSpendsStakingUpdates(state)
-
-    val liquidityPoolsCalculatedState = getLiquidityPools(state)
+    val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
 
     for {
       l1Validations <- stakingValidationsL1(stakingUpdate)
       signatures <- signatureValidations(signedStakingUpdate, signedStakingUpdate.source)
       sourceAddress = signedStakingUpdate.source
 
-      pendingTransactionAlreadyExists = validateIfPendingTransactionAlreadyExists(
+      transactionAlreadyExists = validateIfTransactionAlreadyExists(
         stakingUpdate,
-        pendingStaking
-      )
-
-      confirmedTransactionAlreadyExists = validateIfConfirmedTransactionAlreadyExists(
-        stakingUpdate,
-        stakingCalculatedState.confirmed.value.get(sourceAddress)
+        stakingCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
+        stakingCalculatedState.getPendingUpdates
       )
 
       liquidityPoolExists <- validateIfLiquidityPoolExists(
@@ -72,34 +66,25 @@ object StakingValidations {
     } yield
       l1Validations
         .productR(signatures)
-        .productR(confirmedTransactionAlreadyExists)
-        .productR(pendingTransactionAlreadyExists)
+        .productR(transactionAlreadyExists)
         .productR(liquidityPoolExists)
         .productR(tokenAAllowSpendIsDuplicated)
         .productR(tokenBAllowSpendIsDuplicated)
         .productR(lastRef)
   }
 
-  private def validateIfConfirmedTransactionAlreadyExists(
+  private def validateIfTransactionAlreadyExists(
     stakingUpdate: StakingUpdate,
-    maybeConfirmedStaking: Option[Set[StakingCalculatedStateAddress]]
+    confirmedStakings: Set[StakingCalculatedStateAddress],
+    pendingStakings: Set[Signed[StakingUpdate]]
   ): DataApplicationValidationErrorOr[Unit] =
     StakingTransactionAlreadyExists.whenA(
-      maybeConfirmedStaking.exists(
-        _.exists(staking =>
-          staking.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
+      confirmedStakings.exists(staking =>
+        staking.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
+      ) ||
+        pendingStakings.exists(staking =>
+          staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
         )
-      )
-    )
-
-  private def validateIfPendingTransactionAlreadyExists(
-    stakingUpdate: StakingUpdate,
-    maybePendingStaking: Set[Signed[StakingUpdate]]
-  ): DataApplicationValidationErrorOr[Unit] =
-    StakingTransactionAlreadyExists.whenA(
-      maybePendingStaking.exists(staking =>
-        staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
-      )
     )
 
   private def validateIfLiquidityPoolExists[F[_]: Async](

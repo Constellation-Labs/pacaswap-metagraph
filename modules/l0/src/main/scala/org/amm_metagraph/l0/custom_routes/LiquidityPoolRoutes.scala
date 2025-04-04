@@ -15,7 +15,6 @@ import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
-import org.http4s.ember.core.Shared
 import org.http4s.{HttpRoutes, Response}
 
 object LiquidityPoolRoutes {
@@ -37,7 +36,7 @@ object LiquidityPoolRoutes {
     totalShared: Long
   )
 
-  object LiquidityPoolResponse {
+  private object LiquidityPoolResponse {
     def from(pool: LiquidityPool, priceTokenA: Long, priceTokenB: Long): LiquidityPoolResponse =
       LiquidityPoolResponse(
         poolId = pool.poolId.value,
@@ -56,7 +55,7 @@ object LiquidityPoolRoutes {
     shares: ShareAmount
   )
 
-  object LiquidityPoolSharesResponse {
+  private object LiquidityPoolSharesResponse {
     def from(pool: LiquidityPool, address: Address): Option[LiquidityPoolSharesResponse] =
       pool.poolShares.addressShares.get(address).map(shares => LiquidityPoolSharesResponse(pool.poolId, address, shares))
   }

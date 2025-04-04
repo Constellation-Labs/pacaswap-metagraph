@@ -11,7 +11,6 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
-import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
@@ -39,8 +38,8 @@ object SwapRoutes {
   @derive(eqv, show)
   sealed trait SwapState extends EnumEntry
 
-  object SwapState extends Enum[SwapState] with SwapStateCodecs {
-    val values = findValues
+  private object SwapState extends Enum[SwapState] with SwapStateCodecs {
+    val values: IndexedSeq[SwapState] = findValues
 
     case object Confirmed extends SwapState
 
@@ -133,7 +132,7 @@ object SwapRoutes {
   }
 }
 
-case class SwapRoutes[F[_]: Async: HasherSelector: SecurityProvider](
+case class SwapRoutes[F[_]: Async: HasherSelector](
   calculatedStateService: CalculatedStateService[F],
   pricingService: PricingService[F],
   dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]

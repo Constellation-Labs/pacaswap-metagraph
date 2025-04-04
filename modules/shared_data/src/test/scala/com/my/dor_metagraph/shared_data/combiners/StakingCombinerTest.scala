@@ -221,7 +221,7 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
 
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -360,7 +360,7 @@ object StakingCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -489,7 +489,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
@@ -601,7 +601,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
 
       stakeResponse <- stakingCombinerService.combineNew(
@@ -619,6 +619,126 @@ object StakingCombinerTest extends MutableIOSuite {
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
         ),
         stakingCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
+      )
+  }
+
+  test("Test failure staking - duplicated staking") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        primaryToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        pairToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          PosLong.unsafeFrom(toFixedPoint(100.0)),
+          pairToken.identifier,
+          StakingReference.empty,
+          futureEpoch
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+          ),
+        pairToken.identifier.get.value.some ->
+          SortedMap(
+            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
+        stakingUpdate,
+        state,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(ownerAddress)
+      )
+
+      stakeResponsePendingSpendActionResponse2 <- stakingCombinerService.combineNew(
+        stakingUpdate,
+        stakeResponsePendingSpendActionResponse,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(ownerAddress)
+      )
+
+      stakingCalculatedState = stakeResponsePendingSpendActionResponse2.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
+    } yield
+      expect.all(
+        stakingCalculatedState.failed.toList.length === 1,
+        stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        stakingCalculatedState.failed.toList.head.reason == DuplicatedStakingRequest(stakingUpdate)
       )
   }
 }

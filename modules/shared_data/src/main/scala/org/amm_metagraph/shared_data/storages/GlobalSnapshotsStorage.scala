@@ -1,12 +1,10 @@
 package org.amm_metagraph.shared_data.storages
 
-import cats.Applicative
 import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedMap
 
-import io.constellationnetwork.node.shared.domain.snapshot.Validator.isNextSnapshot
 import io.constellationnetwork.schema.{GlobalIncrementalSnapshot, GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 

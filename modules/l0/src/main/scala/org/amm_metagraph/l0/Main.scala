@@ -54,12 +54,12 @@ object Main
     globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
 
     validationService = ValidationService.make[IO](config)
-    pricingService = PricingService.make[IO](calculatedStateService)
+    pricingService = PricingService.make[IO](config, calculatedStateService)
     governanceCombinerService = GovernanceCombinerService.make[IO](config)
     liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-    withdrawalCombinerService = WithdrawalCombinerService.make[IO](config)
+    withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
 
     combinerService = L0CombinerService
       .make[IO](

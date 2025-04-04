@@ -2,7 +2,7 @@ package com.my.dor_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.Validated.{Invalid, Valid}
-import cats.data.{Chain, NonEmptyList, NonEmptySet}
+import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 

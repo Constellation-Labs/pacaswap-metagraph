@@ -128,10 +128,9 @@ object SwapValidationTest extends MutableIOSuite {
     Eq.fromUniversalEquals
 
   test("Validate update successfully") { implicit res =>
-    implicit val (h, hs, sp) = res
+    implicit val (_, hs, sp) = res
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
     val stakingUpdate = SwapUpdate(
       sourceAddress,

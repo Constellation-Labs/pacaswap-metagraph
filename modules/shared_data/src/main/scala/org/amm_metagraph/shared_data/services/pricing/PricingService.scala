@@ -5,18 +5,26 @@ import cats.syntax.all._
 
 import scala.math.BigDecimal.RoundingMode
 
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
+import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.{StakingUpdate, SwapUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.{StakingUpdate, SwapUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingTokenInformation
+import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.{SwapQuote, SwapTokenInfo}
+import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalTokenAmounts
 
 trait PricingService[F[_]] {
   def getSwapQuote(
@@ -29,19 +37,51 @@ trait PricingService[F[_]] {
   def getLiquidityPoolPrices(poolId: PoolId): F[Either[String, (Long, Long)]]
 
   def getSwapTokenInfo(
-    swapUpdate: SwapUpdate,
-    poolId: PoolId
-  ): F[Either[String, SwapTokenInfo]]
+    signedUpdate: Signed[SwapUpdate],
+    poolId: PoolId,
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): F[Either[FailedCalculatedState, SwapTokenInfo]]
 
   def getStakingTokenInfo(
-    stakingUpdate: StakingUpdate,
-    poolId: PoolId
-  ): F[Either[String, StakingTokenInformation]]
+    signedUpdate: Signed[StakingUpdate],
+    poolId: PoolId,
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): F[Either[FailedCalculatedState, StakingTokenInformation]]
+
+  def getUpdatedLiquidityPoolDueStaking(
+    liquidityPool: LiquidityPool,
+    signedUpdate: Signed[StakingUpdate],
+    signerAddress: Address,
+    stakingTokenInformation: StakingTokenInformation,
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Either[FailedCalculatedState, LiquidityPool]
+
+  def getUpdatedLiquidityPoolDueSwap(
+    liquidityPool: LiquidityPool,
+    fromTokenInfo: TokenInformation,
+    toTokenInfo: TokenInformation,
+    grossAmount: SwapAmount,
+    metagraphId: CurrencyId
+  ): Either[FailedCalculatedState, LiquidityPool]
+
+  def getUpdatedLiquidityPoolDueWithdrawal(
+    signedUpdate: Signed[WithdrawalUpdate],
+    liquidityPool: LiquidityPool,
+    withdrawalAmounts: WithdrawalTokenAmounts,
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Either[FailedCalculatedState, LiquidityPool]
+
+  def calculateWithdrawalAmounts(
+    signedUpdate: Signed[WithdrawalUpdate],
+    liquidityPool: LiquidityPool,
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Either[FailedCalculatedState, WithdrawalTokenAmounts]
 
 }
 
 object PricingService {
   def make[F[_]: Async](
+    applicationConfig: ApplicationConfig,
     calculatedStateService: CalculatedStateService[F]
   ): PricingService[F] = {
     case class ReservesAndReceived(
@@ -139,6 +179,14 @@ object PricingService {
             minimumReceived = minimumReceived
           )
 
+      private def getExpireEpochProgress(lastSyncGlobalEpochProgress: EpochProgress): EpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+          .getOrElse(NonNegLong.MinValue)
+      )
+
       override def getSwapQuote(
         fromTokenId: Option[CurrencyId],
         toTokenId: Option[CurrencyId],
@@ -179,12 +227,22 @@ object PricingService {
       } yield result
 
       override def getSwapTokenInfo(
-        swapUpdate: SwapUpdate,
-        poolId: PoolId
-      ): F[Either[String, SwapTokenInfo]] = for {
+        signedUpdate: Signed[SwapUpdate],
+        poolId: PoolId,
+        lastSyncGlobalEpochProgress: EpochProgress
+      ): F[Either[FailedCalculatedState, SwapTokenInfo]] = for {
         liquidityPools <- getConfirmedLiquidityPools
+        swapUpdate = signedUpdate.value
+        expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
         result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
-          case Left(_) => Left("Liquidity pool does not exist")
+          case Left(_) =>
+            Left(
+              FailedCalculatedState(
+                InvalidLiquidityPool(),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
           case Right(liquidityPool) =>
             val calculationResult = calculateReservesAndReceived(liquidityPool, swapUpdate.swapFromPair, swapUpdate.amountIn)
 
@@ -206,20 +264,44 @@ object PricingService {
                 )
                 Right(swapTokenInfo)
               case Left(errorMsg) =>
-                Left(errorMsg)
+                Left(
+                  FailedCalculatedState(
+                    InvalidSwapTokenInfo(errorMsg),
+                    expireEpochProgress,
+                    signedUpdate
+                  )
+                )
             }
         }.handleErrorWith { _ =>
-          Async[F].pure(Left("Could not get pool"))
+          Async[F].pure(
+            Left(
+              FailedCalculatedState(
+                InvalidLiquidityPool(),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          )
         }
       } yield result
 
       def getStakingTokenInfo(
-        stakingUpdate: StakingUpdate,
-        poolId: PoolId
-      ): F[Either[String, StakingTokenInformation]] = for {
+        signedUpdate: Signed[StakingUpdate],
+        poolId: PoolId,
+        lastSyncGlobalEpochProgress: EpochProgress
+      ): F[Either[FailedCalculatedState, StakingTokenInformation]] = for {
         liquidityPools <- getConfirmedLiquidityPools
+        stakingUpdate = signedUpdate.value
+        expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
         result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
-          case Left(_) => Left("Liquidity pool does not exist")
+          case Left(_) =>
+            Left(
+              FailedCalculatedState(
+                InvalidLiquidityPool(),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
           case Right(liquidityPool) =>
             val (primaryToken, pairToken) = if (stakingUpdate.tokenAId === liquidityPool.tokenA.identifier) {
               (liquidityPool.tokenA, liquidityPool.tokenB)
@@ -248,6 +330,255 @@ object PricingService {
             )
         }
       } yield result
+
+      def getUpdatedLiquidityPoolDueStaking(
+        liquidityPool: LiquidityPool,
+        signedUpdate: Signed[StakingUpdate],
+        signerAddress: Address,
+        stakingTokenInformation: StakingTokenInformation,
+        lastSyncGlobalEpochProgress: EpochProgress
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        val primaryToken = stakingTokenInformation.primaryTokenInformation
+        val pairToken = stakingTokenInformation.pairTokenInformation
+        val newlyIssuedShares = stakingTokenInformation.newlyIssuedShares
+        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+
+        val tokenA = if (liquidityPool.tokenA.identifier == primaryToken.identifier) primaryToken else pairToken
+        val tokenB = if (liquidityPool.tokenB.identifier == pairToken.identifier) pairToken else primaryToken
+        val tokenAValue = liquidityPool.tokenA.amount.value + tokenA.amount.value
+        val tokenBValue = liquidityPool.tokenB.amount.value + tokenB.amount.value
+
+        for {
+          updatedTokenAAmount <- tokenAValue.toPosLong
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated token A amount $tokenAValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          updatedTokenBAmount <- tokenBValue.toPosLong
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated token B amount $tokenBValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          addressSharesAmount = liquidityPool.poolShares.addressShares.getOrElse(signerAddress, ShareAmount(Amount.empty))
+          updatedAddressSharesAmount =
+            ShareAmount(Amount(NonNegLong.unsafeFrom(addressSharesAmount.value.value.value + newlyIssuedShares)))
+          updatedAddressShares = liquidityPool.poolShares.addressShares.updated(signerAddress, updatedAddressSharesAmount)
+          poolShares <- (liquidityPool.poolShares.totalShares.value + newlyIssuedShares).toPosLong
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"poolShares $tokenBValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+        } yield
+          liquidityPool
+            .focus(_.tokenA)
+            .modify(_.focus(_.amount).replace(updatedTokenAAmount))
+            .focus(_.tokenB)
+            .modify(_.focus(_.amount).replace(updatedTokenBAmount))
+            .focus(_.k)
+            .replace(BigInt(updatedTokenAAmount.value) * BigInt(updatedTokenBAmount.value))
+            .focus(_.poolShares)
+            .replace(
+              PoolShares(
+                poolShares,
+                updatedAddressShares,
+                liquidityPool.poolShares.feeShares
+              )
+            )
+      }
+
+      def getUpdatedLiquidityPoolDueSwap(
+        liquidityPool: LiquidityPool,
+        fromTokenInfo: TokenInformation,
+        toTokenInfo: TokenInformation,
+        grossAmount: SwapAmount,
+        metagraphId: CurrencyId
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        def distributeFees: PoolShares = {
+          val fees = FeeDistributor.calculateFeeAmounts(
+            BigInt(grossAmount.value.value),
+            liquidityPool.poolFees
+          )
+
+          val updateFeeShares = FeeDistributor.distributeProviderFees(
+            fees.providers,
+            fees.operators,
+            liquidityPool.poolShares,
+            metagraphId
+          )
+
+          liquidityPool.poolShares.copy(feeShares = updateFeeShares)
+        }
+
+        val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
+        val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
+
+        Right(
+          liquidityPool
+            .focus(_.tokenA)
+            .replace(tokenA)
+            .focus(_.tokenB)
+            .replace(tokenB)
+            .focus(_.poolShares)
+            .replace(distributeFees)
+        )
+      }
+
+      def getUpdatedLiquidityPoolDueWithdrawal(
+        signedUpdate: Signed[WithdrawalUpdate],
+        liquidityPool: LiquidityPool,
+        withdrawalAmounts: WithdrawalTokenAmounts,
+        lastSyncGlobalEpochProgress: EpochProgress
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        val tokenAValue = liquidityPool.tokenA.amount.value - withdrawalAmounts.tokenAAmount.value
+        val tokenBValue = liquidityPool.tokenB.amount.value - withdrawalAmounts.tokenBAmount.value
+        val totalSharesValue = liquidityPool.poolShares.totalShares.value - signedUpdate.shareToWithdraw.value.value
+        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+
+        for {
+          tokenAAmount <- PosLong
+            .from(tokenAValue)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated token A amount $tokenAValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          tokenBAmount <- PosLong
+            .from(tokenBValue)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated token B amount $tokenBValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          totalSharesAmount <- PosLong
+            .from(totalSharesValue)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated total shares $totalSharesValue is not positive"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          addressSharesAmount = liquidityPool.poolShares.addressShares.getOrElse(signedUpdate.source, ShareAmount(Amount.empty))
+          sharesDifference = addressSharesAmount.value.value - signedUpdate.shareToWithdraw.value.value
+          updatedAddressSharesAmount <- NonNegLong
+            .from(sharesDifference)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Updated address shares amount $sharesDifference is negative"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+            .map(nonNeg => ShareAmount(Amount(nonNeg)))
+          updatedAddressShares =
+            if (updatedAddressSharesAmount.value === Amount.empty) {
+              liquidityPool.poolShares.addressShares - signedUpdate.source
+            } else {
+              liquidityPool.poolShares.addressShares.updated(signedUpdate.source, updatedAddressSharesAmount)
+            }
+
+          k = BigInt(tokenAAmount.value) * BigInt(tokenBAmount.value)
+        } yield
+          liquidityPool.copy(
+            tokenA = liquidityPool.tokenA.copy(amount = tokenAAmount),
+            tokenB = liquidityPool.tokenB.copy(amount = tokenBAmount),
+            k = k,
+            poolShares = PoolShares(
+              totalSharesAmount,
+              updatedAddressShares,
+              liquidityPool.poolShares.feeShares
+            )
+          )
+      }
+
+      def calculateWithdrawalAmounts(
+        signedUpdate: Signed[WithdrawalUpdate],
+        liquidityPool: LiquidityPool,
+        lastSyncGlobalEpochProgress: EpochProgress
+      ): Either[FailedCalculatedState, WithdrawalTokenAmounts] = {
+        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+
+        val PRECISION = 8
+        val SCALING_FACTOR = BigInt(10).pow(PRECISION)
+
+        for {
+          _ <- liquidityPool.poolShares.addressShares
+            .get(signedUpdate.source)
+            .filter(signedUpdate.shareToWithdraw.value <= _.value)
+            .toRight(
+              FailedCalculatedState(
+                WithdrawalAmountExceedsAvailableShares(signedUpdate.shareToWithdraw),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+
+          _ <- Either.cond(
+            signedUpdate.shareToWithdraw.value.value < liquidityPool.poolShares.totalShares.value,
+            (),
+            FailedCalculatedState(
+              CannotWithdrawAllShares(),
+              expireEpochProgress,
+              signedUpdate
+            )
+          )
+          totalShares = BigInt(liquidityPool.poolShares.totalShares.value)
+          sharesBigInt = BigInt(signedUpdate.shareToWithdraw.value.value)
+          tokenAOut = (BigInt(liquidityPool.tokenA.amount.value) * sharesBigInt * SCALING_FACTOR / totalShares) / SCALING_FACTOR
+          tokenBOut = (BigInt(liquidityPool.tokenB.amount.value) * sharesBigInt * SCALING_FACTOR / totalShares) / SCALING_FACTOR
+
+          tokenAAmount <- PosLong
+            .from(tokenAOut.toLong)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Token A amount doesn't match PosLong: $tokenAOut"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+          tokenBAmount <- PosLong
+            .from(tokenBOut.toLong)
+            .leftMap(_ =>
+              FailedCalculatedState(
+                ArithmeticError(s"Token B amount doesn't match PosLong: $tokenBOut"),
+                expireEpochProgress,
+                signedUpdate
+              )
+            )
+
+          _ <- Either.cond(
+            tokenAAmount <= liquidityPool.tokenA.amount.value,
+            (),
+            FailedCalculatedState(
+              TokenExceedsAvailableAmount(liquidityPool.tokenA.identifier, liquidityPool.tokenA.amount.value, tokenAAmount.value),
+              expireEpochProgress,
+              signedUpdate
+            )
+          )
+          _ <- Either.cond(
+            tokenBAmount <= liquidityPool.tokenB.amount.value,
+            (),
+            FailedCalculatedState(
+              TokenExceedsAvailableAmount(liquidityPool.tokenB.identifier, liquidityPool.tokenB.amount.value, tokenBAmount.value),
+              expireEpochProgress,
+              signedUpdate
+            )
+          )
+        } yield WithdrawalTokenAmounts(SwapAmount(tokenAAmount), SwapAmount(tokenBAmount))
+      }
     }
   }
 }

@@ -24,6 +24,11 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.States._
 
 object Withdrawal {
+  case class WithdrawalTokenAmounts(
+    tokenAAmount: SwapAmount,
+    tokenBAmount: SwapAmount
+  )
+
   @derive(encoder, decoder)
   case class WithdrawalCalculatedStateAddress(
     tokenAId: Option[CurrencyId],

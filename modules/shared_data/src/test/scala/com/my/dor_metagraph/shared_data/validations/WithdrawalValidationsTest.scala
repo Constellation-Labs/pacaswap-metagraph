@@ -24,7 +24,7 @@ import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.FeeDistributor
-import org.amm_metagraph.shared_data.refined.{NonNegLongOps, Percentage, PosLongOps}
+import org.amm_metagraph.shared_data.refined.{NonNegLongOps, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
