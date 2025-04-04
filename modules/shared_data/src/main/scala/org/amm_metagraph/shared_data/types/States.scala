@@ -203,4 +203,6 @@ object States {
   case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
       extends FailedCalculatedStateReason
   case class ArithmeticError(message: String) extends FailedCalculatedStateReason
+  case class SwapWouldDrainPoolBalance() extends FailedCalculatedStateReason
+  case class WithdrawalWouldDrainPoolBalance() extends FailedCalculatedStateReason
 }

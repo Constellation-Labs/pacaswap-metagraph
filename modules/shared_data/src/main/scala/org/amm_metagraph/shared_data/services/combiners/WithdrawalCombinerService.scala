@@ -239,20 +239,48 @@ object WithdrawalCombinerService {
 
       private def validateUpdate(
         signedUpdate: Signed[WithdrawalUpdate],
-        lastSyncGlobalEpochProgress: EpochProgress
-      ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
-
-        Either.cond(
-          signedUpdate.maxValidGsEpochProgress >= lastSyncGlobalEpochProgress,
-          signedUpdate,
-          FailedCalculatedState(
-            OperationExpired(signedUpdate),
-            expireEpochProgress,
-            signedUpdate
+        lastSyncGlobalEpochProgress: EpochProgress,
+        maybeUpdatedPool: Option[LiquidityPool] = None
+      ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] =
+        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          Left(
+            FailedCalculatedState(
+              OperationExpired(signedUpdate),
+              EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
+              signedUpdate
+            )
           )
-        )
-      }
+        } else {
+          maybeUpdatedPool match {
+            case Some(withdrawalTokenAmounts) =>
+              val expireEpochProgress = EpochProgress(
+                NonNegLong
+                  .from(
+                    lastSyncGlobalEpochProgress.value.value +
+                      applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+                  )
+                  .getOrElse(NonNegLong.MinValue)
+              )
+
+              if (
+                withdrawalTokenAmounts.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
+                withdrawalTokenAmounts.tokenB.amount < applicationConfig.minTokensLiquidityPool
+              ) {
+                Left(
+                  FailedCalculatedState(
+                    WithdrawalWouldDrainPoolBalance(),
+                    expireEpochProgress,
+                    signedUpdate
+                  )
+                )
+              } else {
+                Right(signedUpdate)
+              }
+
+            case None =>
+              Right(signedUpdate)
+          }
+        }
 
       override def combineNew(
         signedUpdate: Signed[WithdrawalUpdate],
@@ -328,7 +356,6 @@ object WithdrawalCombinerService {
               oldState.pure[F]
             } else {
               val processingState = for {
-                _ <- EitherT.fromEither(validateUpdate(signedWithdrawalUpdate, globalEpochProgress))
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
                 liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
                 withdrawalReference <- EitherT.liftF(
@@ -349,6 +376,8 @@ object WithdrawalCombinerService {
                     globalEpochProgress
                   )
                 )
+                _ <- EitherT.fromEither(validateUpdate(signedWithdrawalUpdate, globalEpochProgress, updatedPool.some))
+
                 withdrawalCalculatedStateAddress = WithdrawalCalculatedStateAddress(
                   withdrawalUpdate.tokenAId,
                   withdrawalAmounts.tokenAAmount,

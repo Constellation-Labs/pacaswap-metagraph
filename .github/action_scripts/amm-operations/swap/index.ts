@@ -46,9 +46,9 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
-    tokenAAllowSpendAmount: 50,
-    tokenBAllowSpendAmount: 100,
-    tokenAToSwapAmount: 25,
+    tokenAAllowSpendAmount: 50 * 1e8,
+    tokenBAllowSpendAmount: 100 * 1e8,
+    tokenAToSwapAmount: 25 * 1e8,
 });
 
 type SwapConfig = BaseConfig & {

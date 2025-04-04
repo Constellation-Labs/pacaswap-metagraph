@@ -236,7 +236,7 @@ object PricingService {
                 currentPrimaryTokenAmount
               ) // Maintain invariant
 
-            val relativeDepositIncrease = incomingPrimaryAmount.toDouble / (currentPrimaryTokenAmount + incomingPrimaryAmount)
+            val relativeDepositIncrease = incomingPrimaryAmount.toDouble / currentPrimaryTokenAmount
             val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
 
             Right(

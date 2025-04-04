@@ -62,7 +62,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       NonNegLong.MinValue,
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
-    )
+    ),
+    PosLong.unsafeFrom((100 * 1e8).toLong)
   )
 
   override def sharedResource: Resource[IO, Res] = for {

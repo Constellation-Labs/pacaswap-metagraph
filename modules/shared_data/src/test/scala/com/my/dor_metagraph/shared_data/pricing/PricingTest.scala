@@ -391,7 +391,7 @@ object PricingTest extends SimpleIOSuite {
         stakingTokenInfo.isRight,
         stakingTokenInfo.toOption.get.primaryTokenInformation.amount.value === toFixedPoint(100.0),
         stakingTokenInfo.toOption.get.pairTokenInformation.amount.value === toFixedPoint(200.0),
-        stakingTokenInfo.toOption.get.newlyIssuedShares === 4761904L
+        stakingTokenInfo.toOption.get.newlyIssuedShares === 5000000L
       )
   }
 }
