@@ -52,7 +52,8 @@ trait LiquidityPoolCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     spendActions: List[SpendAction],
-    currentSnapshotOrdinal: SnapshotOrdinal
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
@@ -69,7 +70,8 @@ object LiquidityPoolCombinerService {
         maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
         lastSyncGlobalEpochProgress: EpochProgress,
         confirmedLps: Map[String, LiquidityPool],
-        pendingLps: List[PoolId]
+        pendingLps: List[PoolId],
+        currencyId: CurrencyId
       ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
         val expireEpochProgress = EpochProgress(
           NonNegLong
@@ -90,7 +92,11 @@ object LiquidityPoolCombinerService {
           (maybeAllowSpendTokenA, maybeAllowSpendTokenB) match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               val update = signedUpdate.value
-              if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
+              if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
+                failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
+              } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
+                failWith(AllowSpendsDestinationAddressInvalid())
+              } else if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
                 failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
               } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
                 failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
@@ -190,7 +196,8 @@ object LiquidityPoolCombinerService {
               none,
               globalEpochProgress,
               confirmedLps,
-              pendingLpsPoolsIds
+              pendingLpsPoolsIds,
+              currencyId
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
@@ -251,7 +258,8 @@ object LiquidityPoolCombinerService {
               none,
               globalEpochProgress,
               Map.empty,
-              List.empty
+              List.empty,
+              currencyId
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
@@ -267,7 +275,8 @@ object LiquidityPoolCombinerService {
                     allowSpendTokenB.some,
                     globalEpochProgress,
                     Map.empty,
-                    List.empty
+                    List.empty,
+                    currencyId
                   )
                 )
                 amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)
@@ -321,7 +330,8 @@ object LiquidityPoolCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         spendActions: List[SpendAction],
-        currentSnapshotOrdinal: SnapshotOrdinal
+        currentSnapshotOrdinal: SnapshotOrdinal,
+        currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
 
@@ -341,7 +351,8 @@ object LiquidityPoolCombinerService {
               none,
               globalEpochProgress,
               Map.empty,
-              List.empty
+              List.empty,
+              currencyId
             )
           )
           sourceAddress = liquidityPoolUpdate.source

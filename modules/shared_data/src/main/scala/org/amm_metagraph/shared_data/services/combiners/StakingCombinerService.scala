@@ -49,7 +49,8 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     spendActions: List[SpendAction],
-    currentSnapshotOrdinal: SnapshotOrdinal
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
@@ -67,7 +68,8 @@ object StakingCombinerService {
         maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
         lastSyncGlobalEpochProgress: EpochProgress,
         confirmedStakings: Set[StakingCalculatedStateAddress],
-        pendingStakings: Set[Signed[StakingUpdate]]
+        pendingStakings: Set[Signed[StakingUpdate]],
+        currencyId: CurrencyId
       ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
         val expireEpochProgress = EpochProgress(
           NonNegLong
@@ -99,8 +101,11 @@ object StakingCombinerService {
                 } else {
                   (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
                 }
-
-                if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
+                if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
+                  failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
+                } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
+                  failWith(AllowSpendsDestinationAddressInvalid())
+                } else if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
                   failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
                 } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
                   failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
@@ -197,7 +202,8 @@ object StakingCombinerService {
               none,
               globalEpochProgress,
               confirmedStakings,
-              pendingStakings
+              pendingStakings,
+              currencyId
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
@@ -260,7 +266,8 @@ object StakingCombinerService {
               none,
               globalEpochProgress,
               Set.empty,
-              Set.empty
+              Set.empty,
+              currencyId
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
@@ -278,7 +285,8 @@ object StakingCombinerService {
                     allowSpendTokenB.some,
                     globalEpochProgress,
                     Set.empty,
-                    Set.empty
+                    Set.empty,
+                    currencyId
                   )
                 )
                 (amountToSpendA, amountToSpendB) =
@@ -339,7 +347,8 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         spendActions: List[SpendAction],
-        currentSnapshotOrdinal: SnapshotOrdinal
+        currentSnapshotOrdinal: SnapshotOrdinal,
+        currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val signedStakingUpdate = pendingSpendAction.update
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
@@ -358,7 +367,8 @@ object StakingCombinerService {
               none,
               globalEpochProgress,
               Set.empty,
-              Set.empty
+              Set.empty,
+              currencyId
             )
           )
           metagraphGeneratedSpendActionHash <- EitherT.liftF(

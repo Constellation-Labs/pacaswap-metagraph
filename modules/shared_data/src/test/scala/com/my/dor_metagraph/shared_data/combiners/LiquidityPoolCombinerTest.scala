@@ -104,6 +104,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -111,8 +112,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         tokenAId,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -121,8 +122,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         tokenBId,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -155,11 +156,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         tokenAId.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         tokenBId.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -171,7 +172,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
@@ -180,7 +181,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -191,7 +192,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        CurrencyId(destinationAddress)
       )
       updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
         .operations(OperationType.LiquidityPool)
@@ -219,6 +221,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -226,8 +230,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -236,8 +240,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -270,11 +274,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         tokenAId.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         tokenBId ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -296,7 +300,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
@@ -306,7 +310,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        CurrencyId(destinationAddress)
       )
 
       updatedLiquidityPoolCalculatedState = liquidityPoolConfirmedResponse.calculated
@@ -339,6 +344,9 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState()
 
@@ -348,8 +356,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
@@ -358,8 +366,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
@@ -392,11 +400,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -418,7 +426,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield
@@ -445,6 +453,9 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState()
 
@@ -454,8 +465,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -464,8 +475,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -498,11 +509,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -514,7 +525,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
 
@@ -523,7 +534,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield
@@ -550,6 +561,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -563,23 +575,23 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
-        SwapAmount(PosLong(1)),
+        ownerAddress,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-        none,
-        SwapAmount(PosLong(1)),
+        ownerAddress,
+        destinationAddress,
+        pairToken.identifier,
+        SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-        EpochProgress.MinValue,
+        EpochProgress.MaxValue,
         List.empty
       )
 
@@ -607,11 +619,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -623,7 +635,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
@@ -633,7 +645,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
     } yield

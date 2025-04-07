@@ -2,6 +2,7 @@ package com.my.dor_metagraph.shared_data
 
 import java.security.KeyPair
 
+import cats.Parallel
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -20,7 +21,7 @@ import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 import monocle.syntax.all._
 
 object DummyL0Context {
-  def buildGlobalIncrementalSnapshot[F[_]: Async: SecurityProvider](
+  def buildGlobalIncrementalSnapshot[F[_]: Parallel: Async: SecurityProvider](
     keyPair: KeyPair,
     gsEpochProgress: EpochProgress
   )(
@@ -36,7 +37,7 @@ object DummyL0Context {
           .flatMap(_.toHashed[F])
       }
 
-  def buildCurrencyIncrementalSnapshot[F[_]: Async: SecurityProvider](
+  def buildCurrencyIncrementalSnapshot[F[_]: Parallel: Async: SecurityProvider](
     keyPair: KeyPair
   )(
     implicit hs: Hasher[F]
@@ -87,7 +88,7 @@ object DummyL0Context {
       None
     )
 
-  def buildL0NodeContext[F[_]: Async: Hasher: SecurityProvider](
+  def buildL0NodeContext[F[_]: Async: Parallel: Hasher: SecurityProvider](
     keyPair: KeyPair,
     gsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
     gsEpochProgress: EpochProgress = EpochProgress.MinValue,
