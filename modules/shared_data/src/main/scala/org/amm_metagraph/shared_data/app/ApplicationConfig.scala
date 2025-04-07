@@ -12,7 +12,8 @@ case class ApplicationConfig(
   environment: ApplicationConfig.Environment,
   governance: ApplicationConfig.Governance,
   rewards: ApplicationConfig.Rewards,
-  minTokensLiquidityPool: PosLong
+  minTokensLiquidityPool: PosLong,
+  allowSpendEpochBufferDelay: EpochProgress
 )
 
 object ApplicationConfig {
