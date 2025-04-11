@@ -16,12 +16,11 @@ import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
-import com.my.dor_metagraph.shared_data.combiners.SwapCombinerTest.{getFakeSignedUpdate, toFixedPoint}
-import com.my.dor_metagraph.shared_data.combiners.WithdrawalCombinerTest.toFixedPoint
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
 import org.amm_metagraph.shared_data.FeeDistributor
-import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -36,6 +35,29 @@ object PricingTest extends SimpleIOSuite {
   val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+
+  private val config = ApplicationConfig(
+    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    "NodeValidators",
+    Dev,
+    Governance(
+      VotingWeightMultipliers(
+        PosDouble.MinValue,
+        PosDouble.MinValue,
+        PosDouble.MinValue
+      )
+    ),
+    Rewards(
+      Amount.empty,
+      Amount.empty,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      NonNegLong.MinValue,
+      EpochProgress.MinValue,
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+    ),
+    PosLong.unsafeFrom((1 * 1e8).toLong)
+  )
 
   def buildLiquidityPoolCalculatedState(
     tokenA: TokenInformation,
@@ -114,7 +136,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -156,7 +178,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -198,7 +220,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         None,
         pairToken.identifier,
@@ -241,7 +263,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -278,7 +300,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -315,7 +337,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
 
       swapUpdate = getFakeSignedUpdate[SwapUpdate](
         SwapUpdate(
@@ -332,7 +354,8 @@ object PricingTest extends SimpleIOSuite {
 
       swapTokenInfo <- pricingService.getSwapTokenInfo(
         swapUpdate,
-        poolId
+        poolId,
+        EpochProgress.MaxValue
       )
 
     } yield
@@ -366,7 +389,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
 
       stakingUpdate = getFakeSignedUpdate[StakingUpdate](
         StakingUpdate(
@@ -383,7 +406,8 @@ object PricingTest extends SimpleIOSuite {
 
       stakingTokenInfo <- pricingService.getStakingTokenInfo(
         stakingUpdate,
-        poolId
+        poolId,
+        EpochProgress.MaxValue
       )
 
     } yield

@@ -11,10 +11,8 @@ import io.constellationnetwork.security.hash.Hash
 import derevo.cats.eqv
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
-import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount

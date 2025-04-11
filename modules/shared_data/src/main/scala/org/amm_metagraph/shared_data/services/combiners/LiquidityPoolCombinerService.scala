@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data.services.combiners
 
+import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -13,7 +14,7 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
+import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
@@ -28,8 +29,6 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPool
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
-import org.typelevel.log4cats.SelfAwareStructuredLogger
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -58,67 +57,58 @@ trait LiquidityPoolCombinerService[F[_]] {
 }
 
 object LiquidityPoolCombinerService {
-  def make[F[_]: Async: HasherSelector: SecurityProvider](
+  def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig
   ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
-      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("LiquidityPoolCombinerService")
       private def validateUpdate(
+        poolId: PoolId,
         applicationConfig: ApplicationConfig,
         signedUpdate: Signed[LiquidityPoolUpdate],
         maybeAllowSpendTokenA: Option[Hashed[AllowSpend]],
         maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
-        lastSyncGlobalEpochProgress: EpochProgress
-      ): Option[FailedCalculatedState] =
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          FailedCalculatedState(
-            OperationExpired(signedUpdate),
-            EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
-            signedUpdate
-          ).some
-        } else {
-          (maybeAllowSpendTokenA, maybeAllowSpendTokenB).mapN { (allowSpendTokenA, allowSpendTokenB) =>
-            val expireEpochProgress = EpochProgress(
-              NonNegLong
-                .from(
-                  lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                )
-                .getOrElse(NonNegLong.MinValue)
+        lastSyncGlobalEpochProgress: EpochProgress,
+        confirmedLps: Map[String, LiquidityPool],
+        pendingLps: List[PoolId]
+      ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
+        val expireEpochProgress = EpochProgress(
+          NonNegLong
+            .from(
+              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
             )
+            .getOrElse(NonNegLong.MinValue)
+        )
 
-            val update = signedUpdate.value
-            if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
-              FailedCalculatedState(
-                AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
-              FailedCalculatedState(
-                AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-              FailedCalculatedState(
-                AllowSpendExpired(allowSpendTokenA.signed.value),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-              FailedCalculatedState(
-                AllowSpendExpired(allowSpendTokenB.signed.value),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else {
-              None
-            }
-          }.flatten
+        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[LiquidityPoolUpdate]] =
+          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
+
+        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          failWith(OperationExpired(signedUpdate))
+        } else if (confirmedLps.contains(poolId.value) || pendingLps.contains(poolId)) {
+          failWith(DuplicatedLiquidityPoolRequest(signedUpdate))
+        } else {
+          (maybeAllowSpendTokenA, maybeAllowSpendTokenB) match {
+            case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
+              val update = signedUpdate.value
+              if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
+                failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
+              } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
+                failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
+              } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+                failWith(AllowSpendExpired(allowSpendTokenA.signed.value))
+              } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+                failWith(AllowSpendExpired(allowSpendTokenB.signed.value))
+              } else {
+                Right(signedUpdate)
+              }
+            case _ => Right(signedUpdate)
+          }
         }
+      }
 
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
+        liquidityPoolUpdate: Signed[LiquidityPoolUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
         liquidityPoolCalculatedState: LiquidityPoolCalculatedState
@@ -126,6 +116,8 @@ object LiquidityPoolCombinerService {
         val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
           .focus(_.failed)
           .modify(_ + failedCalculatedState)
+          .focus(_.pending)
+          .modify(_.filter(_.update =!= liquidityPoolUpdate))
 
         val updatedCalculatedState = acc.calculated
           .focus(_.operations)
@@ -177,43 +169,64 @@ object LiquidityPoolCombinerService {
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolUpdate = signedUpdate.value
-        val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
-        val pendingAllowSpendsCalculatedState = liquidityPoolCalculatedState.pending
+        val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
+        val confirmedLps = getConfirmedLiquidityPools(oldState.calculated)
+
+        val pendingAllowSpendsCalculatedState = liquidityPoolsCalculatedState.pending
+        val pendingLps = liquidityPoolsCalculatedState.getPendingUpdates
 
         val updates = liquidityPoolUpdate :: oldState.onChain.updates
-        getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
-          case (None, _) | (_, None) =>
-            val updatedLiquidityPoolPending =
-              if (liquidityPoolUpdate.maxValidGsEpochProgress < globalEpochProgress) {
-                removePendingAllowSpend(liquidityPoolCalculatedState, signedUpdate)
-              } else if (!pendingAllowSpendsCalculatedState.exists(_.update === signedUpdate)) {
-                pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate)
-              } else {
-                pendingAllowSpendsCalculatedState
-              }
-
-            val newLiquidityPoolState = liquidityPoolCalculatedState
-              .focus(_.pending)
-              .replace(updatedLiquidityPoolPending)
-
-            val updatedCalculatedState = oldState.calculated
-              .focus(_.operations)
-              .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-
-            DataState(
-              AmmOnChainState(updates),
-              updatedCalculatedState,
-              oldState.sharedArtifacts
-            ).pure
-
-          case (Some(_), Some(_)) =>
-            combinePendingAllowSpend(
+        val combinedState = for {
+          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
+          pendingLpsPoolsIds <- EitherT.liftF(
+            pendingLps.toList.traverse(pendingLp => buildLiquidityPoolUniqueIdentifier(pendingLp.tokenAId, pendingLp.tokenBId))
+          )
+          _ <- EitherT.fromEither(
+            validateUpdate(
+              poolId,
+              applicationConfig,
               signedUpdate,
-              oldState,
+              none,
+              none,
               globalEpochProgress,
-              lastGlobalSnapshotsAllowSpends,
-              currencyId
+              confirmedLps,
+              pendingLpsPoolsIds
             )
+          )
+          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
+          response <- updateAllowSpends match {
+            case (None, _) | (_, None) =>
+              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate)
+              val newStakingState = liquidityPoolsCalculatedState
+                .focus(_.pending)
+                .replace(updatedPendingCalculatedState)
+
+              val updatedCalculatedState = oldState.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, newStakingState))
+
+              val result = DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState,
+                oldState.sharedArtifacts
+              )
+
+              EitherT.rightT[F, FailedCalculatedState](result)
+            case (Some(_), Some(_)) =>
+              EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
+                combinePendingAllowSpend(
+                  signedUpdate,
+                  oldState,
+                  globalEpochProgress,
+                  lastGlobalSnapshotsAllowSpends,
+                  currencyId
+                )
+              )
+          }
+        } yield response
+
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
 
@@ -225,66 +238,81 @@ object LiquidityPoolCombinerService {
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
-
         val liquidityPoolUpdate = signedUpdate.value
         val updates = liquidityPoolUpdate :: oldState.onChain.updates
-        validateUpdate(applicationConfig, signedUpdate, none, none, globalEpochProgress) match {
-          case Some(failedCalculatedState) =>
-            handleFailedUpdate(updates, oldState, failedCalculatedState, liquidityPoolsCalculatedState).pure
-          case None =>
-            getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
-              case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
-                val maybeFailedUpdate = validateUpdate(
-                  applicationConfig,
-                  signedUpdate,
-                  allowSpendTokenA.some,
-                  allowSpendTokenB.some,
-                  globalEpochProgress
+        val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
+          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
+          _ <- EitherT.fromEither[F](
+            validateUpdate(
+              poolId,
+              applicationConfig,
+              signedUpdate,
+              none,
+              none,
+              globalEpochProgress,
+              Map.empty,
+              List.empty
+            )
+          )
+          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
+          result <- updateAllowSpends match {
+            case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
+              for {
+                _ <- EitherT.fromEither[F](
+                  validateUpdate(
+                    poolId,
+                    applicationConfig,
+                    signedUpdate,
+                    allowSpendTokenA.some,
+                    allowSpendTokenB.some,
+                    globalEpochProgress,
+                    Map.empty,
+                    List.empty
+                  )
+                )
+                amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)
+                amountToSpendB = SwapAmount(liquidityPoolUpdate.tokenBAmount)
+
+                spendAction = generateSpendAction(
+                  allowSpendTokenA,
+                  amountToSpendA,
+                  allowSpendTokenB,
+                  amountToSpendB
                 )
 
-                maybeFailedUpdate match {
-                  case Some(failedCalculatedState) =>
-                    handleFailedUpdate(updates, oldState, failedCalculatedState, liquidityPoolsCalculatedState).pure
-                  case None =>
-                    val amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)
-                    val amountToSpendB = SwapAmount(liquidityPoolUpdate.tokenBAmount)
+                updatedPendingAllowSpendCalculatedState =
+                  removePendingAllowSpend(liquidityPoolsCalculatedState, signedUpdate)
+                updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
+                  signedUpdate,
+                  spendAction
+                )
 
-                    val spendAction = generateSpendAction(
-                      allowSpendTokenA,
-                      amountToSpendA,
-                      allowSpendTokenB,
-                      amountToSpendB
-                    )
+                updatedLiquidityPoolCalculatedState =
+                  liquidityPoolsCalculatedState
+                    .focus(_.pending)
+                    .replace(updatedPendingSpendActionCalculatedState)
 
-                    val updatedPendingAllowSpendCalculatedState =
-                      removePendingAllowSpend(liquidityPoolsCalculatedState, signedUpdate)
-                    val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
-                      signedUpdate,
-                      spendAction
-                    )
+                updatedCalculatedState = oldState.calculated
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
 
-                    val updatedLiquidityPoolCalculatedState =
-                      liquidityPoolsCalculatedState
-                        .focus(_.pending)
-                        .replace(updatedPendingSpendActionCalculatedState)
+                updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](
+                  spendAction
+                )
 
-                    val updatedCalculatedState = oldState.calculated
-                      .focus(_.operations)
-                      .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
+              } yield
+                DataState(
+                  AmmOnChainState(updates),
+                  updatedCalculatedState,
+                  updatedSharedArtifacts
+                )
+            case _ =>
+              EitherT.rightT[F, FailedCalculatedState](oldState)
+          }
+        } yield result
 
-                    val updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](
-                      spendAction
-                    )
-
-                    DataState(
-                      AmmOnChainState(updates),
-                      updatedCalculatedState,
-                      updatedSharedArtifacts
-                    ).pure
-                }
-
-              case _ => oldState.pure
-            }
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
 
@@ -300,68 +328,85 @@ object LiquidityPoolCombinerService {
         val signedLiquidityPoolUpdate = pendingSpendAction.update
         val liquidityPoolUpdate = pendingSpendAction.update.value
         val updates = liquidityPoolUpdate :: oldState.onChain.updates
-        validateUpdate(applicationConfig, signedLiquidityPoolUpdate, none, none, globalEpochProgress) match {
-          case Some(value) => handleFailedUpdate(updates, oldState, value, liquidityPoolsCalculatedState).pure
-          case None =>
-            for {
-              metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
-                Hasher[F].hash(pendingSpendAction.generatedSpendAction)
+        val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
+          poolId <- EitherT.liftF(
+            buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.tokenAId, signedLiquidityPoolUpdate.tokenBId)
+          )
+          _ <- EitherT.fromEither[F](
+            validateUpdate(
+              poolId,
+              applicationConfig,
+              signedLiquidityPoolUpdate,
+              none,
+              none,
+              globalEpochProgress,
+              Map.empty,
+              List.empty
+            )
+          )
+          sourceAddress = liquidityPoolUpdate.source
+          metagraphGeneratedSpendActionHash <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => Hasher[F].hash(pendingSpendAction.generatedSpendAction))
+          )
+          globalSnapshotsHashes <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
+          )
+          allSpendActionsAccepted <- EitherT.liftF {
+            Async[F].pure(checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes))
+          }
+
+          fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
+          result <-
+            if (!allSpendActionsAccepted) {
+              EitherT.rightT[F, FailedCalculatedState](oldState)
+            } else {
+              val amountA = liquidityPoolUpdate.tokenAAmount.value
+              val amountB = liquidityPoolUpdate.tokenBAmount.value
+              val poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
+              val initialFeeShares: NonNegLong = 0L.toNonNegLongUnsafe
+
+              val liquidityPool = LiquidityPool(
+                poolId,
+                TokenInformation(
+                  liquidityPoolUpdate.tokenAId,
+                  liquidityPoolUpdate.tokenAAmount
+                ),
+                TokenInformation(
+                  liquidityPoolUpdate.tokenBId,
+                  liquidityPoolUpdate.tokenBAmount
+                ),
+                sourceAddress,
+                BigInt(amountA) * BigInt(amountB),
+                PoolShares(
+                  poolTotalShares,
+                  Map(sourceAddress -> ShareAmount(Amount(poolTotalShares))),
+                  Map(sourceAddress -> initialFeeShares)
+                ),
+                fees
               )
-              sourceAddress = liquidityPoolUpdate.source
-              globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
-              allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
-              fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
-              updatedState <-
-                if (!allSpendActionsAccepted) {
-                  oldState.pure
-                } else {
-                  for {
-                    poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
-                    amountA = liquidityPoolUpdate.tokenAAmount.value
-                    amountB = liquidityPoolUpdate.tokenBAmount.value
-                    poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
-                    initialFeeShares: NonNegLong = 0L.toNonNegLongUnsafe
 
-                    liquidityPool = LiquidityPool(
-                      poolId,
-                      TokenInformation(
-                        liquidityPoolUpdate.tokenAId,
-                        liquidityPoolUpdate.tokenAAmount
-                      ),
-                      TokenInformation(
-                        liquidityPoolUpdate.tokenBId,
-                        liquidityPoolUpdate.tokenBAmount
-                      ),
-                      sourceAddress,
-                      BigInt(amountA) * BigInt(amountB),
-                      PoolShares(
-                        poolTotalShares,
-                        Map(sourceAddress -> ShareAmount(Amount(poolTotalShares))),
-                        Map(sourceAddress -> initialFeeShares)
-                      ),
-                      fees
-                    )
+              val updatedPendingCalculatedState = removePendingSpendAction(liquidityPoolsCalculatedState, signedLiquidityPoolUpdate)
+              val updatedLiquidityPoolCalculatedState = liquidityPoolsCalculatedState
+                .focus(_.confirmed.value)
+                .modify(liquidityPools => liquidityPools.updated(poolId.value, liquidityPool))
+                .focus(_.pending)
+                .replace(updatedPendingCalculatedState)
 
-                    updatedPendingCalculatedState = removePendingSpendAction(liquidityPoolsCalculatedState, signedLiquidityPoolUpdate)
-                    updatedLiquidityPoolCalculatedState = liquidityPoolsCalculatedState
-                      .focus(_.confirmed.value)
-                      .modify(liquidityPools => liquidityPools.updated(poolId.value, liquidityPool))
-                      .focus(_.pending)
-                      .replace(updatedPendingCalculatedState)
+              val updatedCalculatedState = oldState.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
+              EitherT.rightT[F, FailedCalculatedState](
+                DataState(
+                  AmmOnChainState(updates),
+                  updatedCalculatedState,
+                  oldState.sharedArtifacts
+                )
+              )
+            }
+        } yield result
 
-                    updatedCalculatedState = oldState.calculated
-                      .focus(_.operations)
-                      .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
-
-                    response = DataState(
-                      AmmOnChainState(updates),
-                      updatedCalculatedState,
-                      oldState.sharedArtifacts
-                    )
-
-                  } yield response
-                }
-            } yield updatedState
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedLiquidityPoolUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
     }

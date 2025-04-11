@@ -7,12 +7,9 @@ import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
-import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
-
-import eu.timepit.refined.types.numeric.PosLong
 
 object SpendTransactions {
 

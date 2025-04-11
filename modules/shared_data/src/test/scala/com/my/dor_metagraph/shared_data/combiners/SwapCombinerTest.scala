@@ -207,7 +207,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -327,7 +327,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -409,7 +409,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -490,14 +490,14 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
         swapUpdate,
         state,
-        EpochProgress.MaxValue,
+        EpochProgress(NonNegLong.unsafeFrom(10L)),
         SortedMap.empty,
         CurrencyId(ownerAddress)
       )
@@ -591,7 +591,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -758,7 +758,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
         calculatedStateService <- CalculatedStateService.make[IO]
         _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-        pricingService = PricingService.make[IO](calculatedStateService)
+        pricingService = PricingService.make[IO](config, calculatedStateService)
         jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
         swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -887,7 +887,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
         calculatedStateService <- CalculatedStateService.make[IO]
         _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-        pricingService = PricingService.make[IO](calculatedStateService)
+        pricingService = PricingService.make[IO](config, calculatedStateService)
         jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
         swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -1027,7 +1027,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
           calculatedStateService <- CalculatedStateService.make[IO]
           _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-          pricingService = PricingService.make[IO](calculatedStateService)
+          pricingService = PricingService.make[IO](config, calculatedStateService)
           jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
           swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -1191,7 +1191,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
           calculatedStateService <- CalculatedStateService.make[IO]
           _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-          pricingService = PricingService.make[IO](calculatedStateService)
+          pricingService = PricingService.make[IO](config, calculatedStateService)
           jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
           swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -1337,7 +1337,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](calculatedStateService)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
@@ -1415,7 +1415,7 @@ object SwapCombinerTest extends MutableIOSuite {
                   sourceAddress,
                   Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
                   Some(CurrencyId(ownerAddress)),
-                  SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
+                  SwapAmount(PosLong.from(toFixedPoint(1000.0) - i).getOrElse(PosLong.MaxValue)),
                   AllowSpendFee(PosLong.MinValue),
                   AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
                   EpochProgress.MaxValue,
@@ -1459,7 +1459,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
                 calculatedStateService <- CalculatedStateService.make[IO]
                 _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, accState.calculated)
-                pricingService = PricingService.make[IO](calculatedStateService)
+                pricingService = PricingService.make[IO](config, calculatedStateService)
                 jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
                 swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 

@@ -34,7 +34,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingOrdinal, StakingReference}
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingReference}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}

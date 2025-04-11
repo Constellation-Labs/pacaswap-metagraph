@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data.services.combiners
 
+import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -10,16 +11,14 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher, SecurityProvider}
 
 import eu.timepit.refined.cats.refTypeOrder
-import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.FeeDistributor
-import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -57,98 +56,63 @@ trait SwapCombinerService[F[_]] {
 }
 
 object SwapCombinerService {
-  def make[F[_]: Async: HasherSelector: SecurityProvider](
+  def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): SwapCombinerService[F] =
     new SwapCombinerService[F] {
-      private def updateLiquidityPool(
-        liquidityPool: LiquidityPool,
-        fromTokenInfo: TokenInformation,
-        toTokenInfo: TokenInformation,
-        grossAmount: SwapAmount,
-        metagraphId: CurrencyId
-      ): LiquidityPool = {
-        def distributeFees: PoolShares = {
-          val fees = FeeDistributor.calculateFeeAmounts(
-            BigInt(grossAmount.value.value),
-            liquidityPool.poolFees
-          )
-
-          val updateFeeShares = FeeDistributor.distributeProviderFees(
-            fees.providers,
-            fees.operators,
-            liquidityPool.poolShares,
-            metagraphId
-          )
-
-          liquidityPool.poolShares.copy(feeShares = updateFeeShares)
-        }
-
-        val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
-        val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
-
-        liquidityPool
-          .focus(_.tokenA)
-          .replace(tokenA)
-          .focus(_.tokenB)
-          .replace(tokenB)
-          .focus(_.poolShares)
-          .replace(distributeFees)
-      }
-
       private def validateUpdate(
         signedUpdate: Signed[SwapUpdate],
         maybeTokenInformation: Option[SwapTokenInfo],
         maybeAllowSpendToken: Option[Hashed[AllowSpend]],
-        lastSyncGlobalEpochProgress: EpochProgress
-      ): Option[FailedCalculatedState] =
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          FailedCalculatedState(
-            OperationExpired(signedUpdate),
-            EpochProgress(NonNegLong.unsafeFrom(lastSyncGlobalEpochProgress.value.value + 30L)),
-            signedUpdate
-          ).some
-        } else {
-          (maybeTokenInformation, maybeAllowSpendToken).mapN { (updatedTokenInformation, allowSpend) =>
-            val expireEpochProgress = EpochProgress(
-              NonNegLong
-                .from(
-                  lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-                )
-                .getOrElse(NonNegLong.MinValue)
+        lastSyncGlobalEpochProgress: EpochProgress,
+        confirmedSwaps: Set[SwapCalculatedStateAddress],
+        pendingSwaps: Set[Signed[SwapUpdate]]
+      ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+        val expireEpochProgress = EpochProgress(
+          NonNegLong
+            .from(
+              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
             )
+            .getOrElse(NonNegLong.MinValue)
+        )
 
-            if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {
-              FailedCalculatedState(
-                SwapLessThanMinAmount(),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (allowSpend.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
-              FailedCalculatedState(
-                AllowSpendExpired(allowSpend.signed.value),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else if (
-              updatedTokenInformation.primaryTokenInformation.amount < applicationConfig.minTokensLiquidityPool ||
-              updatedTokenInformation.pairTokenInformation.amount < applicationConfig.minTokensLiquidityPool
-            ) {
-              FailedCalculatedState(
-                SwapWouldDrainPoolBalance(),
-                expireEpochProgress,
-                signedUpdate
-              ).some
-            } else {
-              None
-            }
-          }.flatten
+        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
+          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
+
+        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          failWith(OperationExpired(signedUpdate))
+        } else if (
+          confirmedSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference) ||
+          pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
+        ) {
+          failWith(DuplicatedSwapRequest(signedUpdate))
+        } else {
+          (maybeTokenInformation, maybeAllowSpendToken) match {
+            case (Some(updatedTokenInformation), Some(allowSpend)) =>
+              if (signedUpdate.amountIn.value > allowSpend.amount.value) {
+                failWith(AmountGreaterThanAllowSpendLimit(allowSpend.signed.value))
+              } else if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {
+                failWith(SwapLessThanMinAmount())
+              } else if (allowSpend.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
+                failWith(AllowSpendExpired(allowSpend.signed.value))
+              } else if (
+                updatedTokenInformation.primaryTokenInformation.amount < applicationConfig.minTokensLiquidityPool ||
+                updatedTokenInformation.pairTokenInformation.amount < applicationConfig.minTokensLiquidityPool
+              ) {
+                failWith(SwapWouldDrainPoolBalance())
+              } else {
+                Right(signedUpdate)
+              }
+            case _ => Right(signedUpdate)
+          }
         }
+      }
 
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
+        swapUpdate: Signed[SwapUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
         swapCalculatedState: SwapCalculatedState
@@ -156,7 +120,9 @@ object SwapCombinerService {
         val updatedSwapCalculatedState = swapCalculatedState
           .focus(_.failed)
           .modify(_ + failedCalculatedState)
-
+          .focus(_.pending)
+          .modify(_.filter(_.update =!= swapUpdate))
+        
         val updatedCalculatedState = acc.calculated
           .focus(_.operations)
           .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
@@ -206,41 +172,50 @@ object SwapCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val swapUpdate = signedUpdate.value
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
+        val confirmedSwaps = swapCalculatedState.confirmed.value.getOrElse(signedUpdate.source, Set.empty)
+        val pendingSwaps = swapCalculatedState.getPendingUpdates
         val swapCalculatedStatePendingAllowSpend = swapCalculatedState.pending
 
         val updates = swapUpdate :: oldState.onChain.updates
-        getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
-          case None =>
-            val updatedPendingSwapsCalculatedState = if (swapUpdate.maxValidGsEpochProgress < globalEpochProgress) {
-              removePendingAllowSpend(swapCalculatedState, signedUpdate)
-            } else if (!swapCalculatedStatePendingAllowSpend.exists(_.update === signedUpdate)) {
-              swapCalculatedStatePendingAllowSpend + PendingAllowSpend(signedUpdate)
-            } else {
-              swapCalculatedStatePendingAllowSpend
-            }
 
-            val newSwapState = swapCalculatedState
-              .focus(_.pending)
-              .replace(updatedPendingSwapsCalculatedState)
+        val combinedState = for {
+          _ <- EitherT.fromEither(
+            validateUpdate(signedUpdate, none, none, globalEpochProgress, confirmedSwaps, pendingSwaps)
+          )
+          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
+          response <- updateAllowSpends match {
+            case None =>
+              val updatedPendingSwapsCalculatedState = swapCalculatedStatePendingAllowSpend + PendingAllowSpend(signedUpdate)
+              val newSwapState = swapCalculatedState
+                .focus(_.pending)
+                .replace(updatedPendingSwapsCalculatedState)
 
-            val updatedCalculatedState = oldState.calculated
-              .focus(_.operations)
-              .modify(_.updated(OperationType.Swap, newSwapState))
+              val updatedCalculatedState = oldState.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.Swap, newSwapState))
 
-            DataState(
-              AmmOnChainState(updates),
-              updatedCalculatedState,
-              oldState.sharedArtifacts
-            ).pure
+              val result = DataState(
+                AmmOnChainState(updates),
+                updatedCalculatedState,
+                oldState.sharedArtifacts
+              )
+              EitherT.rightT[F, FailedCalculatedState](result)
 
-          case Some(_) =>
-            combinePendingAllowSpend(
-              signedUpdate,
-              oldState,
-              globalEpochProgress,
-              lastGlobalSnapshotsAllowSpends,
-              currencyId
-            )
+            case Some(_) =>
+              EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
+                combinePendingAllowSpend(
+                  signedUpdate,
+                  oldState,
+                  globalEpochProgress,
+                  lastGlobalSnapshotsAllowSpends,
+                  currencyId
+                )
+              )
+          }
+        } yield response
+
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, swapCalculatedState)
         }
       }
 
@@ -252,69 +227,77 @@ object SwapCombinerService {
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
-
         val swapUpdate = signedUpdate.value
         val updates = swapUpdate :: oldState.onChain.updates
-        validateUpdate(signedUpdate, none, none, globalEpochProgress) match {
-          case Some(failedCalculatedState) => handleFailedUpdate(updates, oldState, failedCalculatedState, swapCalculatedState).pure
-          case None =>
-            getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends).flatMap {
-              case Some(allowSpendToken) =>
-                for {
-                  poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-                  swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
-                  response = swapTokenInfo match {
-                    case Left(_) => oldState
-                    case Right(updatedTokenInformation) =>
-                      val maybeFailedUpdate = validateUpdate(
-                        signedUpdate,
-                        updatedTokenInformation.some,
-                        allowSpendToken.some,
-                        globalEpochProgress
-                      )
 
-                      maybeFailedUpdate match {
-                        case Some(failedCalculatedState) =>
-                          handleFailedUpdate(updates, oldState, failedCalculatedState, swapCalculatedState)
-                        case None =>
-                          val spendActionToken = generateSpendAction(
-                            allowSpendToken,
-                            swapUpdate.amountIn,
-                            updatedTokenInformation.pairTokenInformation.identifier,
-                            updatedTokenInformation.netReceived,
-                            currencyId.value
-                          )
+        val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
+          _ <- EitherT.fromEither[F](
+            validateUpdate(
+              signedUpdate,
+              none,
+              none,
+              globalEpochProgress,
+              Set.empty,
+              Set.empty
+            )
+          )
 
-                          val updatedPendingAllowSpendCalculatedState =
-                            removePendingAllowSpend(swapCalculatedState, signedUpdate)
-                          val updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
-                            signedUpdate,
-                            spendActionToken
-                          )
+          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
 
-                          val updatedPendingSwapCalculatedState =
-                            swapCalculatedState
-                              .focus(_.pending)
-                              .replace(updatedPendingSpendActionCalculatedState)
+          result <- updateAllowSpends match {
+            case Some(allowSpendToken) =>
+              for {
+                poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))
+                updatedTokenInformation <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, poolId, globalEpochProgress))
+                _ <- EitherT.fromEither[F](
+                  validateUpdate(
+                    signedUpdate,
+                    updatedTokenInformation.some,
+                    allowSpendToken.some,
+                    globalEpochProgress,
+                    Set.empty,
+                    Set.empty
+                  )
+                )
 
-                          val updatedCalculatedState = oldState.calculated
-                            .focus(_.operations)
-                            .modify(_.updated(OperationType.Swap, updatedPendingSwapCalculatedState))
+                spendActionToken = generateSpendAction(
+                  allowSpendToken,
+                  swapUpdate.amountIn,
+                  updatedTokenInformation.pairTokenInformation.identifier,
+                  updatedTokenInformation.netReceived,
+                  currencyId.value
+                )
 
-                          val updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](
-                            spendActionToken
-                          )
+                updatedPendingAllowSpendCalculatedState =
+                  removePendingAllowSpend(swapCalculatedState, signedUpdate)
 
-                          DataState(
-                            AmmOnChainState(updates),
-                            updatedCalculatedState,
-                            updatedSharedArtifacts
-                          )
-                      }
-                  }
-                } yield response
-              case _ => oldState.pure
-            }
+                updatedPendingSpendActionCalculatedState =
+                  updatedPendingAllowSpendCalculatedState + PendingSpendAction(signedUpdate, spendActionToken)
+
+                updatedPendingSwapCalculatedState =
+                  swapCalculatedState
+                    .focus(_.pending)
+                    .replace(updatedPendingSpendActionCalculatedState)
+
+                updatedCalculatedState = oldState.calculated
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.Swap, updatedPendingSwapCalculatedState))
+
+                updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](spendActionToken)
+              } yield
+                DataState(
+                  AmmOnChainState(updates),
+                  updatedCalculatedState,
+                  updatedSharedArtifacts
+                )
+
+            case None =>
+              EitherT.rightT[F, FailedCalculatedState](oldState)
+          }
+        } yield result
+
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, swapCalculatedState)
         }
       }
 
@@ -326,82 +309,82 @@ object SwapCombinerService {
         currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+        val signedSwapUpdate = pendingSpendAction.update
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
 
-        val signedSwapUpdate = pendingSpendAction.update
         val swapUpdate = pendingSpendAction.update.value
         val updates = swapUpdate :: oldState.onChain.updates
 
-        for {
-          poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-          liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
-          swapTokenInfo <- pricingService.getSwapTokenInfo(swapUpdate, poolId)
-          swapReference <- HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate))
-          swapUpdateHashed <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+        val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
+          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))
+          liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
+          updatedTokenInformation <- EitherT(pricingService.getSwapTokenInfo(pendingSpendAction.update, poolId, globalEpochProgress))
+          swapReference <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate)))
+          swapUpdateHashed <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+          )
           sourceAddress = signedSwapUpdate.source
+          _ <- EitherT.fromEither[F](
+            validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress, Set.empty, Set.empty)
+          )
+          liquidityPoolUpdated <- EitherT.fromEither[F](
+            pricingService.getUpdatedLiquidityPoolDueSwap(
+              liquidityPool,
+              updatedTokenInformation.primaryTokenInformation,
+              updatedTokenInformation.pairTokenInformation,
+              updatedTokenInformation.grossReceived,
+              currencyId
+            )
+          )
+          swapCalculatedStateAddress = SwapCalculatedStateAddress(
+            swapUpdateHashed.hash,
+            sourceAddress,
+            updatedTokenInformation.primaryTokenInformation,
+            updatedTokenInformation.pairTokenInformation,
+            swapUpdate.allowSpendReference,
+            swapUpdate.amountIn,
+            updatedTokenInformation.grossReceived,
+            updatedTokenInformation.netReceived,
+            swapUpdate.amountOutMinimum,
+            swapUpdate.maxValidGsEpochProgress,
+            poolId.some,
+            currentSnapshotOrdinal,
+            swapReference
+          )
 
-          response = swapTokenInfo match {
-            case Left(_) => oldState
-            case Right(updatedTokenInformation) =>
-              validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress) match {
-                case Some(value) => handleFailedUpdate(updates, oldState, value, swapCalculatedState)
-                case None =>
-                  val liquidityPoolUpdated = updateLiquidityPool(
-                    liquidityPool,
-                    updatedTokenInformation.primaryTokenInformation,
-                    updatedTokenInformation.pairTokenInformation,
-                    updatedTokenInformation.grossReceived,
-                    currencyId
-                  )
-
-                  val swapCalculatedStateAddress = SwapCalculatedStateAddress(
-                    swapUpdateHashed.hash,
-                    sourceAddress,
-                    updatedTokenInformation.primaryTokenInformation,
-                    updatedTokenInformation.pairTokenInformation,
-                    swapUpdate.allowSpendReference,
-                    swapUpdate.amountIn,
-                    updatedTokenInformation.grossReceived,
-                    updatedTokenInformation.netReceived,
-                    swapUpdate.amountOutMinimum,
-                    swapUpdate.maxValidGsEpochProgress,
-                    poolId.some,
-                    currentSnapshotOrdinal,
-                    swapReference
-                  )
-
-                  val updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
-                  val newSwapState = swapCalculatedState
-                    .focus(_.confirmed.value)
-                    .modify(current =>
-                      current.updatedWith(sourceAddress) {
-                        case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
-                        case None                 => Some(Set(swapCalculatedStateAddress))
-                      }
-                    )
-                    .focus(_.pending)
-                    .replace(updatedPendingCalculatedState)
-
-                  val newLiquidityPoolState =
-                    liquidityPoolsCalculatedState
-                      .focus(_.confirmed.value)
-                      .modify(_.updated(poolId.value, liquidityPoolUpdated))
-
-                  val updatedCalculatedState = oldState.calculated
-                    .focus(_.operations)
-                    .modify(_.updated(OperationType.Swap, newSwapState))
-                    .focus(_.operations)
-                    .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-
-                  DataState(
-                    AmmOnChainState(updates),
-                    updatedCalculatedState,
-                    oldState.sharedArtifacts
-                  )
+          updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
+          newSwapState = swapCalculatedState
+            .focus(_.confirmed.value)
+            .modify(current =>
+              current.updatedWith(sourceAddress) {
+                case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
+                case None                 => Some(Set(swapCalculatedStateAddress))
               }
-          }
-        } yield response
+            )
+            .focus(_.pending)
+            .replace(updatedPendingCalculatedState)
+
+          newLiquidityPoolState =
+            liquidityPoolsCalculatedState
+              .focus(_.confirmed.value)
+              .modify(_.updated(poolId.value, liquidityPoolUpdated))
+
+          updatedCalculatedState = oldState.calculated
+            .focus(_.operations)
+            .modify(_.updated(OperationType.Swap, newSwapState))
+            .focus(_.operations)
+            .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+        } yield
+          DataState(
+            AmmOnChainState(updates),
+            updatedCalculatedState,
+            oldState.sharedArtifacts
+          )
+
+        combinedState.valueOr { failedCalculatedState =>
+          handleFailedUpdate(updates, signedSwapUpdate, oldState, failedCalculatedState, swapCalculatedState)
+        }
       }
     }
 }

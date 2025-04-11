@@ -16,6 +16,9 @@ object refined {
   implicit class PosLongOps(value: Long) {
     def toPosLongUnsafe: PosLong =
       PosLong.unsafeFrom(value)
+
+    def toPosLong: Either[String, PosLong] =
+      PosLong.from(value)
   }
 
   implicit class LongOps(value: Long) {

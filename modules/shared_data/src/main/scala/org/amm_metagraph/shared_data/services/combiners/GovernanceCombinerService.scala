@@ -8,12 +8,10 @@ import scala.tools.nsc.tasty.SafeEq
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
-import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.schema.tokenLock.TokenLock
-import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
@@ -55,7 +53,7 @@ trait GovernanceCombinerService[F[_]] {
 }
 
 object GovernanceCombinerService {
-  def make[F[_]: Async: HasherSelector: SecurityProvider](
+  def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig
   ): GovernanceCombinerService[F] =
     new GovernanceCombinerService[F] {

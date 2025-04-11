@@ -10,8 +10,8 @@ import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getLiquidityPools}
-import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
+import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, WithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalReference, getWithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
@@ -35,7 +35,7 @@ object WithdrawalValidations {
     withdrawalUpdate = signedWithdrawalUpdate.value
     withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
-    liquidityPoolsCalculatedState = getLiquidityPools(state)
+    liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
 
     liquidityPoolExists <- validateIfLiquidityPoolExists(
       withdrawalUpdate,

@@ -43,12 +43,14 @@ object LiquidityPoolValidations {
       l1Validations <- liquidityPoolValidationsL1(applicationConfig, liquidityPoolUpdate)
       signatures <- signatureValidations(signedLiquidityPoolUpdate, signedLiquidityPoolUpdate.source)
 
-      calculatedState = getLiquidityPools(state)
       liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(state)
+      confirmedLiquidityPools = getConfirmedLiquidityPools(state)
+
       tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
       poolAlreadyExists <- validateIfPoolAlreadyExists(
         liquidityPoolUpdate,
-        calculatedState
+        confirmedLiquidityPools,
+        liquidityPoolCalculatedState.getPendingUpdates
       ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
       tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         liquidityPoolUpdate.tokenAAllowSpend,
@@ -74,11 +76,19 @@ object LiquidityPoolValidations {
 
   private def validateIfPoolAlreadyExists[F[_]: Async](
     liquidityPoolUpdate: LiquidityPoolUpdate,
-    currentLiquidityPools: Map[String, LiquidityPool]
+    currentConfirmedLiquidityPools: Map[String, LiquidityPool],
+    currentPendingUpdates: Set[Signed[LiquidityPoolUpdate]]
   ): F[DataApplicationValidationErrorOr[Unit]] =
     for {
       poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
-    } yield LiquidityPoolAlreadyExists.whenA(currentLiquidityPools.contains(poolId.value))
+      currentPendingLiquidityPoolsIds <- currentPendingUpdates.toList.traverse { pending =>
+        buildLiquidityPoolUniqueIdentifier(pending.tokenAId, pending.tokenBId)
+      }
+    } yield
+      LiquidityPoolAlreadyExists.whenA(
+        currentConfirmedLiquidityPools.contains(poolId.value) ||
+          currentPendingLiquidityPoolsIds.contains(poolId)
+      )
 
   private def validateComponentsSumToTotal(
     liquidityPoolUpdate: LiquidityPoolUpdate

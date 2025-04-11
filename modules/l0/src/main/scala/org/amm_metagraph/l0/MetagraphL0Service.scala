@@ -135,7 +135,7 @@ object MetagraphL0Service {
         calculatedStateService.hash(state)
 
       override def routes(implicit context: L0NodeContext[F]): HttpRoutes[F] = {
-        implicit val sp = context.securityProvider
+        implicit val sp: SecurityProvider[F] = context.securityProvider
         CustomRoutes[F](calculatedStateService, pricingService, dataUpdateCodec).public
       }
 
