@@ -48,31 +48,18 @@ object L0CombinerService {
 
       def getPendingAllowSpendsUpdates(
         state: AmmCalculatedState
-      ): (
-        Set[Signed[LiquidityPoolUpdate]],
-        Set[Signed[StakingUpdate]],
-        Set[Signed[SwapUpdate]]
-      ) =
-        (
-          getPendingAllowSpendsLiquidityPoolUpdates(state),
-          getPendingAllowSpendsStakingUpdates(state),
+      ): Set[PendingAllowSpend[AmmUpdate]] =
+        getPendingAllowSpendsLiquidityPoolUpdates(state) ++
+          getPendingAllowSpendsStakingUpdates(state) ++
           getPendingAllowSpendsSwapUpdates(state)
-        )
 
       def getPendingSpendActionsUpdates(
         state: AmmCalculatedState
-      ): (
-        Set[PendingSpendAction[LiquidityPoolUpdate]],
-        Set[PendingSpendAction[StakingUpdate]],
-        Set[PendingSpendAction[SwapUpdate]],
-        Set[PendingSpendAction[WithdrawalUpdate]]
-      ) =
-        (
-          getPendingSpendActionLiquidityPoolUpdates(state),
-          getPendingSpendActionStakingUpdates(state),
-          getPendingSpendActionSwapUpdates(state),
+      ): Set[PendingSpendAction[AmmUpdate]] =
+        getPendingSpendActionLiquidityPoolUpdates(state) ++
+          getPendingSpendActionStakingUpdates(state) ++
+          getPendingSpendActionSwapUpdates(state) ++
           getPendingSpendActionWithdrawalUpdates(state)
-        )
 
       private def combineIncomingUpdates(
         incomingUpdates: List[Signed[AmmUpdate]],
@@ -145,115 +132,115 @@ object L0CombinerService {
       private def combinePendingAllowSpendsUpdates(
         lastSyncGlobalEpochProgress: EpochProgress,
         globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
-        pendingAllowSpendLiquidityPool: Set[Signed[LiquidityPoolUpdate]],
-        pendingAllowSpendStaking: Set[Signed[StakingUpdate]],
-        pendingAllowSpendSwap: Set[Signed[SwapUpdate]],
+        pendingAllowSpends: Set[PendingAllowSpend[AmmUpdate]],
         stateCombinedByNewUpdates: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
         if (globalSnapshotSyncAllowSpends.isEmpty) {
           stateCombinedByNewUpdates.pure
         } else {
-          for {
-            stateUpdatedByLiquidityPools <- pendingAllowSpendLiquidityPool.toList
-              .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingLp) =>
-                logger.info(s"Trying to combine pending allow spends LiquidityPool: $pendingLp") >>
+          pendingAllowSpends.toList
+            .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingUpdate) =>
+              pendingUpdate.update.value match {
+                case lpUpdate: LiquidityPoolUpdate =>
                   liquidityPoolCombinerService.combinePendingAllowSpend(
-                    pendingLp,
+                    PendingAllowSpend(Signed(lpUpdate, pendingUpdate.update.proofs), pendingUpdate.pricingTokenInfo),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncAllowSpends,
                     currencyId
                   )
-              }
-            stateUpdatedByStaking <- pendingAllowSpendStaking.toList
-              .foldLeftM(stateUpdatedByLiquidityPools) { (acc, pendingStake) =>
-                logger.info(s"Trying to combine pending allow spends Stake: $pendingStake") >>
+
+                case stakingUpdate: StakingUpdate =>
                   stakingCombinerService.combinePendingAllowSpend(
-                    pendingStake,
+                    PendingAllowSpend(Signed(stakingUpdate, pendingUpdate.update.proofs), pendingUpdate.pricingTokenInfo),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncAllowSpends,
                     currencyId
                   )
-              }
-            stateUpdatedBySwap <- pendingAllowSpendSwap.toList
-              .foldLeftM(stateUpdatedByStaking) { (acc, pendingSwap) =>
-                logger.info(s"Trying to combine pending allow spends Swap: $pendingSwap") >>
+
+                case swapUpdate: SwapUpdate =>
                   swapCombinerService.combinePendingAllowSpend(
-                    pendingSwap,
+                    PendingAllowSpend(Signed(swapUpdate, pendingUpdate.update.proofs), pendingUpdate.pricingTokenInfo),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncAllowSpends,
                     currencyId
                   )
+                case _ => acc.pure
               }
-          } yield stateUpdatedBySwap
+            }
         }
 
       private def combinePendingSpendTransactionsUpdates(
         lastSyncGlobalEpochProgress: EpochProgress,
         globalSnapshotSyncSpendActions: List[SpendAction],
         currencySnapshotOrdinal: SnapshotOrdinal,
-        pendingSpendActionLiquidityPool: Set[PendingSpendAction[LiquidityPoolUpdate]],
-        pendingSpendActionStaking: Set[PendingSpendAction[StakingUpdate]],
-        pendingSpendActionWithdrawals: Set[PendingSpendAction[WithdrawalUpdate]],
-        pendingSpendActionSwap: Set[PendingSpendAction[SwapUpdate]],
+        pendingSpendActions: Set[PendingSpendAction[AmmUpdate]],
         stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
         if (globalSnapshotSyncSpendActions.isEmpty) {
           stateCombinedByPendingAllowSpends.pure
         } else {
-          for {
-            stateUpdatedByLiquidityPools <- pendingSpendActionLiquidityPool.toList
-              .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingLp) =>
-                logger.info(s"Trying to combine pending spend actions LiquidityPool: $pendingLp") >>
+          pendingSpendActions.toList
+            .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingUpdate) =>
+              pendingUpdate.update.value match {
+                case lpUpdate: LiquidityPoolUpdate =>
                   liquidityPoolCombinerService.combinePendingSpendAction(
-                    pendingLp,
+                    PendingSpendAction(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
                     currencySnapshotOrdinal,
                     currencyId
                   )
-              }
-            stateUpdatedByStaking <- pendingSpendActionStaking.toList
-              .foldLeftM(stateUpdatedByLiquidityPools) { (acc, pendingStake) =>
-                logger.info(s"Trying to combine pending spend actions Stake: $pendingStake") >>
+                case stakingUpdate: StakingUpdate =>
                   stakingCombinerService.combinePendingSpendAction(
-                    pendingStake,
+                    PendingSpendAction(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
                     currencySnapshotOrdinal,
                     currencyId
                   )
-              }
-            stateUpdatedByWithdrawals <- pendingSpendActionWithdrawals.toList
-              .foldLeftM(stateUpdatedByStaking) { (acc, pendingWithdrawal) =>
-                logger.info(s"Trying to combine pending spend actions Withdrawal: $pendingWithdrawal") >>
+                case withdrawalUpdate: WithdrawalUpdate =>
                   withdrawalCombinerService.combinePendingSpendAction(
-                    pendingWithdrawal,
+                    PendingSpendAction(
+                      Signed(withdrawalUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
                     currencySnapshotOrdinal
                   )
-              }
-            stateUpdatedBySwap <- pendingSpendActionSwap.toList
-              .foldLeftM(stateUpdatedByWithdrawals) { (acc, pendingSwap) =>
-                logger.info(s"Trying to combine pending spend actions Swap: $pendingSwap") >>
+                case swapUpdate: SwapUpdate =>
                   swapCombinerService.combinePendingSpendAction(
-                    pendingSwap,
+                    PendingSpendAction(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
                     currencySnapshotOrdinal,
                     currencyId
                   )
+                case _ => acc.pure
               }
-          } yield stateUpdatedBySwap
+            }
         }
 
       override def combine(
@@ -289,11 +276,8 @@ object L0CombinerService {
               oldState.calculated
             )
 
-          (pendingAllowSpendLiquidityPool, pendingAllowSpendStaking, pendingAllowSpendSwap) =
-            getPendingAllowSpendsUpdates(newState.calculated)
-
-          (pendingSpendActionLiquidityPool, pendingSpendActionStaking, pendingSpendActionSwap, pendingSpendActionWithdrawals) =
-            getPendingSpendActionsUpdates(newState.calculated)
+          pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
+          pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)
 
           updatedVotingWeights = governanceCombinerService.updateVotingWeights(
             newState.calculated,
@@ -324,9 +308,7 @@ object L0CombinerService {
             combinePendingAllowSpendsUpdates(
               lastSyncGlobalEpochProgress,
               globalSnapshotSyncAllowSpends,
-              pendingAllowSpendLiquidityPool,
-              pendingAllowSpendStaking,
-              pendingAllowSpendSwap,
+              pendingAllowSpends,
               stateCombinedByNewUpdates,
               currencyId
             )
@@ -336,10 +318,7 @@ object L0CombinerService {
               lastSyncGlobalEpochProgress,
               globalSnapshotsSyncSpendActions,
               currentSnapshotOrdinal,
-              pendingSpendActionLiquidityPool,
-              pendingSpendActionStaking,
-              pendingSpendActionWithdrawals,
-              pendingSpendActionSwap,
+              pendingSpendActions,
               stateCombinedByPendingAllowSpendUpdates,
               currencyId
             )

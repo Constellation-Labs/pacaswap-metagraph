@@ -19,15 +19,11 @@ import eu.timepit.refined.cats._
 import eu.timepit.refined.types.all.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.States._
 
 object Withdrawal {
-  case class WithdrawalTokenAmounts(
-    tokenAAmount: SwapAmount,
-    tokenBAmount: SwapAmount
-  )
 
   @derive(encoder, decoder)
   case class WithdrawalCalculatedStateAddress(
@@ -72,8 +68,13 @@ object Withdrawal {
 
   def getPendingSpendActionWithdrawalUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[WithdrawalUpdate]] =
+  ): Set[PendingSpendAction[AmmUpdate]] =
     getWithdrawalCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[WithdrawalUpdate] => pendingSpend
+      case pendingSpend: PendingSpendAction[WithdrawalUpdate] =>
+        PendingSpendAction[AmmUpdate](
+          pendingSpend.update,
+          pendingSpend.generatedSpendAction,
+          pendingSpend.pricingTokenInfo
+        )
     }
 }

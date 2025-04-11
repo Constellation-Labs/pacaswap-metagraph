@@ -40,7 +40,7 @@ trait LiquidityPoolCombinerService[F[_]] {
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
   def combinePendingAllowSpend(
-    pendingSignedUpdate: Signed[LiquidityPoolUpdate],
+    pendingSignedUpdate: PendingAllowSpend[LiquidityPoolUpdate],
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
@@ -156,8 +156,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update) if update === signedLiquidityPoolUpdate => true
-          case _                                                                 => false
+          case PendingAllowSpend(update, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                    => false
         }
 
       private def removePendingSpendAction(
@@ -165,8 +165,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                     => false
+          case PendingSpendAction(update, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                        => false
         }
 
       def combineNew(
@@ -224,7 +224,7 @@ object LiquidityPoolCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  signedUpdate,
+                  PendingAllowSpend(signedUpdate),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -240,22 +240,22 @@ object LiquidityPoolCombinerService {
       }
 
       def combinePendingAllowSpend(
-        signedUpdate: Signed[LiquidityPoolUpdate],
+        pendingAllowSpendUpdate: PendingAllowSpend[LiquidityPoolUpdate],
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
-        val liquidityPoolUpdate = signedUpdate.value
+        val liquidityPoolUpdate = pendingAllowSpendUpdate.update.value
         val updates = liquidityPoolUpdate :: oldState.onChain.updates
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
+          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId))
           _ <- EitherT.fromEither[F](
             validateUpdate(
               poolId,
               applicationConfig,
-              signedUpdate,
+              pendingAllowSpendUpdate.update,
               none,
               none,
               globalEpochProgress,
@@ -272,7 +272,7 @@ object LiquidityPoolCombinerService {
                   validateUpdate(
                     poolId,
                     applicationConfig,
-                    signedUpdate,
+                    pendingAllowSpendUpdate.update,
                     allowSpendTokenA.some,
                     allowSpendTokenB.some,
                     globalEpochProgress,
@@ -292,9 +292,9 @@ object LiquidityPoolCombinerService {
                 )
 
                 updatedPendingAllowSpendCalculatedState =
-                  removePendingAllowSpend(liquidityPoolsCalculatedState, signedUpdate)
+                  removePendingAllowSpend(liquidityPoolsCalculatedState, pendingAllowSpendUpdate.update)
                 updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
-                  signedUpdate,
+                  pendingAllowSpendUpdate.update,
                   spendAction
                 )
 
@@ -323,7 +323,7 @@ object LiquidityPoolCombinerService {
         } yield result
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
+          handleFailedUpdate(updates, pendingAllowSpendUpdate.update, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
 
