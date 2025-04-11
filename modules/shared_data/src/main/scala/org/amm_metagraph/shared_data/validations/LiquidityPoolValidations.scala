@@ -7,6 +7,7 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.DataAppl
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.AllowSpends._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
 import org.amm_metagraph.shared_data.refined.Percentage
@@ -52,13 +53,16 @@ object LiquidityPoolValidations {
         confirmedLiquidityPools,
         liquidityPoolCalculatedState.getPendingUpdates
       ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
+
+      allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
+
       tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         liquidityPoolUpdate.tokenAAllowSpend,
-        liquidityPoolCalculatedState.getPendingUpdates
+        allAllowSpendsInUse
       )
       tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         liquidityPoolUpdate.tokenBAllowSpend,
-        liquidityPoolCalculatedState.getPendingUpdates
+        allAllowSpendsInUse
       )
     } yield
       l1Validations

@@ -303,8 +303,8 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
-        SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
+        primaryToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -313,8 +313,8 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
-        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+        pairToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
         EpochProgress.MaxValue,
@@ -433,7 +433,7 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        primaryToken.identifier,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -443,7 +443,7 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -546,7 +546,7 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        primaryToken.identifier,
         SwapAmount(PosLong(100)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -556,7 +556,7 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),

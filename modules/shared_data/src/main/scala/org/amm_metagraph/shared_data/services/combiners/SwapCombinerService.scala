@@ -96,6 +96,8 @@ object SwapCombinerService {
                 failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
               } else if (allowSpend.destination =!= currencyId.value) {
                 failWith(AllowSpendsDestinationAddressInvalid())
+              } else if (allowSpend.currencyId =!= signedUpdate.swapFromPair) {
+                failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
               } else if (signedUpdate.amountIn.value > allowSpend.amount.value) {
                 failWith(AmountGreaterThanAllowSpendLimit(allowSpend.signed.value))
               } else if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {

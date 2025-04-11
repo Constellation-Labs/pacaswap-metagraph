@@ -10,6 +10,7 @@ import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.cats.refTypeEq
+import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
@@ -45,9 +46,10 @@ object SwapValidations {
         liquidityPoolsCalculatedState
       )
       swapCalculatedState = getSwapCalculatedState(state)
+      allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
       allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         swapUpdate.allowSpendReference,
-        swapCalculatedState.getPendingUpdates
+        allAllowSpendsInUse
       )
       transactionAlreadyExists = validateIfTransactionAlreadyExists(
         swapUpdate,

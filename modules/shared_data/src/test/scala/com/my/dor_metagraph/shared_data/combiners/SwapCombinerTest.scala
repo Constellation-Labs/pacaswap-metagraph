@@ -163,7 +163,7 @@ object SwapCombinerTest extends MutableIOSuite {
       allowSpend = AllowSpend(
         sourceAddress,
         destinationAddress,
-        Some(CurrencyId(ownerAddress)),
+        primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -284,7 +284,7 @@ object SwapCombinerTest extends MutableIOSuite {
       allowSpend = AllowSpend(
         sourceAddress,
         destinationAddress,
-        Some(CurrencyId(ownerAddress)),
+        primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -549,7 +549,7 @@ object SwapCombinerTest extends MutableIOSuite {
       allowSpend = AllowSpend(
         sourceAddress,
         destinationAddress,
-        Some(CurrencyId(ownerAddress)),
+        primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -717,7 +717,7 @@ object SwapCombinerTest extends MutableIOSuite {
         allowSpend = AllowSpend(
           sourceAddress,
           destinationAddress,
-          Some(CurrencyId(ownerAddress)),
+          primaryToken.identifier,
           SwapAmount(PosLong.MaxValue),
           AllowSpendFee(PosLong.MinValue),
           AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -847,7 +847,7 @@ object SwapCombinerTest extends MutableIOSuite {
         allowSpend = AllowSpend(
           sourceAddress,
           destinationAddress,
-          Some(CurrencyId(ownerAddress)),
+          pairToken.identifier,
           SwapAmount(PosLong.MaxValue),
           AllowSpendFee(PosLong.MinValue),
           AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -988,7 +988,7 @@ object SwapCombinerTest extends MutableIOSuite {
           allowSpend = AllowSpend(
             sourceAddress,
             destinationAddress,
-            Some(CurrencyId(ownerAddress)),
+            primaryToken.identifier,
             SwapAmount(PosLong.MaxValue),
             AllowSpendFee(PosLong.MinValue),
             AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -1154,7 +1154,7 @@ object SwapCombinerTest extends MutableIOSuite {
           allowSpend = AllowSpend(
             sourceAddress,
             destinationAddress,
-            Some(CurrencyId(ownerAddress)),
+            tokenB.identifier,
             SwapAmount(PosLong.MaxValue),
             AllowSpendFee(PosLong.MinValue),
             AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -1300,7 +1300,7 @@ object SwapCombinerTest extends MutableIOSuite {
       allowSpend = AllowSpend(
         sourceAddress,
         destinationAddress,
-        Some(CurrencyId(ownerAddress)),
+        primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -1423,7 +1423,7 @@ object SwapCombinerTest extends MutableIOSuite {
                 allowSpend = AllowSpend(
                   sourceAddress,
                   destinationAddress,
-                  Some(CurrencyId(ownerAddress)),
+                  primaryToken.identifier,
                   SwapAmount(PosLong.from(toFixedPoint(1000.0) - i).getOrElse(PosLong.MaxValue)),
                   AllowSpendFee(PosLong.MinValue),
                   AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),

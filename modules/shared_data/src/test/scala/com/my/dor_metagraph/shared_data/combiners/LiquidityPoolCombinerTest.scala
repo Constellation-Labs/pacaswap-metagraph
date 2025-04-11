@@ -232,7 +232,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        tokenAId,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -242,7 +242,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        tokenBId,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -346,7 +346,6 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState()
 
@@ -358,7 +357,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        primaryToken.identifier,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -368,7 +367,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -455,7 +454,6 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState()
 
@@ -467,7 +465,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenA = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -477,7 +475,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       allowSpendTokenB = AllowSpend(
         ownerAddress,
         destinationAddress,
-        none,
+        pairToken.identifier,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
         AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
@@ -655,6 +653,111 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == DuplicatedLiquidityPoolRequest(liquidityPoolUpdate)
+      )
+  }
+
+  test("Return fail - different currencyId between allowSpend and update") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
+    val tokenBId = none
+    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        none,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenBId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue,
+          None
+        )
+      )
+
+      allowSpends = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+
+      futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+
+      liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
+        liquidityPoolUpdate,
+        state,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+      liquidityPoolCalculatedState = liquidityPoolPendingSpendActionResponse.calculated
+        .operations(LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        liquidityPoolCalculatedState.failed.toList.length === 1,
+        liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        liquidityPoolCalculatedState.failed.toList.head.reason == InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(liquidityPoolUpdate)
       )
   }
 }

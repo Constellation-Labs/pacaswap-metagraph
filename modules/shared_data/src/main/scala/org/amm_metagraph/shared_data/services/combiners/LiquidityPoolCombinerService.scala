@@ -96,6 +96,8 @@ object LiquidityPoolCombinerService {
                 failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
               } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
                 failWith(AllowSpendsDestinationAddressInvalid())
+              } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
+                failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
               } else if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
                 failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
               } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
