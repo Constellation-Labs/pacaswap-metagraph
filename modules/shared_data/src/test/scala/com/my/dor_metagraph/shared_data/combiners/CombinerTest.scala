@@ -126,148 +126,150 @@ object CombinerTest extends MutableIOSuite {
       )
     )
 
-//  test("Test combiner - confirmed") { implicit res =>
-//    implicit val (h, hs, sp) = res
-//
-//    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
-//    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
-//    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
-//    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
-//
-//    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-//    val ammOnChainState = AmmOnChainState(List.empty)
-//    val ammCalculatedState = AmmCalculatedState(Map.empty)
-//    val state = DataState(ammOnChainState, ammCalculatedState)
-//
-//    for {
-//      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-//      allowSpendTokenA = AllowSpend(
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-//        tokenAId,
-//        SwapAmount(PosLong.MaxValue),
-//        AllowSpendFee(PosLong.MinValue),
-//        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-//        EpochProgress.MaxValue,
-//        List.empty
-//      )
-//      allowSpendTokenB = AllowSpend(
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-//        tokenBId,
-//        SwapAmount(PosLong.MaxValue),
-//        AllowSpendFee(PosLong.MinValue),
-//        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-//        EpochProgress.MaxValue,
-//        List.empty
-//      )
-//
-//      signedAllowSpendA <- Signed
-//        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
-//        .flatMap(_.toHashed[IO])
-//      signedAllowSpendB <- Signed
-//        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
-//        .flatMap(_.toHashed[IO])
-//
-//      liquidityPoolUpdate = getFakeSignedUpdate(
-//        LiquidityPoolUpdate(
-//          sourceAddress,
-//          signedAllowSpendA.hash,
-//          signedAllowSpendB.hash,
-//          tokenAId,
-//          tokenBId,
-//          tokenAAmount,
-//          tokenBAmount,
-//          EpochProgress.MaxValue,
-//          None
-//        )
-//      )
-//
-//      allowSpendsLp = SortedMap(
-//        tokenAId.get.value.some ->
-//          SortedMap(
-//            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-//          ),
-//        tokenBId.get.value.some ->
-//          SortedMap(
-//            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-//          )
-//      )
-//
-//      context1 = buildL0NodeContext(
-//        keyPair,
-//        allowSpendsLp,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        SortedMap.empty,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        ownerAddress
-//      )
-//
-//      calculatedStateService <- CalculatedStateService.make[IO]
-//      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-//      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-//      globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
-//
-//      pricingService = PricingService.make[IO](config, calculatedStateService)
-//      governanceCombinerService = GovernanceCombinerService.make[IO](config)
-//      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
-//      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
-//      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-//      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
-//
-//      combinerService = L0CombinerService
-//        .make[IO](
-//          globalSnapshotService,
-//          governanceCombinerService,
-//          liquidityPoolCombinerService,
-//          stakingCombinerService,
-//          swapCombinerService,
-//          withdrawalCombinerService
-//        )
-//
-//      combineResponsePendingSpendAction <- combinerService.combine(
-//        state,
-//        List(liquidityPoolUpdate)
-//      )(context1)
-//      spendActions = combineResponsePendingSpendAction.sharedArtifacts.collect { case spendAction: SpendAction => spendAction }
-//
-//      context2 = buildL0NodeContext(
-//        keyPair,
-//        SortedMap.empty,
-//        EpochProgress(NonNegLong.unsafeFrom(2L)),
-//        SnapshotOrdinal(NonNegLong.unsafeFrom(2L)),
-//        SortedMap.empty,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        ownerAddress,
-//        SortedMap(ownerAddress -> spendActions.toList).some
-//      )
-//
-//      t <- context2.getLastSynchronizedGlobalSnapshot
-//      _ <- globalSnapshotService.set(t.get)
-//
-//      combineResponseConfirmed <- combinerService.combine(
-//        combineResponsePendingSpendAction,
-//        List.empty
-//      )(context2)
-//
-//      pendingLiquidityPoolCalculatedState = combineResponsePendingSpendAction.calculated
-//        .operations(OperationType.LiquidityPool)
-//        .asInstanceOf[LiquidityPoolCalculatedState]
-//
-//      confirmedLiquidityPoolCalculatedState = combineResponseConfirmed.calculated
-//        .operations(OperationType.LiquidityPool)
-//        .asInstanceOf[LiquidityPoolCalculatedState]
-//    } yield
-//      expect.all(
-//        pendingLiquidityPoolCalculatedState.pending.size === 1 &&
-//          confirmedLiquidityPoolCalculatedState.pending.size === 0 &&
-//          pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
-//          confirmedLiquidityPoolCalculatedState.confirmed.value.size === 1
-//      )
-//  }
+  test("Test combiner - confirmed") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
+    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
+    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenAId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenBId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue,
+          None
+        )
+      )
+
+      allowSpendsLp = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      context1 = buildL0NodeContext(
+        keyPair,
+        allowSpendsLp,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
+
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      governanceCombinerService = GovernanceCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+
+      combinerService = L0CombinerService
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService
+        )
+
+      combineResponsePendingSpendAction <- combinerService.combine(
+        state,
+        List(liquidityPoolUpdate)
+      )(context1)
+      spendActions = combineResponsePendingSpendAction.sharedArtifacts.collect { case spendAction: SpendAction => spendAction }
+
+      context2 = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress(NonNegLong.unsafeFrom(2L)),
+        SnapshotOrdinal(NonNegLong.unsafeFrom(2L)),
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress,
+        SortedMap(ownerAddress -> spendActions.toList).some
+      )
+
+      t <- context2.getLastSynchronizedGlobalSnapshot
+      _ <- globalSnapshotService.set(t.get)
+
+      combineResponseConfirmed <- combinerService.combine(
+        combineResponsePendingSpendAction,
+        List.empty
+      )(context2)
+
+      pendingLiquidityPoolCalculatedState = combineResponsePendingSpendAction.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+
+      confirmedLiquidityPoolCalculatedState = combineResponseConfirmed.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        pendingLiquidityPoolCalculatedState.pending.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.size === 0 &&
+          pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
+          confirmedLiquidityPoolCalculatedState.confirmed.value.size === 1
+      )
+  }
 
   test("Test combiner - pendingAllowSpend") { implicit res =>
     implicit val (h, hs, sp) = res
@@ -403,145 +405,147 @@ object CombinerTest extends MutableIOSuite {
       )
   }
 
-//  test("Test combiner - pendingSpendAction") { implicit res =>
-//    implicit val (h, hs, sp) = res
-//
-//    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
-//    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
-//    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
-//    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
-//
-//    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-//    val ammOnChainState = AmmOnChainState(List.empty)
-//    val ammCalculatedState = AmmCalculatedState(Map.empty)
-//    val state = DataState(ammOnChainState, ammCalculatedState)
-//
-//    for {
-//      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-//      allowSpendTokenA = AllowSpend(
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-//        tokenAId,
-//        SwapAmount(PosLong.MaxValue),
-//        AllowSpendFee(PosLong.MinValue),
-//        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-//        EpochProgress.MaxValue,
-//        List.empty
-//      )
-//      allowSpendTokenB = AllowSpend(
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-//        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
-//        tokenBId,
-//        SwapAmount(PosLong.MaxValue),
-//        AllowSpendFee(PosLong.MinValue),
-//        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
-//        EpochProgress.MaxValue,
-//        List.empty
-//      )
-//
-//      signedAllowSpendA <- Signed
-//        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
-//        .flatMap(_.toHashed[IO])
-//      signedAllowSpendB <- Signed
-//        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
-//        .flatMap(_.toHashed[IO])
-//
-//      liquidityPoolUpdate = getFakeSignedUpdate(
-//        LiquidityPoolUpdate(
-//          sourceAddress,
-//          signedAllowSpendA.hash,
-//          signedAllowSpendB.hash,
-//          tokenAId,
-//          tokenBId,
-//          tokenAAmount,
-//          tokenBAmount,
-//          EpochProgress.MaxValue,
-//          None
-//        )
-//      )
-//
-//      allowSpends = SortedMap(
-//        tokenAId.get.value.some ->
-//          SortedMap(
-//            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
-//          ),
-//        tokenBId.get.value.some ->
-//          SortedMap(
-//            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
-//          )
-//      )
-//
-//      context1 = buildL0NodeContext(
-//        keyPair,
-//        allowSpends,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        SortedMap.empty,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        ownerAddress
-//      )
-//
-//      calculatedStateService <- CalculatedStateService.make[IO]
-//      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-//      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-//      globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
-//
-//      pricingService = PricingService.make[IO](config, calculatedStateService)
-//      governanceCombinerService = GovernanceCombinerService.make[IO](config)
-//      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
-//      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
-//      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-//      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
-//
-//      combinerService = L0CombinerService
-//        .make[IO](
-//          globalSnapshotService,
-//          governanceCombinerService,
-//          liquidityPoolCombinerService,
-//          stakingCombinerService,
-//          swapCombinerService,
-//          withdrawalCombinerService
-//        )
-//
-//      combineResponsePendingSpendAction <- combinerService.combine(
-//        state,
-//        List(liquidityPoolUpdate)
-//      )(context1)
-//
-//      context2 = buildL0NodeContext(
-//        keyPair,
-//        SortedMap.empty,
-//        EpochProgress(NonNegLong.unsafeFrom(2L)),
-//        SnapshotOrdinal(NonNegLong.unsafeFrom(2L)),
-//        SortedMap.empty,
-//        EpochProgress.MinValue,
-//        SnapshotOrdinal.MinValue,
-//        ownerAddress,
-//        None
-//      )
-//
-//      t <- context2.getLastSynchronizedGlobalSnapshot
-//      _ <- globalSnapshotService.set(t.get)
-//
-//      stillPendingResponse <- combinerService.combine(
-//        combineResponsePendingSpendAction,
-//        List.empty
-//      )(context2)
-//
-//      pendingLiquidityPoolCalculatedState = combineResponsePendingSpendAction.calculated
-//        .operations(OperationType.LiquidityPool)
-//        .asInstanceOf[LiquidityPoolCalculatedState]
-//
-//      confirmedLiquidityPoolCalculatedState = stillPendingResponse.calculated
-//        .operations(OperationType.LiquidityPool)
-//        .asInstanceOf[LiquidityPoolCalculatedState]
-//    } yield
-//      expect.all(
-//        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
-//          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
-//          pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
-//          confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
-//      )
-//  }
+  test("Test combiner - pendingSpendAction") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
+    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
+    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenAId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenBId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue,
+          None
+        )
+      )
+
+      allowSpends = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      context1 = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
+
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      governanceCombinerService = GovernanceCombinerService.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+
+      combinerService = L0CombinerService
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService
+        )
+
+      combineResponsePendingSpendAction <- combinerService.combine(
+        state,
+        List(liquidityPoolUpdate)
+      )(context1)
+
+      context2 = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress(NonNegLong.unsafeFrom(2L)),
+        SnapshotOrdinal(NonNegLong.unsafeFrom(2L)),
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress,
+        None
+      )
+
+      t <- context2.getLastSynchronizedGlobalSnapshot
+      _ <- globalSnapshotService.set(t.get)
+
+      stillPendingResponse <- combinerService.combine(
+        combineResponsePendingSpendAction,
+        List.empty
+      )(context2)
+
+      pendingLiquidityPoolCalculatedState = combineResponsePendingSpendAction.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+
+      confirmedLiquidityPoolCalculatedState = stillPendingResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
+          pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
+          confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
+      )
+  }
 }

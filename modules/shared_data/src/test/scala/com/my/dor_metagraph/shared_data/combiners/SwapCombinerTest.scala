@@ -149,6 +149,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
 
@@ -161,7 +162,7 @@ object SwapCombinerTest extends MutableIOSuite {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
         sourceAddress,
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        destinationAddress,
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -202,7 +203,7 @@ object SwapCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -216,7 +217,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -269,6 +270,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -281,7 +283,7 @@ object SwapCombinerTest extends MutableIOSuite {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
         sourceAddress,
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        destinationAddress,
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -322,7 +324,7 @@ object SwapCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -336,7 +338,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       swapCalculatedState = swapResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -526,6 +528,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
       primaryToken,
@@ -545,7 +548,7 @@ object SwapCombinerTest extends MutableIOSuite {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
         sourceAddress,
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        destinationAddress,
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -586,7 +589,7 @@ object SwapCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        Address("DAG3JgDiCr8sUWm1QyxeEShNvyutX6bLsP9Vub6f")
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -600,7 +603,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -688,6 +691,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val percentageBuckets = List(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95)
@@ -712,7 +716,7 @@ object SwapCombinerTest extends MutableIOSuite {
         keyPair <- KeyPairGenerator.makeKeyPair[IO]
         allowSpend = AllowSpend(
           sourceAddress,
-          Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+          destinationAddress,
           Some(CurrencyId(ownerAddress)),
           SwapAmount(PosLong.MaxValue),
           AllowSpendFee(PosLong.MinValue),
@@ -753,7 +757,7 @@ object SwapCombinerTest extends MutableIOSuite {
           SortedMap.empty,
           EpochProgress.MinValue,
           SnapshotOrdinal.MinValue,
-          ownerAddress
+          destinationAddress
         )
 
         calculatedStateService <- CalculatedStateService.make[IO]
@@ -767,7 +771,7 @@ object SwapCombinerTest extends MutableIOSuite {
           state,
           futureEpoch,
           allowSpends,
-          CurrencyId(ownerAddress)
+          CurrencyId(destinationAddress)
         )
 
         spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -817,6 +821,7 @@ object SwapCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
 
     val percentageBuckets = List(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95)
@@ -841,7 +846,7 @@ object SwapCombinerTest extends MutableIOSuite {
         keyPair <- KeyPairGenerator.makeKeyPair[IO]
         allowSpend = AllowSpend(
           sourceAddress,
-          Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"),
+          destinationAddress,
           Some(CurrencyId(ownerAddress)),
           SwapAmount(PosLong.MaxValue),
           AllowSpendFee(PosLong.MinValue),
@@ -882,7 +887,7 @@ object SwapCombinerTest extends MutableIOSuite {
           SortedMap.empty,
           EpochProgress.MinValue,
           SnapshotOrdinal.MinValue,
-          ownerAddress
+          destinationAddress
         )
 
         calculatedStateService <- CalculatedStateService.make[IO]
@@ -896,7 +901,7 @@ object SwapCombinerTest extends MutableIOSuite {
           state,
           futureEpoch,
           allowSpends,
-          CurrencyId(ownerAddress)
+          CurrencyId(destinationAddress)
         )
 
         spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -947,6 +952,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val testCases = List(
       (30, 0.0, true), // 0% slippage tolerance - should succeed (exact match)
@@ -981,7 +987,7 @@ object SwapCombinerTest extends MutableIOSuite {
           keyPair <- KeyPairGenerator.makeKeyPair[IO]
           allowSpend = AllowSpend(
             sourceAddress,
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+            destinationAddress,
             Some(CurrencyId(ownerAddress)),
             SwapAmount(PosLong.MaxValue),
             AllowSpendFee(PosLong.MinValue),
@@ -1022,7 +1028,7 @@ object SwapCombinerTest extends MutableIOSuite {
             SortedMap.empty,
             EpochProgress.MinValue,
             SnapshotOrdinal.MinValue,
-            ownerAddress
+            destinationAddress
           )
 
           calculatedStateService <- CalculatedStateService.make[IO]
@@ -1036,7 +1042,7 @@ object SwapCombinerTest extends MutableIOSuite {
             state,
             futureEpoch,
             allowSpends,
-            CurrencyId(ownerAddress)
+            CurrencyId(destinationAddress)
           )
 
           spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -1114,6 +1120,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val testCases = List(
       (30, 0.0, true), // 0% slippage tolerance - should succeed (exact match)
@@ -1146,7 +1153,7 @@ object SwapCombinerTest extends MutableIOSuite {
           keyPair <- KeyPairGenerator.makeKeyPair[IO]
           allowSpend = AllowSpend(
             sourceAddress,
-            Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"),
+            destinationAddress,
             Some(CurrencyId(ownerAddress)),
             SwapAmount(PosLong.MaxValue),
             AllowSpendFee(PosLong.MinValue),
@@ -1186,7 +1193,7 @@ object SwapCombinerTest extends MutableIOSuite {
             SortedMap.empty,
             EpochProgress.MinValue,
             SnapshotOrdinal.MinValue,
-            ownerAddress
+            destinationAddress
           )
 
           calculatedStateService <- CalculatedStateService.make[IO]
@@ -1200,7 +1207,7 @@ object SwapCombinerTest extends MutableIOSuite {
             state,
             futureEpoch,
             allowSpends,
-            CurrencyId(ownerAddress)
+            CurrencyId(destinationAddress)
           )
 
           spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -1273,6 +1280,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val swapAmount = 100.0 * 100 // 100x the available Token A
     val expectedOutput = 50.0 * 100 / (1.0 + 100.0) // Expected but huge value
@@ -1291,7 +1299,7 @@ object SwapCombinerTest extends MutableIOSuite {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
         sourceAddress,
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        destinationAddress,
         Some(CurrencyId(ownerAddress)),
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -1332,7 +1340,7 @@ object SwapCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -1346,7 +1354,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -1390,6 +1398,7 @@ object SwapCombinerTest extends MutableIOSuite {
 
     val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
 
@@ -1413,7 +1422,7 @@ object SwapCombinerTest extends MutableIOSuite {
                 keyPair <- KeyPairGenerator.makeKeyPair[IO]
                 allowSpend = AllowSpend(
                   sourceAddress,
-                  Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+                  destinationAddress,
                   Some(CurrencyId(ownerAddress)),
                   SwapAmount(PosLong.from(toFixedPoint(1000.0) - i).getOrElse(PosLong.MaxValue)),
                   AllowSpendFee(PosLong.MinValue),
@@ -1454,7 +1463,7 @@ object SwapCombinerTest extends MutableIOSuite {
                   SortedMap.empty,
                   EpochProgress.MinValue,
                   SnapshotOrdinal.MinValue,
-                  ownerAddress
+                  destinationAddress
                 )
 
                 calculatedStateService <- CalculatedStateService.make[IO]
@@ -1468,7 +1477,7 @@ object SwapCombinerTest extends MutableIOSuite {
                   accState,
                   EpochProgress.MinValue,
                   allowSpends,
-                  CurrencyId(ownerAddress)
+                  CurrencyId(destinationAddress)
                 )
 
                 (updatedState, currentExpectations) <-

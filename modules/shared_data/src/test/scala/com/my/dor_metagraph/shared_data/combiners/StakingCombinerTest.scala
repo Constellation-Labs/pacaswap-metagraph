@@ -147,6 +147,7 @@ object StakingCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -158,8 +159,8 @@ object StakingCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -168,8 +169,8 @@ object StakingCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         pairToken.identifier,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -201,11 +202,11 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -217,7 +218,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
@@ -229,7 +230,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -239,7 +240,8 @@ object StakingCombinerTest extends MutableIOSuite {
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        CurrencyId(destinationAddress)
       )
 
       oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
@@ -279,6 +281,8 @@ object StakingCombinerTest extends MutableIOSuite {
       PosLong.unsafeFrom(toFixedPoint(50.0))
     )
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
     val secondProviderAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Kt")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
@@ -297,8 +301,8 @@ object StakingCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -307,8 +311,8 @@ object StakingCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -340,11 +344,11 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -356,7 +360,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
@@ -368,7 +372,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
 
@@ -377,7 +381,8 @@ object StakingCombinerTest extends MutableIOSuite {
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        CurrencyId(destinationAddress)
       )
 
       oldLiquidityPool = liquidityPoolCalculatedState.confirmed.value(poolId)
@@ -412,6 +417,7 @@ object StakingCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -425,8 +431,8 @@ object StakingCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
@@ -435,8 +441,8 @@ object StakingCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong(1)),
         AllowSpendFee(PosLong.MinValue),
@@ -468,11 +474,11 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -484,7 +490,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -497,7 +503,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
     } yield
@@ -524,6 +530,7 @@ object StakingCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
@@ -537,8 +544,8 @@ object StakingCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong(100)),
         AllowSpendFee(PosLong.MinValue),
@@ -547,8 +554,8 @@ object StakingCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         none,
         SwapAmount(PosLong.MaxValue),
         AllowSpendFee(PosLong.MinValue),
@@ -580,11 +587,11 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -596,7 +603,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
 
       calculatedStateService <- CalculatedStateService.make[IO]
@@ -609,7 +616,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
     } yield
@@ -638,8 +645,9 @@ object StakingCombinerTest extends MutableIOSuite {
     )
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(List.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
@@ -649,8 +657,8 @@ object StakingCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -659,8 +667,8 @@ object StakingCombinerTest extends MutableIOSuite {
         List.empty
       )
       allowSpendTokenB = AllowSpend(
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        ownerAddress,
+        destinationAddress,
         pairToken.identifier,
         SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
         AllowSpendFee(PosLong.MinValue),
@@ -692,11 +700,11 @@ object StakingCombinerTest extends MutableIOSuite {
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
           ),
         pairToken.identifier.get.value.some ->
           SortedMap(
-            Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
           )
       )
 
@@ -708,7 +716,7 @@ object StakingCombinerTest extends MutableIOSuite {
         SortedMap.empty,
         EpochProgress.MinValue,
         SnapshotOrdinal.MinValue,
-        ownerAddress
+        destinationAddress
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
@@ -720,7 +728,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       stakeResponsePendingSpendActionResponse2 <- stakingCombinerService.combineNew(
@@ -728,7 +736,7 @@ object StakingCombinerTest extends MutableIOSuite {
         stakeResponsePendingSpendActionResponse,
         futureEpoch,
         allowSpends,
-        CurrencyId(ownerAddress)
+        CurrencyId(destinationAddress)
       )
 
       stakingCalculatedState = stakeResponsePendingSpendActionResponse2.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]

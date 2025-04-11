@@ -68,7 +68,8 @@ object SwapCombinerService {
         maybeAllowSpendToken: Option[Hashed[AllowSpend]],
         lastSyncGlobalEpochProgress: EpochProgress,
         confirmedSwaps: Set[SwapCalculatedStateAddress],
-        pendingSwaps: Set[Signed[SwapUpdate]]
+        pendingSwaps: Set[Signed[SwapUpdate]],
+        currencyId: CurrencyId
       ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
         val expireEpochProgress = EpochProgress(
           NonNegLong
@@ -91,7 +92,11 @@ object SwapCombinerService {
         } else {
           (maybeTokenInformation, maybeAllowSpendToken) match {
             case (Some(updatedTokenInformation), Some(allowSpend)) =>
-              if (signedUpdate.amountIn.value > allowSpend.amount.value) {
+              if (allowSpend.source =!= signedUpdate.source) {
+                failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
+              } else if (allowSpend.destination =!= currencyId.value) {
+                failWith(AllowSpendsDestinationAddressInvalid())
+              } else if (signedUpdate.amountIn.value > allowSpend.amount.value) {
                 failWith(AmountGreaterThanAllowSpendLimit(allowSpend.signed.value))
               } else if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {
                 failWith(SwapLessThanMinAmount())
@@ -122,7 +127,7 @@ object SwapCombinerService {
           .modify(_ + failedCalculatedState)
           .focus(_.pending)
           .modify(_.filter(_.update =!= swapUpdate))
-        
+
         val updatedCalculatedState = acc.calculated
           .focus(_.operations)
           .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
@@ -180,7 +185,7 @@ object SwapCombinerService {
 
         val combinedState = for {
           _ <- EitherT.fromEither(
-            validateUpdate(signedUpdate, none, none, globalEpochProgress, confirmedSwaps, pendingSwaps)
+            validateUpdate(signedUpdate, none, none, globalEpochProgress, confirmedSwaps, pendingSwaps, currencyId)
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
           response <- updateAllowSpends match {
@@ -238,7 +243,8 @@ object SwapCombinerService {
               none,
               globalEpochProgress,
               Set.empty,
-              Set.empty
+              Set.empty,
+              currencyId
             )
           )
 
@@ -256,7 +262,8 @@ object SwapCombinerService {
                     allowSpendToken.some,
                     globalEpochProgress,
                     Set.empty,
-                    Set.empty
+                    Set.empty,
+                    currencyId
                   )
                 )
 
@@ -326,7 +333,7 @@ object SwapCombinerService {
           )
           sourceAddress = signedSwapUpdate.source
           _ <- EitherT.fromEither[F](
-            validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress, Set.empty, Set.empty)
+            validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress, Set.empty, Set.empty, currencyId)
           )
           liquidityPoolUpdated <- EitherT.fromEither[F](
             pricingService.getUpdatedLiquidityPoolDueSwap(

@@ -214,7 +214,8 @@ object L0CombinerService {
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
-                    currencySnapshotOrdinal
+                    currencySnapshotOrdinal,
+                    currencyId
                   )
               }
             stateUpdatedByStaking <- pendingSpendActionStaking.toList
@@ -225,7 +226,8 @@ object L0CombinerService {
                     acc,
                     lastSyncGlobalEpochProgress,
                     globalSnapshotSyncSpendActions,
-                    currencySnapshotOrdinal
+                    currencySnapshotOrdinal,
+                    currencyId
                   )
               }
             stateUpdatedByWithdrawals <- pendingSpendActionWithdrawals.toList
