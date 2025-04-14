@@ -1,12 +1,13 @@
 import { dag4 } from "@stardust-collective/dag4";
 import axios from "axios";
-import { delay, getPublicKey, log, retry, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate } from "../../shared";
+import { delay, getPublicKey, log, retry, getSnapshotRewardForAddress, getSnapshotBalanceForAddress, getGlobalSnapshotCombined, getBalanceForAddress, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate } from "../../shared";
 import { z } from 'zod';
 
 const voteAllocations = [{
     "privateKey": "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
     "allocations": [{ "key": "NodeValidators", "amount": 10 }]
-}]
+}
+]
 
 const AllocationsSchema = z.object({
     key: z.string()
@@ -80,8 +81,8 @@ const validateVoteAllocations = async (
     const { ammMl0Url } = config;
 
     try {
-        await axios.get(`${ammMl0Url}/v1/addresses/${address}/vote-info`);
-        logger(`Vote info filled`);
+        const voteInfo = await axios.get(`${ammMl0Url}/v1/addresses/${address}/vote-info`);
+        logger(`Vote info filled for ${address}`);
         return
     } catch (error) {
         logger(`Error validating vote allocation: ${error.message}`, "WARN");
@@ -95,26 +96,24 @@ const validateAllocationsRewards = async (
     logger: (message: string, type?: string, context?: string) => void = log
 ) => {
     const { ammMl0Url } = config;
-    try {
+
         const { data: lastRewards } = await axios.get(`${ammMl0Url}/v1/governance/allocations/rewards`);
 
-        const someRewardFilled = lastRewards.find(reward => {
+        const someRewardFilled = lastRewards.data.find(reward => {
             return Object.keys(reward.rewardsInfo).length > 0
         })
 
+        logger(`Check reward`);
         if (someRewardFilled) {
             const nodeValidatorsReward = someRewardFilled.rewardsInfo.NodeValidators
-            if (nodeValidatorsReward === 250) {
+            if (nodeValidatorsReward === 25000) {
                 logger(`Rewards filled correctly`);
                 return
             }
             throw new Error(`NodeValidatorsReward invalid weight: ${nodeValidatorsReward}`);
         }
 
-        logger(`Rewards not filled yet. Retrying...`);
-    } catch (error) {
-        logger(`Error checking allocation rewards: ${error.message}`, "WARN");
-    }
+        throw new Error(`Rewards not filled yet`);
 };
 
 const voteAllocationTests = async (argsObject: object) => {
@@ -133,6 +132,12 @@ const voteAllocationTests = async (argsObject: object) => {
         };
     });
 
+    for (const voteAllocationInfo of voteAllocationsInfo) {
+        const { address } = voteAllocationInfo;
+        log(`Initial balance for ${address}`)
+        const balance = getBalanceForAddress(address, config.gl0Url, false, "")
+    }
+
     log("Vote allocation information built successfully.");
 
     for (const voteAllocationInfo of voteAllocationsInfo) {
@@ -141,16 +146,50 @@ const voteAllocationTests = async (argsObject: object) => {
         const signedVoteAllocation = await getSignedVoteAllocation(config, voteAllocationInfo);
         await sendDataUpdate(config.ammDl1Url, signedVoteAllocation);
 
-        await retry('Validate voting weight')(async (logger) => {
+        await retry(`Validate voting weight for ${address}`, { delayMs: 10000 })(async (logger) => {
             await validateVoteAllocations(config, address, logger)
         })
+        await delay(1000)
+    }
+    await delay(10000)
 
-        await delay(10000)
+
+    for (const voteAllocationInfo of voteAllocationsInfo) {
+        const { address } = voteAllocationInfo;
+        await retry(`Validate voting weight second time for ${address}`)(async (logger) => {
+            await validateVoteAllocations(config, address, logger)
+        })
     }
 
-    await retry('Validate allocations rewards', { delayMs: 5000, maxAttempts: 24 })(async (logger) => {
+    await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
         await validateAllocationsRewards(config, logger)
     })
+
+    for (const voteAllocationInfo of voteAllocationsInfo) {
+        const { address } = voteAllocationInfo;
+      
+        let previousBalance = 0;
+      
+        for (let i = 0; i < 10; i++) {
+          const balance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId);
+      
+          if (balance < previousBalance) {
+            throw new Error(`Balance decreased for address ${address}: ${balance} < ${previousBalance}`);
+          }
+      
+          previousBalance = balance;
+      
+          const rewards = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId);
+      
+          const expectedRewards = [95496, 232770];
+      
+          if (rewards.length !== 2 || rewards[0] !== expectedRewards[0] || rewards[1] !== expectedRewards[1]) {
+            throw new Error(`Unexpected rewards for address ${address}: got ${JSON.stringify(rewards)}`);
+          }
+      
+          await delay(10000);
+        }
+      }
 
     log("All vote allocations validated successfully.", "SUCCESS");
 };

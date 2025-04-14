@@ -1,13 +1,12 @@
 package org.amm_metagraph.shared_data
 
-import org.amm_metagraph.shared_data.epochProgress.epochProgressOneDay
-
 object credits {
   def getUpdatedCredits(
     lastUpdateEpoch: Long,
     lastUpdateCredits: Double,
     currentEpoch: Long,
-    maxCredits: Double
+    maxCredits: Double,
+    epochProgressOneDay: Long
   ): Either[String, Double] = {
     val regenerationRate = maxCredits / epochProgressOneDay
 
