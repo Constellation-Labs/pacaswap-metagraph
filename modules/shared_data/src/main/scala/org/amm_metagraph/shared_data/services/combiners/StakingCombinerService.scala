@@ -105,6 +105,8 @@ object StakingCombinerService {
                   failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
                 } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
                   failWith(AllowSpendsDestinationAddressInvalid())
+                } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
+                  failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
                 } else if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
                   failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
                 } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {

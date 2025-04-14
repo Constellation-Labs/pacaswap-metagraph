@@ -8,6 +8,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
@@ -52,13 +53,16 @@ object StakingValidations {
         stakingUpdate,
         liquidityPoolsCalculatedState
       )
+
+      allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
+
       tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         stakingUpdate.tokenAAllowSpend,
-        stakingCalculatedState.getPendingUpdates
+        allAllowSpendsInUse
       )
       tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
         stakingUpdate.tokenBAllowSpend,
-        stakingCalculatedState.getPendingUpdates
+        allAllowSpendsInUse
       )
 
       lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)

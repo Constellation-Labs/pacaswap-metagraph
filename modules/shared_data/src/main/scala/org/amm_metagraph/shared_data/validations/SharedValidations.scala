@@ -43,16 +43,7 @@ object SharedValidations {
 
   def validateIfAllowSpendsAreDuplicated(
     allowSpendRef: Hash,
-    existingPendingUpdates: Set[_ <: Signed[AmmUpdate]]
-  ): DataApplicationValidationErrorOr[Unit] = {
-    val updateAlreadyExists = existingPendingUpdates.exists(_.value match {
-      case lpUpdate: LiquidityPoolUpdate => lpUpdate.tokenAAllowSpend === allowSpendRef || lpUpdate.tokenBAllowSpend === allowSpendRef
-      case stakingUpdate: StakingUpdate =>
-        stakingUpdate.tokenAAllowSpend === allowSpendRef || stakingUpdate.tokenBAllowSpend === allowSpendRef
-      case swapUpdate: SwapUpdate => swapUpdate.allowSpendReference === allowSpendRef
-      case _                      => false
-    })
-
-    DuplicatedOperation.whenA(updateAlreadyExists)
-  }
+    allAllowSpendsInUse: Set[Hash]
+  ): DataApplicationValidationErrorOr[Unit] =
+    DuplicatedOperation.whenA(allAllowSpendsInUse.contains(allowSpendRef))
 }
