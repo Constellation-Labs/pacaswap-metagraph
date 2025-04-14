@@ -47,6 +47,8 @@ object ConfigReaders {
     )
   }
 
+  implicit val epochMetadataReader: ConfigReader[ApplicationConfig.EpochMetadata] = deriveReader
+
   implicit val configReader: ConfigReader[Environment] = ConfigReader.fromString[Environment] {
     case "dev"            => Right(Dev)
     case "testnet"        => Right(Testnet)

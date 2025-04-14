@@ -43,6 +43,7 @@ object GovernanceValidations {
       lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
       lastTransactionRef = lastTransactionRefValidation(rewardAllocationVoteUpdate, lastUserAllocation)
       dailyLimitAllocation = dailyLimitAllocationValidation(
+        applicationConfig,
         lastUserAllocation,
         lastSyncGlobalSnapshotEpochProgress
       )
@@ -96,6 +97,7 @@ object GovernanceValidations {
   }
 
   private def dailyLimitAllocationValidation(
+    applicationConfig: ApplicationConfig,
     lastUserAllocation: Option[UserAllocations],
     lastCurrencySnapshotEpochProgress: EpochProgress
   ): DataApplicationValidationErrorOr[Unit] =
@@ -104,7 +106,8 @@ object GovernanceValidations {
         allocation.allocationGlobalEpochProgress.value.value,
         allocation.credits,
         lastCurrencySnapshotEpochProgress.value.value,
-        maxCredits
+        maxCredits,
+        applicationConfig.epochInfo.epochProgressOneDay
       ).fold(_ => DailyAllocationExceed.invalid, _ => valid)
     }
 

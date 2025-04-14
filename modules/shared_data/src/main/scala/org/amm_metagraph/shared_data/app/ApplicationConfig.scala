@@ -1,5 +1,7 @@
 package org.amm_metagraph.shared_data.app
 
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -13,7 +15,8 @@ case class ApplicationConfig(
   governance: ApplicationConfig.Governance,
   rewards: ApplicationConfig.Rewards,
   minTokensLiquidityPool: PosLong,
-  allowSpendEpochBufferDelay: EpochProgress
+  allowSpendEpochBufferDelay: EpochProgress,
+  epochInfo: ApplicationConfig.EpochMetadata
 )
 
 object ApplicationConfig {
@@ -43,4 +46,13 @@ object ApplicationConfig {
     initialEpoch: EpochProgress,
     daoAddress: Address
   )
+
+  case class EpochMetadata(oneEpochProgress: FiniteDuration) {
+    val oneEpochProgressInSeconds: Int = oneEpochProgress.toSeconds.toInt
+    val epochProgressOneDay: Long = (1.day / oneEpochProgress).toLong
+    val epochProgress1Month: Long = epochProgressOneDay * 30L
+    val epochProgress6Months: Long = epochProgress1Month * 6L
+    val epochProgress1Year: Long = epochProgress6Months * 2
+    val epochProgress2Years: Long = epochProgress1Year * 2
+  }
 }

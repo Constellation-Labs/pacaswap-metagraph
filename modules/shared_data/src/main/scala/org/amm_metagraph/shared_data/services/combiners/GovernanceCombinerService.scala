@@ -19,7 +19,6 @@ import eu.timepit.refined.types.numeric.NonNegInt
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
-import org.amm_metagraph.shared_data.epochProgress.{epochProgress1Year, epochProgress2Years}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
 import org.amm_metagraph.shared_data.types.Governance.MonthlyReference.getMonthlyReference
@@ -66,9 +65,9 @@ object GovernanceCombinerService {
         val syncEpochProgressValue = lastSyncGlobalSnapshotEpochProgress.value.value
         val votingWeightMultipliers = applicationConfig.governance.votingWeightMultipliers
         tokenLock.unlockEpoch match {
-          case Some(unlockEpoch) if (syncEpochProgressValue + epochProgress2Years) <= unlockEpoch.value =>
+          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress2Years) <= unlockEpoch.value =>
             tokenLock.amount.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier
-          case Some(unlockEpoch) if (syncEpochProgressValue + epochProgress1Year) <= unlockEpoch.value =>
+          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress1Year) <= unlockEpoch.value =>
             tokenLock.amount.value * votingWeightMultipliers.lockForOneYearMultiplier
           case _ =>
             tokenLock.amount.value * votingWeightMultipliers.lockForSixMonthsMultiplier
@@ -162,7 +161,8 @@ object GovernanceCombinerService {
                 existing.allocationGlobalEpochProgress.value.value,
                 existing.credits,
                 globalEpochProgress.value.value,
-                maxCredits
+                maxCredits,
+                applicationConfig.epochInfo.epochProgressOneDay
               ) match {
                 case Left(msg) => logger.warn(s"Error when combining reward allocation: $msg").as(existing)
                 case Right(updatedCredits) =>
@@ -229,7 +229,8 @@ object GovernanceCombinerService {
         val monthlyReference = state.calculated.allocations.monthlyReference
 
         val (monthlyReferenceParsed, stateParsed) = if (monthlyReference.monthReference === NonNegInt.MinValue) {
-          val monthlyRef = getMonthlyReference(applicationConfig.environment, globalEpochProgress)
+          val monthlyRef =
+            getMonthlyReference(applicationConfig.environment, globalEpochProgress, applicationConfig.epochInfo.oneEpochProgressInSeconds)
           (monthlyRef, state.focus(_.calculated.allocations.monthlyReference).replace(monthlyRef))
         } else {
           (monthlyReference, state)
@@ -255,7 +256,8 @@ object GovernanceCombinerService {
             .sortBy(-_.epochProgressToReward.value.value)
             .take(3)
 
-          val updatedMonthlyReference = getMonthlyReference(applicationConfig.environment, globalEpochProgress)
+          val updatedMonthlyReference =
+            getMonthlyReference(applicationConfig.environment, globalEpochProgress, applicationConfig.epochInfo.oneEpochProgressInSeconds)
 
           stateParsed
             .focus(_.calculated.allocations.usersAllocations)

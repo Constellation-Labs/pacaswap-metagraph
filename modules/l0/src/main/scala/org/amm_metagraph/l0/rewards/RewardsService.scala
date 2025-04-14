@@ -37,7 +37,7 @@ object RewardsService {
         case Some(calculatedState) =>
           for {
             config <- ApplicationConfigOps.readDefault[F]
-            calculator = RewardCalculator.make(config.rewards)
+            calculator = RewardCalculator.make(config.rewards, config.epochInfo)
             facilitators <- lastArtifact.proofs.toList.traverse(_.id.toAddress[F])
             votingPowers = calculatedState.votingWeights.toList.map { case (addr, weight) => VotingPower(addr, weight) }
             distribution <- calculator.calculateEpochRewards[F](

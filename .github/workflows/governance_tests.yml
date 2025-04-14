@@ -92,6 +92,7 @@ jobs:
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)
           echo "METAGRAPH_ID: $METAGRAPH_ID"
+          echo "GL0_URL: $GL0_URL"
 
           cd .github/action_scripts
           npx tsx governance/main.ts \

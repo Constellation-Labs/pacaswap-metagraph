@@ -7,6 +7,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedMap
+import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
@@ -60,7 +61,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     ),
     PosLong.unsafeFrom((100 * 1e8).toLong),
-    EpochProgress(NonNegLong.unsafeFrom(0L))
+    EpochProgress(NonNegLong.unsafeFrom(0L)),
+    EpochMetadata(43.seconds)
   )
 
   override def sharedResource: Resource[IO, Res] = for {
