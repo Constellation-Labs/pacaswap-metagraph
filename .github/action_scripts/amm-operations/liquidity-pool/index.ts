@@ -111,6 +111,7 @@ const processLiquidityPoolCreation = async (
         tokenBAllowSpendHash,
         tokenA.tokenId,
         tokenB.tokenId,
+        config.ammMetagraphId,
         tokenA.amountToSpend,
         tokenB.amountToSpend,
         privateKey,

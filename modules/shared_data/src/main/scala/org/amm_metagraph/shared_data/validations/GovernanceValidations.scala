@@ -6,6 +6,7 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
@@ -21,8 +22,9 @@ import org.amm_metagraph.shared_data.validations.SharedValidations._
 object GovernanceValidations {
   def rewardAllocationValidationsL1[F[_]: Async](
     rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
-  ): F[DataApplicationValidationErrorOr[Unit]] =
-    exceedingAllocationPercentage(rewardAllocationVoteUpdate).pure
+  ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
+    exceedingAllocationPercentage(rewardAllocationVoteUpdate)
+  }
 
   def rewardAllocationValidationsL0[F[_]: Async](
     applicationConfig: ApplicationConfig,

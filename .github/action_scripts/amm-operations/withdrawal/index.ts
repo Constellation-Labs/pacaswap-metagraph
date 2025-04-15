@@ -60,6 +60,7 @@ const processWithdrawal = async (
     const withdrawalUpdate = await createWithdrawalUpdate(
         tokenA.tokenId,
         tokenB.tokenId,
+        config.ammMetagraphId,
         sharesToWithdraw,
         withdrawalAccount,
         privateKey,

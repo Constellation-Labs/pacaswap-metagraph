@@ -1,6 +1,5 @@
 package com.my.dor_metagraph.shared_data.validations
 
-import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -17,14 +16,11 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security._
 import io.constellationnetwork.security.hex.Hex
-import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.dor_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.FeeDistributor
-import org.amm_metagraph.shared_data.refined.{NonNegLongOps, PosLongOps}
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
@@ -36,7 +32,6 @@ import weaver.MutableIOSuite
 
 object WithdrawalValidationsTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
-  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -44,64 +39,6 @@ object WithdrawalValidationsTest extends MutableIOSuite {
     h = Hasher.forJson[IO]
     hs = codecs.HasherSelector.forSync(h, h)
   } yield (h, hs, sp)
-
-  private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
-
-  def buildLiquidityPoolCalculatedState(
-    tokenA: TokenInformation,
-    tokenB: TokenInformation,
-    owner: Address,
-    additionalProvider: Option[(Address, ShareAmount)] = None
-  ): (String, LiquidityPoolCalculatedState) = {
-    val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
-    val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
-
-    val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
-    val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
-    val rewards = additionalProvider.foldLeft(Map(owner -> 0L.toNonNegLongUnsafe)) {
-      case (acc, (addr, _)) => acc + (addr -> 0L.toNonNegLongUnsafe)
-    }
-
-    val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
-
-    val liquidityPool = LiquidityPool(
-      poolId,
-      tokenA,
-      tokenB,
-      owner,
-      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares, rewards),
-      FeeDistributor.empty
-    )
-    (
-      poolId.value,
-      LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
-      )
-    )
-  }
-
-  def getFakeSignedUpdate(
-    update: WithdrawalUpdate
-  ): Signed[WithdrawalUpdate] =
-    Signed(
-      update,
-      NonEmptySet.one(
-        SignatureProof(
-          Id(
-            Hex(
-              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
-            )
-          ),
-          Signature(
-            Hex(
-              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
-            )
-          )
-        )
-      )
-    )
 
   test("Validation passes for valid withdrawal request") { implicit res =>
     implicit val (h, hs, sp) = res
@@ -136,6 +73,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          CurrencyId(ownerAddress),
           sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
@@ -175,6 +113,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          CurrencyId(ownerAddress),
           sourceAddress,
           Some(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"))),
           Some(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"))),
@@ -226,6 +165,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          CurrencyId(ownerAddress),
           sourceAddress,
           primaryToken.identifier,
           pairToken.identifier,
@@ -277,6 +217,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
       withdrawalUpdate = getFakeSignedUpdate(
         WithdrawalUpdate(
+          CurrencyId(ownerAddress),
           ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
@@ -320,6 +261,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
     val withdrawalUpdate = getFakeSignedUpdate(
       WithdrawalUpdate(
+        CurrencyId(ownerAddress),
         sourceAddress,
         primaryToken.identifier,
         pairToken.identifier,

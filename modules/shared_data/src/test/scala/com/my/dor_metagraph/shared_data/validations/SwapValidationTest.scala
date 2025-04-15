@@ -9,7 +9,7 @@ import cats.syntax.all._
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
-import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.ID.Id
@@ -25,6 +25,8 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.dor_metagraph.shared_data.DummyL1Context.buildL1NodeContext
+import com.my.dor_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
@@ -42,7 +44,6 @@ import weaver.MutableIOSuite
 
 object SwapValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
-  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -132,7 +133,12 @@ object SwapValidationTest extends MutableIOSuite {
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
 
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
     val stakingUpdate = SwapUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
@@ -145,7 +151,7 @@ object SwapValidationTest extends MutableIOSuite {
 
     val validationService = ValidationService.make[IO](config)
     for {
-      response <- validationService.validateUpdate(stakingUpdate)
+      response <- validationService.validateUpdate(stakingUpdate)(context)
     } yield expect.eql(Valid(()), response)
   }
 
@@ -181,6 +187,7 @@ object SwapValidationTest extends MutableIOSuite {
         .flatMap(_.toHashed[IO])
 
       swapUpdate = SwapUpdate(
+        CurrencyId(ownerAddress),
         ownerAddress,
         primaryToken.identifier,
         pairToken.identifier,
@@ -225,6 +232,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,
@@ -278,6 +286,7 @@ object SwapValidationTest extends MutableIOSuite {
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       primaryToken.identifier,
       pairToken.identifier,

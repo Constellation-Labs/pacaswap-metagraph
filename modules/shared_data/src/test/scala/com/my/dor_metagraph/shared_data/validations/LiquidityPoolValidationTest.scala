@@ -1,37 +1,34 @@
 package com.my.dor_metagraph.shared_data.validations
 
 import cats.Eq
+import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
-import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedMap
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
-import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
-import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
-import io.constellationnetwork.security.hex.Hex
-import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.dor_metagraph.shared_data.DummyL1Context.buildL1NodeContext
+import com.my.dor_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
-import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
@@ -41,7 +38,6 @@ import weaver.MutableIOSuite
 
 object LiquidityPoolValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
-  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   private val config = ApplicationConfig(
     EpochProgress(NonNegLong.unsafeFrom(30L)),
@@ -73,56 +69,6 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     hs = codecs.HasherSelector.forSync(h, h)
   } yield (h, hs, sp)
 
-  def buildLiquidityPoolCalculatedState(
-    tokenA: TokenInformation,
-    tokenB: TokenInformation,
-    owner: Address
-  ): (String, LiquidityPoolCalculatedState) = {
-    val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
-    val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
-    val liquidityPool = LiquidityPool(
-      poolId,
-      tokenA,
-      tokenB,
-      owner,
-      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(
-        1L.toTokenAmountFormat.toPosLongUnsafe,
-        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
-        Map(owner -> 0L.toNonNegLongUnsafe)
-      ),
-      FeeDistributor.empty
-    )
-    (
-      poolId.value,
-      LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
-      )
-    )
-  }
-
-  def getFakeSignedUpdate(
-    update: LiquidityPoolUpdate
-  ): Signed[LiquidityPoolUpdate] =
-    Signed(
-      update,
-      NonEmptySet.one(
-        SignatureProof(
-          Id(
-            Hex(
-              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
-            )
-          ),
-          Signature(
-            Hex(
-              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
-            )
-          )
-        )
-      )
-    )
-
   implicit val eqDataApplicationValidationErrorOr: Eq[DataApplicationValidationErrorOr[Unit]] =
     Eq.fromUniversalEquals
 
@@ -131,7 +77,12 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -145,7 +96,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val validationService = ValidationService.make[IO](config)
     for {
-      response <- validationService.validateUpdate(liquidityPoolUpdate)
+      response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield expect.eql(Valid(()), response)
   }
 
@@ -154,7 +105,12 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(none, 100L)
     val pairToken = TokenInformation(none, 50L)
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -168,7 +124,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val validationService = ValidationService.make[IO](config)
     for {
-      response <- validationService.validateUpdate(liquidityPoolUpdate)
+      response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield {
       val expectedError = response match {
         case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.LiquidityPoolNotEnoughInformation.type]) =>
@@ -191,6 +147,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -232,6 +189,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -273,6 +231,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -325,6 +284,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -360,7 +320,12 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
       Hash.empty,
       Hash.empty,
@@ -374,7 +339,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val validationService = ValidationService.make[IO](config.copy(environment = Mainnet))
     for {
-      response <- validationService.validateUpdate(liquidityPoolUpdate)
+      response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield expect(response == Errors.FeePercentageTotalMustBeGreaterThanZero.invalidNec)
   }
 
@@ -389,6 +354,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val liquidityPoolUpdate = LiquidityPoolUpdate(
+      CurrencyId(ownerAddress),
       sourceAddress,
       Hash.empty,
       Hash.empty,

@@ -11,6 +11,7 @@ import { LastRef, lastRefSchema } from "./last-ref";
 import { Signed } from "./signed";
 
 type WithdrawalUpdate = {
+    metagraphId: string
     source: string
     tokenAId: string | null
     tokenBId: string | null
@@ -48,6 +49,7 @@ const getLastWithdrawalReference = async (
 const createWithdrawalUpdate = async (
     tokenAId: string | null,
     tokenBId: string | null,
+    ammMetagraphId: string,
     shareToWithdraw: number,
     account: ReturnType<typeof createAccount>,
     privateKey: string,
@@ -62,6 +64,7 @@ const createWithdrawalUpdate = async (
 
     const body: WithdrawalUpdateBody = {
         WithdrawalUpdate: {
+            metagraphId: ammMetagraphId,
             source: account.address,
             maxValidGsEpochProgress: 1000,
             tokenAId,

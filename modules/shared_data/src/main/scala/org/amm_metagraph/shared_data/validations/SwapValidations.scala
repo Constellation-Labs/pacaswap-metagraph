@@ -6,6 +6,7 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.ext.cats.syntax.next._
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
@@ -22,8 +23,7 @@ object SwapValidations {
   def swapValidationsL1[F[_]: Async](
     swapUpdate: SwapUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-    tokenIdsAreTheSame
+    validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
   }
 
   def swapValidationsL0[F[_]: Async: SecurityProvider](

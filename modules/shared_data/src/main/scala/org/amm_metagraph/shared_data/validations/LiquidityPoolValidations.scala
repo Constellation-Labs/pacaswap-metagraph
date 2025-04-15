@@ -4,6 +4,7 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 

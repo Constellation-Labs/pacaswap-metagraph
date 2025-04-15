@@ -122,6 +122,7 @@ const processSwapCreation = async (
     const swapUpdate = await createSwapUpdate(
         tokenA.tokenId,
         tokenB.tokenId,
+        config.ammMetagraphId,
         allowSpendHash,
         swapQuote.amount,
         swapQuote.minimumReceived,

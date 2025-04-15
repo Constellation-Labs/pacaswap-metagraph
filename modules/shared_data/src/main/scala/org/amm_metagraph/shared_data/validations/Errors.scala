@@ -141,4 +141,8 @@ object Errors {
   case object FeePercentageTotalMustBeGreaterThanZero extends DataApplicationValidationError {
     val message = "Fee percentage total must be greater than zero"
   }
+
+  case object InvalidAMMMetagraphId extends DataApplicationValidationError {
+    val message: String = "Invalid AMM Metagraph ID"
+  }
 }
