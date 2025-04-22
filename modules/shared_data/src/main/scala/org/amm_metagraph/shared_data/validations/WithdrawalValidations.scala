@@ -5,6 +5,7 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 
@@ -20,9 +21,7 @@ object WithdrawalValidations {
   def withdrawalValidationsL1[F[_]: Async](
     withdrawalUpdate: WithdrawalUpdate
   ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    val tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
-
-    tokenIdsAreTheSame
+    validateIfTokenIdsAreTheSame(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
   }
 
   def withdrawalValidationsL0[F[_]: Async](

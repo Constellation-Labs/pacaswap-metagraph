@@ -93,6 +93,7 @@ const processStakingCreation = async (
         tokenBAllowSpendHash,
         tokenA.tokenId,
         tokenB.tokenId,
+        config.ammMetagraphId,
         tokenA.amountToSpend,
         stakingProviderAccount,
         privateKey,

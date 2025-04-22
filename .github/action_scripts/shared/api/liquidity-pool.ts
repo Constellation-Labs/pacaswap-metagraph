@@ -26,6 +26,7 @@ type PoolFees = {
 }
 
 type LiquidityPoolUpdate = {
+    metagraphId: string
     source: string
     tokenAAllowSpend: string
     tokenBAllowSpend: string
@@ -50,6 +51,7 @@ const createLiquidityPoolUpdate = async (
     tokenBAllowSpendHash: string,
     tokenAId: string | null,
     tokenBId: string | null,
+    ammMetagraphId: string,
     tokenAAmount: number,
     tokenBAmount: number,
     privateKey: string,
@@ -58,6 +60,7 @@ const createLiquidityPoolUpdate = async (
     const body: LiquidityUpdateBody = {
         LiquidityPoolUpdate: {
             maxValidGsEpochProgress: 1000,
+            metagraphId: ammMetagraphId,
             source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount,

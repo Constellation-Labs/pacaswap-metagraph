@@ -47,11 +47,12 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
     const body = {
         RewardAllocationVoteUpdate: {
             allocations: parsedAllocations,
-            source: address,
+            metagraphId: config.metagraphId,
             parent: {
                 hash,
                 ordinal
-            }
+            },
+            source: address,
         },
     };
 
@@ -61,12 +62,14 @@ const getSignedVoteAllocation = async (config, { privateKey, publicKey, address,
         encodedMessage
     );
 
-    log(`Signed vote allocation generated for wallet: ${address}`);
-
-    return {
+    const dataUpdate = {
         value: body,
         proofs: [{ id: publicKey, signature }],
     };
+
+    log(`Signed vote allocation generated for wallet: ${address}: ${JSON.stringify(dataUpdate)}`);
+
+    return dataUpdate;
 };
 
 const validateVoteAllocations = async (

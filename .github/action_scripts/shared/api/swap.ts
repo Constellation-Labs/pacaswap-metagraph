@@ -7,6 +7,7 @@ import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./cal
 import { LastRef } from "./last-ref";
 import { Signed } from "./signed";
 type SwapUpdate = {
+    metagraphId: string,
     source: string,
     swapFromPair: string | null
     swapToPair: string | null
@@ -42,6 +43,7 @@ type ConfirmedSwapCalculatedState = {
 const createSwapUpdate = async (
     fromPair: string | null,
     toPair: string | null,
+    ammMetagraphId: string,
     allowSpendReference: string,
     amountIn: number,
     amountOutMinimum: number,
@@ -61,6 +63,7 @@ const createSwapUpdate = async (
 
     const body: SwapUpdateBody = {
         SwapUpdate: {
+            metagraphId: ammMetagraphId,
             source: account.address,
             swapFromPair: fromPair,
             swapToPair: toPair,

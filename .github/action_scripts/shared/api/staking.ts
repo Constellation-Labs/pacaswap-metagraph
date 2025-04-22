@@ -9,6 +9,7 @@ import { Signed } from "./signed";
 import { singleResponseSchema } from "./response";
 
 type StakingUpdate = {
+    metagraphId: string,
     source: string
     tokenAAllowSpend: string
     tokenBAllowSpend: string
@@ -49,6 +50,7 @@ const createStakingUpdate = async (
     tokenBAllowSpendHash: string,
     tokenAId: string | null,
     tokenBId: string | null,
+    ammMetagraphId,
     tokenAAmount: number,
     account: ReturnType<typeof createAccount>,
     privateKey: string,
@@ -64,6 +66,7 @@ const createStakingUpdate = async (
     const body: StakingUpdateBody = {
         StakingUpdate: {
             maxValidGsEpochProgress: 1000,
+            metagraphId: ammMetagraphId,
             source: account.address,
             tokenAAllowSpend: tokenAAllowSpendHash,
             tokenAAmount,

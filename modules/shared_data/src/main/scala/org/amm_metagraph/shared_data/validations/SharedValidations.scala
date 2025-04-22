@@ -46,4 +46,10 @@ object SharedValidations {
     allAllowSpendsInUse: Set[Hash]
   ): DataApplicationValidationErrorOr[Unit] =
     DuplicatedOperation.whenA(allAllowSpendsInUse.contains(allowSpendRef))
+
+  def validateAmmMetagraphId[A <: AmmUpdate](
+    signed: A,
+    currencyId: CurrencyId
+  ): DataApplicationValidationErrorOr[Unit] =
+    InvalidAMMMetagraphId.whenA(signed.metagraphId =!= currencyId)
 }

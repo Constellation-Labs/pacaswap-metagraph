@@ -1,6 +1,5 @@
 package com.my.dor_metagraph.shared_data.combiners
 
-import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -9,62 +8,31 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
-import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
-import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
-import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.dor_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
-import org.amm_metagraph.shared_data.FeeDistributor
-import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.app.ApplicationConfig._
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
 object CombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
-  val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-
-  private val config = ApplicationConfig(
-    EpochProgress(NonNegLong.unsafeFrom(30L)),
-    "NodeValidators",
-    Dev,
-    Governance(
-      VotingWeightMultipliers(
-        PosDouble.MinValue,
-        PosDouble.MinValue,
-        PosDouble.MinValue
-      )
-    ),
-    Rewards(
-      Amount.empty,
-      Amount.empty,
-      NonNegLong.MinValue,
-      NonNegLong.MinValue,
-      NonNegLong.MinValue,
-      EpochProgress.MinValue,
-      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
-    ),
-    PosLong.unsafeFrom((100 * 1e8).toLong)
-  )
 
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
@@ -72,59 +40,6 @@ object CombinerTest extends MutableIOSuite {
     h = Hasher.forJson[IO]
     hs = HasherSelector.forSync(h, h)
   } yield (h, hs, sp)
-
-  private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
-
-  def buildLiquidityPoolCalculatedState(
-    tokenA: TokenInformation,
-    tokenB: TokenInformation,
-    owner: Address,
-    additionalProvider: Option[(Address, ShareAmount)] = None
-  ): (String, LiquidityPoolCalculatedState) = {
-    val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
-    val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = PoolId(s"$primaryAddressAsString-$pairAddressAsString")
-
-    val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
-    val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
-
-    val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
-
-    val liquidityPool = LiquidityPool(
-      poolId,
-      tokenA,
-      tokenB,
-      owner,
-      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares, Map.empty),
-      FeeDistributor.empty
-    )
-    (
-      poolId.value,
-      LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
-      )
-    )
-  }
-
-  def getFakeSignedUpdate[A <: AmmUpdate](update: A): Signed[A] =
-    Signed(
-      update,
-      NonEmptySet.one(
-        SignatureProof(
-          Id(
-            Hex(
-              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
-            )
-          ),
-          Signature(
-            Hex(
-              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
-            )
-          )
-        )
-      )
-    )
 
   test("Test combiner - confirmed") { implicit res =>
     implicit val (h, hs, sp) = res
@@ -173,6 +88,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          CurrencyId(destinationAddress),
           sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
@@ -317,6 +233,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          CurrencyId(ownerAddress),
           sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
@@ -452,6 +369,7 @@ object CombinerTest extends MutableIOSuite {
 
       liquidityPoolUpdate = getFakeSignedUpdate(
         LiquidityPoolUpdate(
+          CurrencyId(destinationAddress),
           sourceAddress,
           signedAllowSpendA.hash,
           signedAllowSpendB.hash,
