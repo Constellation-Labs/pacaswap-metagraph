@@ -15,6 +15,7 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security._
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.hex.Hex
 
 import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
@@ -285,7 +286,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       ammCalculatedState = AmmCalculatedState(
         Map(
           OperationType.LiquidityPool -> liquidityPoolCalculatedState,
-          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(PendingAllowSpend(withdrawalUpdate)))
+          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(PendingAllowSpend(withdrawalUpdate, Hash.empty)))
         )
       )
 

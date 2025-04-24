@@ -22,7 +22,7 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
-import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.refined.Percentage
@@ -95,24 +95,33 @@ object Swap {
 
   def getPendingAllowSpendsSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingAllowSpend[AmmUpdate]] =
-    getSwapCalculatedState(state).pending.collect {
-      case pendingAllow: PendingAllowSpend[SwapUpdate] =>
-        PendingAllowSpend[AmmUpdate](
-          pendingAllow.update,
-          pendingAllow.pricingTokenInfo
-        )
+  ): Set[PendingAllowSpend[AmmUpdate]] = {
+    val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
+      case pending: PendingAllowSpend[SwapUpdate] => pending
     }
+
+    onlyPendingSwap.toList.map { pendingAllow =>
+      PendingAllowSpend[AmmUpdate](
+        pendingAllow.update,
+        pendingAllow.updateHash,
+        pendingAllow.pricingTokenInfo
+      )
+    }.toSet
+  }
 
   def getPendingSpendActionSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] =
-    getSwapCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[SwapUpdate] =>
-        PendingSpendAction[AmmUpdate](
-          pendingSpend.update,
-          pendingSpend.generatedSpendAction,
-          pendingSpend.pricingTokenInfo
-        )
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[SwapUpdate] => pending
     }
+    onlyPendingSwap.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

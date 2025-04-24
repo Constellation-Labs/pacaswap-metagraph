@@ -24,10 +24,14 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.LiquidityPoolCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool.{TokenInformation, buildLiquidityPoolUniqueIdentifier}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{
+  TokenInformation,
+  buildLiquidityPoolUniqueIdentifier,
+  getPendingSpendActionLiquidityPoolUpdates
+}
 import org.amm_metagraph.shared_data.types.States.OperationType.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
 object LiquidityPoolCombinerTest extends MutableIOSuite {
@@ -122,7 +126,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
         state,
@@ -133,9 +138,10 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
+      pending = getPendingSpendActionLiquidityPoolUpdates(liquidityPoolPendingSpendActionResponse.calculated)
 
       liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
-        PendingSpendAction(liquidityPoolUpdate, spendActions.head),
+        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head),
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -241,7 +247,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -251,10 +258,11 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         CurrencyId(destinationAddress)
       )
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionLiquidityPoolUpdates(liquidityPoolPendingSpendActionResponse.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
 
       liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
-        PendingSpendAction(liquidityPoolUpdate, spendActions.head),
+        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head),
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -367,7 +375,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -475,7 +484,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         destinationAddress
       )
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -587,7 +597,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -691,7 +702,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
 
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,

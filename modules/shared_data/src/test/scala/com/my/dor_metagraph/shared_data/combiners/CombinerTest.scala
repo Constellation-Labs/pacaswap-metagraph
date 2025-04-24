@@ -130,10 +130,10 @@ object CombinerTest extends MutableIOSuite {
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -266,10 +266,10 @@ object CombinerTest extends MutableIOSuite {
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -315,8 +315,8 @@ object CombinerTest extends MutableIOSuite {
         .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
-        pendingLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _) => update }.size === 1 &&
-          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _) => update }.size === 1 &&
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _, _) => update }.size === 1 &&
           pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
           confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
       )
@@ -411,10 +411,10 @@ object CombinerTest extends MutableIOSuite {
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -460,8 +460,8 @@ object CombinerTest extends MutableIOSuite {
         .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
-        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _) => update }.size === 1 &&
-          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _) => update }.size === 1 &&
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _) => update }.size === 1 &&
           pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
           confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
       )

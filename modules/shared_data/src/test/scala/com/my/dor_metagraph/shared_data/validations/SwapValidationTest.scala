@@ -92,6 +92,7 @@ object SwapValidationTest extends MutableIOSuite {
       PoolShares(
         1.toTokenAmountFormat.toPosLongUnsafe,
         Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
+        Map.empty,
         Map(owner -> 0L.toNonNegLongUnsafe)
       ),
       FeeDistributor.empty

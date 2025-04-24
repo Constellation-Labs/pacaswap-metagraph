@@ -26,12 +26,13 @@ import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.StakingCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.StakingReference
+import org.amm_metagraph.shared_data.types.Staking.{StakingReference, getPendingSpendActionStakingUpdates}
 import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
+import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
 import weaver.MutableIOSuite
 
 object StakingCombinerTest extends MutableIOSuite {
@@ -139,7 +140,9 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -149,9 +152,10 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, spendActions.head),
+        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -281,7 +285,9 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -291,9 +297,10 @@ object StakingCombinerTest extends MutableIOSuite {
         CurrencyId(destinationAddress)
       )
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, spendActions.head),
+        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -413,7 +420,9 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -527,7 +536,8 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -641,7 +651,9 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,

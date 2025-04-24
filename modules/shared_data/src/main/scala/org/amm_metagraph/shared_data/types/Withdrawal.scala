@@ -68,13 +68,17 @@ object Withdrawal {
 
   def getPendingSpendActionWithdrawalUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] =
-    getWithdrawalCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[WithdrawalUpdate] =>
-        PendingSpendAction[AmmUpdate](
-          pendingSpend.update,
-          pendingSpend.generatedSpendAction,
-          pendingSpend.pricingTokenInfo
-        )
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingWithdrawal = getWithdrawalCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[WithdrawalUpdate] => pending
     }
+    onlyPendingWithdrawal.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

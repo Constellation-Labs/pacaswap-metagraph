@@ -77,7 +77,7 @@ object Shared {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares, feeShares),
+      PoolShares(totalShares, shares, Map.empty, feeShares),
       fees
     )
     (
