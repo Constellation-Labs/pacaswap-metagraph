@@ -32,6 +32,7 @@ import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
+import org.amm_metagraph.shared_data.validations.StakingValidations
 import weaver.MutableIOSuite
 
 object StakingCombinerTest extends MutableIOSuite {
@@ -139,7 +140,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakingValidations = StakingValidations.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations)
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -281,7 +283,8 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakingValidations = StakingValidations.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -413,7 +416,8 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakingValidations = StakingValidations.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -527,7 +531,8 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakingValidations = StakingValidations.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -641,7 +646,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService)
+      stakingValidations = StakingValidations.make[IO](config)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations)
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -665,7 +671,7 @@ object StakingCombinerTest extends MutableIOSuite {
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
         ),
-        stakingCalculatedState.failed.toList.head.reason == DuplicatedStakingRequest(stakingUpdate)
+        stakingCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(stakingUpdate)
       )
   }
 }

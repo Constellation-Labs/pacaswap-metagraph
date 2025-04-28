@@ -31,6 +31,7 @@ import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 import weaver.MutableIOSuite
 
 object WithdrawalCombinerTest extends MutableIOSuite {
@@ -119,7 +120,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -228,7 +230,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -307,7 +310,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -379,7 +383,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -461,7 +466,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
 
       result <- withdrawalCombinerService
         .combineNew(

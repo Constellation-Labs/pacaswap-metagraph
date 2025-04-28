@@ -18,6 +18,7 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.cats.refTypeOrder
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
@@ -27,6 +28,8 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
+import org.amm_metagraph.shared_data.validations.{StakingValidations, SwapValidations}
 
 trait SwapCombinerService[F[_]] {
   def combineNew(
@@ -57,66 +60,11 @@ trait SwapCombinerService[F[_]] {
 
 object SwapCombinerService {
   def make[F[_]: Async: HasherSelector](
-    applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
+    swapValidations: SwapValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): SwapCombinerService[F] =
     new SwapCombinerService[F] {
-      private def validateUpdate(
-        signedUpdate: Signed[SwapUpdate],
-        maybeTokenInformation: Option[SwapTokenInfo],
-        maybeAllowSpendToken: Option[Hashed[AllowSpend]],
-        lastSyncGlobalEpochProgress: EpochProgress,
-        confirmedSwaps: Set[SwapCalculatedStateAddress],
-        pendingSwaps: Set[Signed[SwapUpdate]],
-        currencyId: CurrencyId
-      ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-
-        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
-          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          failWith(OperationExpired(signedUpdate))
-        } else if (
-          confirmedSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference) ||
-          pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
-        ) {
-          failWith(DuplicatedSwapRequest(signedUpdate))
-        } else {
-          (maybeTokenInformation, maybeAllowSpendToken) match {
-            case (Some(updatedTokenInformation), Some(allowSpend)) =>
-              if (allowSpend.source =!= signedUpdate.source) {
-                failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
-              } else if (allowSpend.destination =!= currencyId.value) {
-                failWith(AllowSpendsDestinationAddressInvalid())
-              } else if (allowSpend.currencyId =!= signedUpdate.swapFromPair) {
-                failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
-              } else if (signedUpdate.amountIn.value > allowSpend.amount.value) {
-                failWith(AmountGreaterThanAllowSpendLimit(allowSpend.signed.value))
-              } else if (updatedTokenInformation.netReceived < signedUpdate.amountOutMinimum) {
-                failWith(SwapLessThanMinAmount())
-              } else if (allowSpend.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
-                failWith(AllowSpendExpired(allowSpend.signed.value))
-              } else if (
-                updatedTokenInformation.primaryTokenInformation.amount < applicationConfig.minTokensLiquidityPool ||
-                updatedTokenInformation.pairTokenInformation.amount < applicationConfig.minTokensLiquidityPool
-              ) {
-                failWith(SwapWouldDrainPoolBalance())
-              } else {
-                Right(signedUpdate)
-              }
-            case _ => Right(signedUpdate)
-          }
-        }
-      }
-
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
         swapUpdate: Signed[SwapUpdate],
@@ -187,7 +135,14 @@ object SwapCombinerService {
 
         val combinedState = for {
           _ <- EitherT.fromEither(
-            validateUpdate(signedUpdate, none, none, globalEpochProgress, confirmedSwaps, pendingSwaps, currencyId)
+            swapValidations.combinerContextualValidations(
+              oldState.calculated,
+              signedUpdate,
+              globalEpochProgress,
+              confirmedSwaps,
+              pendingSwaps,
+              isNewUpdate = true
+            )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
           response <- updateAllowSpends match {
@@ -239,14 +194,13 @@ object SwapCombinerService {
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           _ <- EitherT.fromEither[F](
-            validateUpdate(
+            swapValidations.combinerContextualValidations(
+              oldState.calculated,
               signedUpdate,
-              none,
-              none,
               globalEpochProgress,
               Set.empty,
               Set.empty,
-              currencyId
+              isNewUpdate = false
             )
           )
 
@@ -258,14 +212,16 @@ object SwapCombinerService {
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))
                 updatedTokenInformation <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, poolId, globalEpochProgress))
                 _ <- EitherT.fromEither[F](
-                  validateUpdate(
+                  swapValidations.combinerValidations(
+                    oldState.calculated,
                     signedUpdate,
-                    updatedTokenInformation.some,
-                    allowSpendToken.some,
                     globalEpochProgress,
                     Set.empty,
                     Set.empty,
-                    currencyId
+                    isNewUpdate = false,
+                    currencyId,
+                    updatedTokenInformation,
+                    allowSpendToken
                   )
                 )
 
@@ -335,7 +291,14 @@ object SwapCombinerService {
           )
           sourceAddress = signedSwapUpdate.source
           _ <- EitherT.fromEither[F](
-            validateUpdate(signedSwapUpdate, updatedTokenInformation.some, none, globalEpochProgress, Set.empty, Set.empty, currencyId)
+            swapValidations.combinerContextualValidations(
+              oldState.calculated,
+              signedSwapUpdate,
+              globalEpochProgress,
+              Set.empty,
+              Set.empty,
+              isNewUpdate = false
+            )
           )
           liquidityPoolUpdated <- EitherT.fromEither[F](
             pricingService.getUpdatedLiquidityPoolDueSwap(

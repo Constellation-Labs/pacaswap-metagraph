@@ -6,116 +6,248 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.ext.cats.syntax.next._
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.swap.CurrencyId
-import io.constellationnetwork.security.SecurityProvider
+import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
 import eu.timepit.refined.cats.refTypeEq
+import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, SwapReference, getSwapCalculatedState}
+import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
-object SwapValidations {
-  def swapValidationsL1[F[_]: Async](
+trait SwapValidations[F[_]] {
+  def l1Validations(
     swapUpdate: SwapUpdate
-  ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-    validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-  }
+  ): F[DataApplicationValidationErrorOr[Unit]]
 
-  def swapValidationsL0[F[_]: Async: SecurityProvider](
+  def l0Validations(
     signedSwapUpdate: Signed[SwapUpdate],
     state: AmmCalculatedState
-  ): F[DataApplicationValidationErrorOr[Unit]] = {
-    val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
-    val swapUpdate = signedSwapUpdate.value
+  ): F[DataApplicationValidationErrorOr[Unit]]
 
-    for {
-      l1Validations <- swapValidationsL1(swapUpdate)
-      signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
-      liquidityPoolExists <- validateIfLiquidityPoolExists(
-        swapUpdate,
-        liquidityPoolsCalculatedState
-      )
-      sourceAddress = signedSwapUpdate.source
-      poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
-        swapUpdate,
-        liquidityPoolsCalculatedState
-      )
-      swapCalculatedState = getSwapCalculatedState(state)
-      allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
-      allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-        swapUpdate.allowSpendReference,
+  def combinerContextualValidations(
+    oldState: AmmCalculatedState,
+    signedUpdate: Signed[SwapUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress,
+    confirmedSwaps: Set[SwapCalculatedStateAddress],
+    pendingSwaps: Set[Signed[SwapUpdate]],
+    isNewUpdate: Boolean
+  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
+
+  def combinerValidations(
+    oldState: AmmCalculatedState,
+    signedUpdate: Signed[SwapUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress,
+    confirmedSwaps: Set[SwapCalculatedStateAddress],
+    pendingSwaps: Set[Signed[SwapUpdate]],
+    isNewUpdate: Boolean,
+    currencyId: CurrencyId,
+    tokenInformation: SwapTokenInfo,
+    allowSpendToken: Hashed[AllowSpend]
+  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
+
+}
+
+object SwapValidations {
+  def make[F[_]: Async: SecurityProvider](
+    applicationConfig: ApplicationConfig
+  ): SwapValidations[F] = new SwapValidations[F] {
+    def l1Validations(
+      swapUpdate: SwapUpdate
+    ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
+      validateIfTokenIdsAreTheSame(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+    }
+
+    def l0Validations(
+      signedSwapUpdate: Signed[SwapUpdate],
+      state: AmmCalculatedState
+    ): F[DataApplicationValidationErrorOr[Unit]] = {
+      val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
+      val swapUpdate = signedSwapUpdate.value
+
+      for {
+        l1Validations <- l1Validations(swapUpdate)
+        signatures <- signatureValidations(signedSwapUpdate, signedSwapUpdate.source)
+        liquidityPoolExists <- validateIfLiquidityPoolExists(
+          swapUpdate,
+          liquidityPoolsCalculatedState
+        )
+        sourceAddress = signedSwapUpdate.source
+        poolHaveEnoughTokens <- validateIfPoolHaveEnoughTokens(
+          swapUpdate,
+          liquidityPoolsCalculatedState
+        )
+        swapCalculatedState = getSwapCalculatedState(state)
+        allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
+        allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
+          swapUpdate.allowSpendReference,
+          allAllowSpendsInUse
+        )
+        transactionAlreadyExists = validateIfTransactionAlreadyExists(
+          swapUpdate,
+          swapCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
+          swapCalculatedState.getPendingUpdates
+        )
+        lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
+      } yield
+        l1Validations
+          .productR(signatures)
+          .productR(liquidityPoolExists)
+          .productR(poolHaveEnoughTokens)
+          .productR(allowSpendIsDuplicated)
+          .productR(transactionAlreadyExists)
+          .productR(lastRef)
+    }
+
+    def combinerContextualValidations(
+      oldState: AmmCalculatedState,
+      signedUpdate: Signed[SwapUpdate],
+      lastSyncGlobalEpochProgress: EpochProgress,
+      confirmedSwaps: Set[SwapCalculatedStateAddress],
+      pendingSwaps: Set[Signed[SwapUpdate]],
+      isNewUpdate: Boolean
+    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+      val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
+
+      val allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
+        signedUpdate.allowSpendReference,
         allAllowSpendsInUse
       )
-      transactionAlreadyExists = validateIfTransactionAlreadyExists(
-        swapUpdate,
-        swapCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
-        swapCalculatedState.getPendingUpdates
+
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+          .getOrElse(NonNegLong.MinValue)
       )
-      lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
-    } yield
-      l1Validations
-        .productR(signatures)
-        .productR(liquidityPoolExists)
-        .productR(poolHaveEnoughTokens)
-        .productR(allowSpendIsDuplicated)
-        .productR(transactionAlreadyExists)
-        .productR(lastRef)
-  }
 
-  private def validateIfLiquidityPoolExists[F[_]: Async](
-    swapUpdate: SwapUpdate,
-    currentLiquidityPools: Map[String, LiquidityPool]
-  ): F[DataApplicationValidationErrorOr[Unit]] = for {
-    poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-    result = SwapLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId.value))
-  } yield result
+      def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
+        Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
 
-  private def validateIfPoolHaveEnoughTokens[F[_]: Async](
-    swapUpdate: SwapUpdate,
-    currentLiquidityPools: Map[String, LiquidityPool]
-  ): F[DataApplicationValidationErrorOr[Unit]] = {
-    val hasEnoughTokens: LiquidityPool => Boolean = lp => {
-      val maybeToken = swapUpdate.swapToPair match {
-        case None => Option.when(lp.tokenA.identifier.isEmpty)(lp.tokenA).orElse(lp.tokenB.some)
-        case Some(value) if lp.tokenA.identifier.contains(value) => lp.tokenA.some
-        case Some(value)                                         => Option.when(lp.tokenB.identifier.contains(value))(lp.tokenB)
+      if (isNewUpdate && allowSpendIsDuplicated.isInvalid) {
+        failWith(DuplicatedAllowSpend(signedUpdate))
+      } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(OperationExpired(signedUpdate))
+      } else if (
+        confirmedSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference) ||
+        pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
+      ) {
+        failWith(DuplicatedSwapRequest(signedUpdate))
+      } else {
+        signedUpdate.asRight
       }
-      maybeToken.exists(_.amount.value > swapUpdate.amountIn.value.value)
     }
 
-    buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
-      .map(poolId => currentLiquidityPools.get(poolId.value))
-      .map(maybePool => SwapLiquidityPoolNotEnoughTokens.unlessA(maybePool.exists(hasEnoughTokens)))
-  }
-  private def lastRefValidation(
-    swapCalculatedState: SwapCalculatedState,
-    signedSwap: Signed[SwapUpdate],
-    address: Address
-  ): DataApplicationValidationErrorOr[Unit] = {
-    val lastConfirmed: Option[SwapReference] = swapCalculatedState.confirmed.value
-      .get(address)
-      .flatMap(_.maxByOption(_.parent.ordinal))
-      .map(_.parent)
+    def combinerValidations(
+      oldState: AmmCalculatedState,
+      signedUpdate: Signed[SwapUpdate],
+      lastSyncGlobalEpochProgress: EpochProgress,
+      confirmedSwaps: Set[SwapCalculatedStateAddress],
+      pendingSwaps: Set[Signed[SwapUpdate]],
+      isNewUpdate: Boolean,
+      currencyId: CurrencyId,
+      tokenInformation: SwapTokenInfo,
+      allowSpendToken: Hashed[AllowSpend]
+    ): Either[FailedCalculatedState, Signed[SwapUpdate]] =
+      combinerContextualValidations(
+        oldState,
+        signedUpdate,
+        lastSyncGlobalEpochProgress,
+        confirmedSwaps,
+        pendingSwaps,
+        isNewUpdate
+      ) match {
+        case Left(failedCalculatedState) => failedCalculatedState.asLeft
+        case Right(_) =>
+          val expireEpochProgress = EpochProgress(
+            NonNegLong
+              .from(
+                lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+              )
+              .getOrElse(NonNegLong.MinValue)
+          )
 
-    lastConfirmed match {
-      case Some(last) if signedSwap.ordinal.value =!= last.ordinal.next.value || signedSwap.parent =!= last =>
-        InvalidSwapParent.invalid
-      case _ => valid
+          if (allowSpendToken.source =!= signedUpdate.source) {
+            failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
+          } else if (allowSpendToken.destination =!= currencyId.value) {
+            failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
+          } else if (allowSpendToken.currencyId =!= signedUpdate.swapFromPair) {
+            failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
+          } else if (signedUpdate.amountIn.value.value > allowSpendToken.amount.value.value) {
+            failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
+          } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
+            failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate)
+          } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
+          } else if (
+            tokenInformation.primaryTokenInformation.amount.value < applicationConfig.minTokensLiquidityPool.value ||
+            tokenInformation.pairTokenInformation.amount.value < applicationConfig.minTokensLiquidityPool.value
+          ) {
+            failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
+          } else {
+            Right(signedUpdate)
+          }
+      }
+
+    private def validateIfLiquidityPoolExists(
+      swapUpdate: SwapUpdate,
+      currentLiquidityPools: Map[String, LiquidityPool]
+    ): F[DataApplicationValidationErrorOr[Unit]] = for {
+      poolId <- buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+      result = SwapLiquidityPoolDoesNotExists.unlessA(currentLiquidityPools.contains(poolId.value))
+    } yield result
+
+    private def validateIfPoolHaveEnoughTokens(
+      swapUpdate: SwapUpdate,
+      currentLiquidityPools: Map[String, LiquidityPool]
+    ): F[DataApplicationValidationErrorOr[Unit]] = {
+      val hasEnoughTokens: LiquidityPool => Boolean = lp => {
+        val maybeToken = swapUpdate.swapToPair match {
+          case None => Option.when(lp.tokenA.identifier.isEmpty)(lp.tokenA).orElse(lp.tokenB.some)
+          case Some(value) if lp.tokenA.identifier.contains(value) => lp.tokenA.some
+          case Some(value)                                         => Option.when(lp.tokenB.identifier.contains(value))(lp.tokenB)
+        }
+        maybeToken.exists(_.amount.value > swapUpdate.amountIn.value.value)
+      }
+
+      buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+        .map(poolId => currentLiquidityPools.get(poolId.value))
+        .map(maybePool => SwapLiquidityPoolNotEnoughTokens.unlessA(maybePool.exists(hasEnoughTokens)))
     }
-  }
 
-  private def validateIfTransactionAlreadyExists(
-    swapUpdate: SwapUpdate,
-    confirmedSwaps: Set[SwapCalculatedStateAddress],
-    pendingSwaps: Set[Signed[SwapUpdate]]
-  ): DataApplicationValidationErrorOr[Unit] =
-    SwapTransactionAlreadyExists.whenA(
-      confirmedSwaps.exists(swap => swap.allowSpendReference === swapUpdate.allowSpendReference) ||
-        pendingSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference)
-    )
+    private def lastRefValidation(
+      swapCalculatedState: SwapCalculatedState,
+      signedSwap: Signed[SwapUpdate],
+      address: Address
+    ): DataApplicationValidationErrorOr[Unit] = {
+      val lastConfirmed: Option[SwapReference] = swapCalculatedState.confirmed.value
+        .get(address)
+        .flatMap(_.maxByOption(_.parent.ordinal))
+        .map(_.parent)
+
+      lastConfirmed match {
+        case Some(last) if signedSwap.ordinal.value =!= last.ordinal.next.value || signedSwap.parent =!= last =>
+          InvalidSwapParent.invalid
+        case _ => valid
+      }
+    }
+
+    private def validateIfTransactionAlreadyExists(
+      swapUpdate: SwapUpdate,
+      confirmedSwaps: Set[SwapCalculatedStateAddress],
+      pendingSwaps: Set[Signed[SwapUpdate]]
+    ): DataApplicationValidationErrorOr[Unit] =
+      SwapTransactionAlreadyExists.whenA(
+        confirmedSwaps.exists(swap => swap.allowSpendReference === swapUpdate.allowSpendReference) ||
+          pendingSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference)
+      )
+  }
 }

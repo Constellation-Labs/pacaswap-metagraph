@@ -210,6 +210,7 @@ object States {
   case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailedCalculatedStateReason
   case class DuplicatedStakingRequest(update: AmmUpdate) extends FailedCalculatedStateReason
   case class DuplicatedSwapRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedAllowSpend(update: AmmUpdate) extends FailedCalculatedStateReason
   case class SourceAddressBetweenUpdateAndAllowSpendDifferent(update: AmmUpdate) extends FailedCalculatedStateReason
   case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
   case class AllowSpendsDestinationAddressInvalid() extends FailedCalculatedStateReason

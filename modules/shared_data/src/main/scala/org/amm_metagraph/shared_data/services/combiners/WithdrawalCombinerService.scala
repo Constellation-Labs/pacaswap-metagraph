@@ -26,6 +26,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalReference, getWithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 
 trait WithdrawalCombinerService[F[_]] {
   def combineNew(
@@ -47,46 +48,10 @@ trait WithdrawalCombinerService[F[_]] {
 
 object WithdrawalCombinerService {
   def make[F[_]: Async: HasherSelector](
-    applicationConfig: ApplicationConfig,
-    pricingService: PricingService[F]
+    pricingService: PricingService[F],
+    withdrawalValidations: WithdrawalValidations[F]
   ): WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
-      private def validateUpdate(
-        signedUpdate: Signed[WithdrawalUpdate],
-        lastSyncGlobalEpochProgress: EpochProgress,
-        maybeUpdatedPool: Option[LiquidityPool] = None
-      ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-
-        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[WithdrawalUpdate]] =
-          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          failWith(OperationExpired(signedUpdate))
-        } else {
-          maybeUpdatedPool match {
-            case Some(withdrawalTokenAmounts) =>
-              if (
-                withdrawalTokenAmounts.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
-                withdrawalTokenAmounts.tokenB.amount < applicationConfig.minTokensLiquidityPool
-              ) {
-                failWith(WithdrawalWouldDrainPoolBalance())
-              } else {
-                Right(signedUpdate)
-              }
-
-            case None =>
-              Right(signedUpdate)
-          }
-        }
-      }
-
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
         withdrawalUpdate: Signed[WithdrawalUpdate],
@@ -134,7 +99,7 @@ object WithdrawalCombinerService {
         }
 
         val combinedState = for {
-          _ <- EitherT.fromEither(validateUpdate(signedUpdate, globalEpochProgress))
+          _ <- EitherT.fromEither(withdrawalValidations.combinerContextualValidations(signedUpdate, globalEpochProgress))
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
           withdrawalAmounts <- EitherT.fromEither[F](
@@ -213,7 +178,9 @@ object WithdrawalCombinerService {
                     globalEpochProgress
                   )
                 )
-                _ <- EitherT.fromEither(validateUpdate(signedWithdrawalUpdate, globalEpochProgress, updatedPool.some))
+                _ <- EitherT.fromEither(
+                  withdrawalValidations.combinerContextualValidations(signedWithdrawalUpdate, globalEpochProgress, updatedPool.some)
+                )
 
                 withdrawalCalculatedStateAddress = WithdrawalCalculatedStateAddress(
                   withdrawalUpdate.tokenAId,

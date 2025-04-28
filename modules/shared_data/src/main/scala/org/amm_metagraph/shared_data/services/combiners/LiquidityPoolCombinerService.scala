@@ -20,6 +20,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -29,6 +30,8 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPool
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
+import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -59,61 +62,9 @@ trait LiquidityPoolCombinerService[F[_]] {
 
 object LiquidityPoolCombinerService {
   def make[F[_]: Async: HasherSelector](
-    applicationConfig: ApplicationConfig
+    liquidityPoolValidations: LiquidityPoolValidations[F]
   ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
-      private def validateUpdate(
-        poolId: PoolId,
-        applicationConfig: ApplicationConfig,
-        signedUpdate: Signed[LiquidityPoolUpdate],
-        maybeAllowSpendTokenA: Option[Hashed[AllowSpend]],
-        maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
-        lastSyncGlobalEpochProgress: EpochProgress,
-        confirmedLps: Map[String, LiquidityPool],
-        pendingLps: List[PoolId],
-        currencyId: CurrencyId
-      ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-
-        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[LiquidityPoolUpdate]] =
-          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          failWith(OperationExpired(signedUpdate))
-        } else if (confirmedLps.contains(poolId.value) || pendingLps.contains(poolId)) {
-          failWith(DuplicatedLiquidityPoolRequest(signedUpdate))
-        } else {
-          (maybeAllowSpendTokenA, maybeAllowSpendTokenB) match {
-            case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
-              val update = signedUpdate.value
-              if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
-                failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
-              } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
-                failWith(AllowSpendsDestinationAddressInvalid())
-              } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
-                failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
-              } else if (update.tokenAAmount > allowSpendTokenA.amount.value.value) {
-                failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
-              } else if (update.tokenBAmount > allowSpendTokenB.amount.value.value) {
-                failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
-              } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-                failWith(AllowSpendExpired(allowSpendTokenA.signed.value))
-              } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-                failWith(AllowSpendExpired(allowSpendTokenB.signed.value))
-              } else {
-                Right(signedUpdate)
-              }
-            case _ => Right(signedUpdate)
-          }
-        }
-      }
-
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
         liquidityPoolUpdate: Signed[LiquidityPoolUpdate],
@@ -190,16 +141,14 @@ object LiquidityPoolCombinerService {
             pendingLps.toList.traverse(pendingLp => buildLiquidityPoolUniqueIdentifier(pendingLp.tokenAId, pendingLp.tokenBId))
           )
           _ <- EitherT.fromEither(
-            validateUpdate(
+            liquidityPoolValidations.combinerContextualValidations(
+              oldState.calculated,
               poolId,
-              applicationConfig,
               signedUpdate,
-              none,
-              none,
               globalEpochProgress,
               confirmedLps,
               pendingLpsPoolsIds,
-              currencyId
+              isNewUpdate = true
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
@@ -252,16 +201,14 @@ object LiquidityPoolCombinerService {
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
           _ <- EitherT.fromEither[F](
-            validateUpdate(
+            liquidityPoolValidations.combinerContextualValidations(
+              oldState.calculated,
               poolId,
-              applicationConfig,
               signedUpdate,
-              none,
-              none,
               globalEpochProgress,
               Map.empty,
               List.empty,
-              currencyId
+              isNewUpdate = false
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
@@ -269,16 +216,17 @@ object LiquidityPoolCombinerService {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
                 _ <- EitherT.fromEither[F](
-                  validateUpdate(
+                  liquidityPoolValidations.combinerValidations(
+                    oldState.calculated,
                     poolId,
-                    applicationConfig,
                     signedUpdate,
-                    allowSpendTokenA.some,
-                    allowSpendTokenB.some,
                     globalEpochProgress,
                     Map.empty,
                     List.empty,
-                    currencyId
+                    isNewUpdate = false,
+                    currencyId,
+                    allowSpendTokenA,
+                    allowSpendTokenB
                   )
                 )
                 amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)
@@ -345,16 +293,14 @@ object LiquidityPoolCombinerService {
             buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.tokenAId, signedLiquidityPoolUpdate.tokenBId)
           )
           _ <- EitherT.fromEither[F](
-            validateUpdate(
+            liquidityPoolValidations.combinerContextualValidations(
+              oldState.calculated,
               poolId,
-              applicationConfig,
               signedLiquidityPoolUpdate,
-              none,
-              none,
               globalEpochProgress,
               Map.empty,
               List.empty,
-              currencyId
+              isNewUpdate = false
             )
           )
           sourceAddress = liquidityPoolUpdate.source

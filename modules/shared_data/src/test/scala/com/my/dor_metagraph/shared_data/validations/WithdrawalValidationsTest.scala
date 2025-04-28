@@ -94,7 +94,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
         ammCalculatedState
       )
@@ -134,7 +135,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
         ammCalculatedState
       )
@@ -186,7 +188,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
         ammCalculatedState
       )
@@ -238,7 +241,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
         ammCalculatedState
       )
@@ -300,7 +304,8 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      result <- WithdrawalValidations.withdrawalValidationsL0[IO](
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
         ammCalculatedState
       )

@@ -33,7 +33,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
-import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
+import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
 object LiquidityPoolValidationTest extends MutableIOSuite {
@@ -94,7 +94,21 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       None
     )
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
+
     for {
       response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield expect.eql(Valid(()), response)
@@ -122,7 +136,21 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       None
     )
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
+
     for {
       response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield {
@@ -161,7 +189,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -203,7 +244,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -245,7 +299,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -298,7 +365,21 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
+
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -337,7 +418,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       FeeDistributor.empty.some
     )
 
-    val validationService = ValidationService.make[IO](config.copy(environment = Mainnet))
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config.copy(environment = Mainnet),
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield expect(response == Errors.FeePercentageTotalMustBeGreaterThanZero.invalidNec)
@@ -368,7 +462,20 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
-    val validationService = ValidationService.make[IO](config.copy(environment = Mainnet))
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config.copy(environment = Mainnet),
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(

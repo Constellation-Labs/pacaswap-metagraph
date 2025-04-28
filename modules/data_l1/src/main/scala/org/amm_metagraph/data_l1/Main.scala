@@ -16,7 +16,7 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonBinaryCodec, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.ValidationService
+import org.amm_metagraph.shared_data.validations._
 
 object Main
     extends CurrencyL1App(
@@ -44,7 +44,21 @@ object Main
 
     config <- ApplicationConfigOps.readDefault[IO].asResource
 
-    validationService = ValidationService.make[IO](config)
+    liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    stakingValidations = StakingValidations.make[IO](config)
+    swapValidations = SwapValidations.make[IO](config)
+    withdrawalValidations = WithdrawalValidations.make[IO](config)
+    governanceValidations = GovernanceValidations.make[IO]
+
+    validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
+
     l1Service = DataL1Service.make[IO](validationService, jsonBase64BinaryCodec, jsonBinaryCodec)
   } yield l1Service).some
 }

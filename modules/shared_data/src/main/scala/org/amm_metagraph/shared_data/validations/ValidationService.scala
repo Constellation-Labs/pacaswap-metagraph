@@ -13,12 +13,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
-import org.amm_metagraph.shared_data.validations.GovernanceValidations.{rewardAllocationValidationsL0, rewardAllocationValidationsL1}
-import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations.{liquidityPoolValidationsL0, liquidityPoolValidationsL1}
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateAmmMetagraphId
-import org.amm_metagraph.shared_data.validations.StakingValidations.{stakingValidationsL0, stakingValidationsL1}
-import org.amm_metagraph.shared_data.validations.SwapValidations.{swapValidationsL0, swapValidationsL1}
-import org.amm_metagraph.shared_data.validations.WithdrawalValidations.{withdrawalValidationsL0, withdrawalValidationsL1}
 
 trait ValidationService[F[_]] {
   def validateUpdate(
@@ -33,7 +28,12 @@ trait ValidationService[F[_]] {
 
 object ValidationService {
   def make[F[_]: Async: SecurityProvider: HasherSelector](
-    applicationConfig: ApplicationConfig
+    applicationConfig: ApplicationConfig,
+    liquidityPoolValidations: LiquidityPoolValidations[F],
+    stakingValidations: StakingValidations[F],
+    swapValidations: SwapValidations[F],
+    withdrawalValidations: WithdrawalValidations[F],
+    governanceValidations: GovernanceValidations[F]
   ): ValidationService[F] =
     new ValidationService[F] {
       private def validateL1(
@@ -42,13 +42,13 @@ object ValidationService {
         ammMetagraphId <- context.getCurrencyId
         ammMetagraphIdV = validateAmmMetagraphId(update, ammMetagraphId)
         result <- update match {
-          case stakingUpdate: StakingUpdate       => stakingValidationsL1(stakingUpdate)
-          case withdrawalUpdate: WithdrawalUpdate => withdrawalValidationsL1(withdrawalUpdate)
+          case stakingUpdate: StakingUpdate       => stakingValidations.l1Validations(stakingUpdate)
+          case withdrawalUpdate: WithdrawalUpdate => withdrawalValidations.l1Validations(withdrawalUpdate)
           case liquidityPoolUpdate: LiquidityPoolUpdate =>
-            liquidityPoolValidationsL1(applicationConfig, liquidityPoolUpdate)
-          case swapUpdate: SwapUpdate => swapValidationsL1(swapUpdate)
+            liquidityPoolValidations.l1Validations(applicationConfig, liquidityPoolUpdate)
+          case swapUpdate: SwapUpdate => swapValidations.l1Validations(swapUpdate)
           case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
-            rewardAllocationValidationsL1(rewardAllocationVoteUpdate)
+            governanceValidations.l1Validations(rewardAllocationVoteUpdate)
         }
       } yield
         result
@@ -66,14 +66,14 @@ object ValidationService {
           ammMetagraphIdV = validateAmmMetagraphId(signedUpdate.value, ammMetagraphId)
 
           result <- signedUpdate.value match {
-            case stakingUpdate: StakingUpdate => stakingValidationsL0(Signed(stakingUpdate, signedUpdate.proofs), state)
+            case stakingUpdate: StakingUpdate => stakingValidations.l0Validations(Signed(stakingUpdate, signedUpdate.proofs), state)
             case withdrawalUpdate: WithdrawalUpdate =>
-              withdrawalValidationsL0(Signed(withdrawalUpdate, signedUpdate.proofs), state)
+              withdrawalValidations.l0Validations(Signed(withdrawalUpdate, signedUpdate.proofs), state)
             case liquidityPoolUpdate: LiquidityPoolUpdate =>
-              liquidityPoolValidationsL0(applicationConfig, Signed(liquidityPoolUpdate, signedUpdate.proofs), state)
-            case swapUpdate: SwapUpdate => swapValidationsL0(Signed(swapUpdate, signedUpdate.proofs), state)
+              liquidityPoolValidations.l0Validations(applicationConfig, Signed(liquidityPoolUpdate, signedUpdate.proofs), state)
+            case swapUpdate: SwapUpdate => swapValidations.l0Validations(Signed(swapUpdate, signedUpdate.proofs), state)
             case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
-              rewardAllocationValidationsL0(
+              governanceValidations.l0Validations(
                 applicationConfig,
                 Signed(rewardAllocationVoteUpdate, signedUpdate.proofs),
                 state,
