@@ -26,7 +26,7 @@ import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.refined.Percentage
-import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 
@@ -58,13 +58,6 @@ object Swap {
     priceImpactPercent: BigDecimal,
     estimatedReceived: BigInt,
     minimumReceived: BigInt
-  )
-
-  case class SwapTokenInfo(
-    primaryTokenInformation: TokenInformation,
-    pairTokenInformation: TokenInformation,
-    grossReceived: SwapAmount,
-    netReceived: SwapAmount
   )
 
   @derive(decoder, encoder, order, ordering)
@@ -102,15 +95,24 @@ object Swap {
 
   def getPendingAllowSpendsSwapUpdates(
     state: AmmCalculatedState
-  ): Set[Signed[SwapUpdate]] =
+  ): Set[PendingAllowSpend[AmmUpdate]] =
     getSwapCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[SwapUpdate]) => signedUpdate
+      case pendingAllow: PendingAllowSpend[SwapUpdate] =>
+        PendingAllowSpend[AmmUpdate](
+          pendingAllow.update,
+          pendingAllow.pricingTokenInfo
+        )
     }
 
   def getPendingSpendActionSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[SwapUpdate]] =
+  ): Set[PendingSpendAction[AmmUpdate]] =
     getSwapCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[SwapUpdate] => pendingSpend
+      case pendingSpend: PendingSpendAction[SwapUpdate] =>
+        PendingSpendAction[AmmUpdate](
+          pendingSpend.update,
+          pendingSpend.generatedSpendAction,
+          pendingSpend.pricingTokenInfo
+        )
     }
 }

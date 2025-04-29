@@ -316,8 +316,8 @@ object CombinerTest extends MutableIOSuite {
         .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
-        pendingLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update) => update }.size === 1 &&
-          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update) => update }.size === 1 &&
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingAllowSpend(update, _) => update }.size === 1 &&
           pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
           confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
       )
@@ -461,8 +461,8 @@ object CombinerTest extends MutableIOSuite {
         .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
-        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
-          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _) => update }.size === 1 &&
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _) => update }.size === 1 &&
           pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
           confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
       )

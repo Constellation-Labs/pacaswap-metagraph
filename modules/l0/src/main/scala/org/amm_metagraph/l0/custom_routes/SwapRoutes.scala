@@ -182,7 +182,17 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
       calculatedState <- calculatedStateService.get
       swapCalculatedState = getSwapCalculatedState(calculatedState.state)
       pendingAllowSpendsSwap = getPendingAllowSpendsSwapUpdates(calculatedState.state)
-      pendingSpendActionSwap = getPendingSpendActionSwapUpdates(calculatedState.state).map(_.update)
+        .map(_.update)
+        .collect {
+          case Signed(update: SwapUpdate, proofs) => Signed(update, proofs)
+        }
+
+      pendingSpendActionSwap = getPendingSpendActionSwapUpdates(calculatedState.state)
+        .map(_.update)
+        .collect {
+          case Signed(update: SwapUpdate, proofs) => Signed(update, proofs)
+        }
+
       hashedPendingSwaps <- HasherSelector[F].withCurrent { implicit hs =>
         (pendingAllowSpendsSwap ++ pendingSpendActionSwap).toList
           .traverse(_.toHashed(dataUpdateCodec.serialize))

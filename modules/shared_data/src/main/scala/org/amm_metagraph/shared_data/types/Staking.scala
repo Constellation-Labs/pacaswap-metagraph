@@ -19,7 +19,7 @@ import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
 import org.amm_metagraph.shared_data.types.States._
 
@@ -78,15 +78,24 @@ object Staking {
 
   def getPendingAllowSpendsStakingUpdates(
     state: AmmCalculatedState
-  ): Set[Signed[StakingUpdate]] =
+  ): Set[PendingAllowSpend[AmmUpdate]] =
     getStakingCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[StakingUpdate]) => signedUpdate
+      case pendingAllow: PendingAllowSpend[StakingUpdate] =>
+        PendingAllowSpend[AmmUpdate](
+          pendingAllow.update,
+          pendingAllow.pricingTokenInfo
+        )
     }
 
   def getPendingSpendActionStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[StakingUpdate]] =
+  ): Set[PendingSpendAction[AmmUpdate]] =
     getStakingCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[StakingUpdate] => pendingSpend
+      case pendingSpend: PendingSpendAction[StakingUpdate] =>
+        PendingSpendAction[AmmUpdate](
+          pendingSpend.update,
+          pendingSpend.generatedSpendAction,
+          pendingSpend.pricingTokenInfo
+        )
     }
 }
