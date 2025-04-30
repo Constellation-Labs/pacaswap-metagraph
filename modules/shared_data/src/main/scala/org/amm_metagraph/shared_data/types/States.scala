@@ -14,6 +14,7 @@ import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, ShareAmount, TokenInformation}
+import org.amm_metagraph.shared_data.types.Rewards.RewardState
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateAddress
@@ -211,7 +212,8 @@ object States {
     operations: Map[OperationType, AmmOffChainState] = Map.empty,
     votingWeights: Map[Address, VotingWeight] = Map.empty,
     allocations: Allocations = Allocations.empty,
-    lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue
+    lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue,
+    rewards: Map[Address, RewardState] = Map.empty
   ) extends DataCalculatedState
 
   @derive(encoder, decoder)
