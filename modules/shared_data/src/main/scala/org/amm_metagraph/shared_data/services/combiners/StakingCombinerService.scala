@@ -112,9 +112,13 @@ object StakingCombinerService {
                   failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
                 } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
                   failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
-                } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+                } else if (
+                  allowSpendTokenA.lastValidEpochProgress.value.value + applicationConfig.allowSpendEpochBufferDelay.value.value < lastSyncGlobalEpochProgress.value.value
+                ) {
                   failWith(AllowSpendExpired(allowSpendTokenA.signed.value))
-                } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
+                } else if (
+                  allowSpendTokenB.lastValidEpochProgress.value.value + applicationConfig.allowSpendEpochBufferDelay.value.value < lastSyncGlobalEpochProgress.value.value
+                ) {
                   failWith(AllowSpendExpired(allowSpendTokenB.signed.value))
                 } else {
                   Right(signedUpdate)

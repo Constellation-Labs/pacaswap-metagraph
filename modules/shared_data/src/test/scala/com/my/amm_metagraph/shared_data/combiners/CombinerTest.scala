@@ -4,6 +4,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.ext.cats.effect.ResourceIO

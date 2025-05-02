@@ -7,7 +7,7 @@ import { z } from 'zod';
 const tokenLocks = [
     {
         "privateKey": "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
-        "lockAmount": 1000,
+        "lockAmount": 100000,
         "multiplier": 0.25,
         "expireEpochProgress": 5000
     }, {
@@ -170,15 +170,15 @@ const tokenLockTests = async (argsObject: object) => {
         const signedTokenLock = await getSignedTokenLock(config, tokenLockInfo);
         await sendSignedTokenLock(config, signedTokenLock);
 
-        const globalOrdinal = await retry<number>('Validate token lock in GL0')(async (logger) => {
+        const globalOrdinal = await retry<number>(`Validate token lock in GL0 for ${address}`)(async (logger) => {
             return await validateTokenLockInGL0(config, address, logger);
         })
 
-        await retry('Validate if calculated state is synced to global ordinal', { delayMs: 5000 })(async (logger) => {
+        await retry(`Validate if calculated state is synced to global ordinal for ${address}`, { delayMs: 5000 })(async (logger) => {
             await validateIfSyncedToGlobalOrdinal(config.ammMl0Url, globalOrdinal, logger);
         });
 
-        await retry('Validate voting weight')(async (logger) => {
+        await retry(`Validate voting weight for ${address}`)(async (logger) => {
             await validateVotingWeight(config, address, lockAmount, multiplier, logger);
         })
 

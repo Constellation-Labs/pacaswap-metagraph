@@ -6,6 +6,8 @@ import cats.Order._
 import cats.effect.kernel.Async
 import cats.syntax.all._
 
+import scala.concurrent.duration.FiniteDuration
+
 import io.constellationnetwork.ext.crypto._
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
@@ -27,7 +29,6 @@ import io.circe.{Decoder, Encoder}
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
-import org.amm_metagraph.shared_data.epochProgress.oneEpochProgressInSeconds
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
 
@@ -109,7 +110,8 @@ object Governance {
 
     def getMonthlyReference(
       environment: Environment,
-      globalEpochProgress: EpochProgress
+      globalEpochProgress: EpochProgress,
+      oneEpochProgressInSeconds: Int
     ): MonthlyReference =
       environment match {
         case ApplicationConfig.Dev =>

@@ -3,6 +3,8 @@ package com.my.amm_metagraph.shared_data
 import cats.Eq
 import cats.data.NonEmptySet
 
+import scala.concurrent.duration.DurationInt
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.address.Address
@@ -49,7 +51,9 @@ object Shared {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     ),
-    PosLong.unsafeFrom((100 * 1e8).toLong)
+    PosLong.unsafeFrom((100 * 1e8).toLong),
+    EpochProgress(NonNegLong.unsafeFrom(0L)),
+    EpochMetadata(43.seconds)
   )
 
   def buildLiquidityPoolCalculatedState(
