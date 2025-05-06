@@ -32,27 +32,26 @@ trait SwapValidations[F[_]] {
     state: AmmCalculatedState
   ): F[DataApplicationValidationErrorOr[Unit]]
 
-  def combinerContextualValidations(
+  def newUpdateValidations(
     oldState: AmmCalculatedState,
     signedUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
     confirmedSwaps: Set[SwapCalculatedStateAddress],
-    pendingSwaps: Set[Signed[SwapUpdate]],
-    isNewUpdate: Boolean
+    pendingSwaps: Set[Signed[SwapUpdate]]
   ): Either[FailedCalculatedState, Signed[SwapUpdate]]
 
-  def combinerValidations(
-    oldState: AmmCalculatedState,
+  def pendingAllowSpendsValidations(
     signedUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedSwaps: Set[SwapCalculatedStateAddress],
-    pendingSwaps: Set[Signed[SwapUpdate]],
-    isNewUpdate: Boolean,
     currencyId: CurrencyId,
     tokenInformation: SwapTokenInfo,
     allowSpendToken: Hashed[AllowSpend]
   ): Either[FailedCalculatedState, Signed[SwapUpdate]]
 
+  def pendingSpendActionsValidation(
+    signedUpdate: Signed[SwapUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress
+  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
 }
 
 object SwapValidations {
@@ -106,13 +105,12 @@ object SwapValidations {
           .productR(lastRef)
     }
 
-    def combinerContextualValidations(
+    def newUpdateValidations(
       oldState: AmmCalculatedState,
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
       confirmedSwaps: Set[SwapCalculatedStateAddress],
-      pendingSwaps: Set[Signed[SwapUpdate]],
-      isNewUpdate: Boolean
+      pendingSwaps: Set[Signed[SwapUpdate]]
     ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
@@ -132,7 +130,7 @@ object SwapValidations {
       def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
         Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
 
-      if (isNewUpdate && allowSpendIsDuplicated.isInvalid) {
+      if (allowSpendIsDuplicated.isInvalid) {
         failWith(DuplicatedAllowSpend(signedUpdate))
       } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate))
@@ -146,56 +144,61 @@ object SwapValidations {
       }
     }
 
-    def combinerValidations(
-      oldState: AmmCalculatedState,
+    def pendingAllowSpendsValidations(
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedSwaps: Set[SwapCalculatedStateAddress],
-      pendingSwaps: Set[Signed[SwapUpdate]],
-      isNewUpdate: Boolean,
       currencyId: CurrencyId,
       tokenInformation: SwapTokenInfo,
       allowSpendToken: Hashed[AllowSpend]
-    ): Either[FailedCalculatedState, Signed[SwapUpdate]] =
-      combinerContextualValidations(
-        oldState,
-        signedUpdate,
-        lastSyncGlobalEpochProgress,
-        confirmedSwaps,
-        pendingSwaps,
-        isNewUpdate
-      ) match {
-        case Left(failedCalculatedState) => failedCalculatedState.asLeft
-        case Right(_) =>
-          val expireEpochProgress = EpochProgress(
-            NonNegLong
-              .from(
-                lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-              )
-              .getOrElse(NonNegLong.MinValue)
+    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
           )
+          .getOrElse(NonNegLong.MinValue)
+      )
 
-          if (allowSpendToken.source =!= signedUpdate.source) {
-            failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
-          } else if (allowSpendToken.destination =!= currencyId.value) {
-            failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
-          } else if (allowSpendToken.currencyId =!= signedUpdate.swapFromPair) {
-            failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
-          } else if (signedUpdate.amountIn.value.value > allowSpendToken.amount.value.value) {
-            failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
-          } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
-            failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate)
-          } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
-            failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
-          } else if (
-            tokenInformation.primaryTokenInformation.amount.value < applicationConfig.minTokensLiquidityPool.value ||
-            tokenInformation.pairTokenInformation.amount.value < applicationConfig.minTokensLiquidityPool.value
-          ) {
-            failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
-          } else {
-            Right(signedUpdate)
-          }
+      if (allowSpendToken.source =!= signedUpdate.source) {
+        failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
+      } else if (allowSpendToken.destination =!= currencyId.value) {
+        failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
+      } else if (allowSpendToken.currencyId =!= signedUpdate.swapFromPair) {
+        failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
+      } else if (signedUpdate.amountIn.value.value > allowSpendToken.amount.value.value) {
+        failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
+      } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
+        failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate)
+      } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
+      } else if (
+        tokenInformation.primaryTokenInformationUpdated.amount.value < applicationConfig.minTokensLiquidityPool.value ||
+        tokenInformation.pairTokenInformationUpdated.amount.value < applicationConfig.minTokensLiquidityPool.value
+      ) {
+        failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
+      } else {
+        Right(signedUpdate)
       }
+    }
+
+    def pendingSpendActionsValidation(
+      signedUpdate: Signed[SwapUpdate],
+      lastSyncGlobalEpochProgress: EpochProgress
+    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+          .getOrElse(NonNegLong.MinValue)
+      )
+
+      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
+      } else {
+        signedUpdate.asRight
+      }
+    }
 
     private def validateIfLiquidityPoolExists(
       swapUpdate: SwapUpdate,

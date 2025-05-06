@@ -29,10 +29,15 @@ trait WithdrawalValidations[F[_]] {
     state: AmmCalculatedState
   )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]]
 
-  def combinerContextualValidations(
+  def newUpdateValidations(
     signedUpdate: Signed[WithdrawalUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    maybeUpdatedPool: Option[LiquidityPool] = None
+    updatedPool: LiquidityPool
+  ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]]
+
+  def pendingSpendActionsValidation(
+    signedUpdate: Signed[WithdrawalUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]]
 }
 
@@ -90,10 +95,37 @@ object WithdrawalValidations {
         .productR(withdrawalNotPending)
         .productR(lastRef)
 
-    def combinerContextualValidations(
+    def newUpdateValidations(
       signedUpdate: Signed[WithdrawalUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      maybeUpdatedPool: Option[LiquidityPool] = None
+      updatedPool: LiquidityPool
+    ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+          .getOrElse(NonNegLong.MinValue)
+      )
+
+      def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[WithdrawalUpdate]] =
+        Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
+
+      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(OperationExpired(signedUpdate))
+      } else if (
+        updatedPool.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
+        updatedPool.tokenB.amount < applicationConfig.minTokensLiquidityPool
+      ) {
+        failWith(WithdrawalWouldDrainPoolBalance())
+      } else {
+        Right(signedUpdate)
+      }
+    }
+
+    def pendingSpendActionsValidation(
+      signedUpdate: Signed[WithdrawalUpdate],
+      lastSyncGlobalEpochProgress: EpochProgress
     ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
       val expireEpochProgress = EpochProgress(
         NonNegLong
@@ -109,20 +141,7 @@ object WithdrawalValidations {
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate))
       } else {
-        maybeUpdatedPool match {
-          case Some(withdrawalTokenAmounts) =>
-            if (
-              withdrawalTokenAmounts.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
-              withdrawalTokenAmounts.tokenB.amount < applicationConfig.minTokensLiquidityPool
-            ) {
-              failWith(WithdrawalWouldDrainPoolBalance())
-            } else {
-              Right(signedUpdate)
-            }
-
-          case None =>
-            Right(signedUpdate)
-        }
+        Right(signedUpdate)
       }
     }
 

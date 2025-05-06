@@ -72,8 +72,8 @@ object Main
     governanceCombinerService = GovernanceCombinerService.make[IO](config)
     liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
     stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
-    swapCombinerService = SwapCombinerService.make[IO](pricingService, swapValidations, jsonBase64BinaryCodec)
-    withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+    swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+    withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
     combinerService = L0CombinerService
       .make[IO](

@@ -4,7 +4,6 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -139,8 +138,8 @@ object CombinerTest extends MutableIOSuite {
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](pricingService, swapValidations, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -281,8 +280,8 @@ object CombinerTest extends MutableIOSuite {
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](pricingService, swapValidations, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -426,14 +425,13 @@ object CombinerTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config)
       swapValidations = SwapValidations.make[IO](config)
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      governanceValidations = GovernanceValidations.make[IO]
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](pricingService, swapValidations, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](

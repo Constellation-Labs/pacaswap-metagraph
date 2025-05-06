@@ -29,9 +29,9 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
-import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -62,7 +62,7 @@ trait LiquidityPoolCombinerService[F[_]] {
 
 object LiquidityPoolCombinerService {
   def make[F[_]: Async: HasherSelector](
-    liquidityPoolValidations: LiquidityPoolValidations[F]
+    liquidityPoolValidations: LiquidityPoolValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
@@ -145,14 +145,13 @@ object LiquidityPoolCombinerService {
             HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
           )
           _ <- EitherT.fromEither(
-            liquidityPoolValidations.combinerContextualValidations(
+            liquidityPoolValidations.newUpdateValidations(
               oldState.calculated,
               poolId,
               signedUpdate,
               globalEpochProgress,
               confirmedLps,
-              pendingLpsPoolsIds,
-              isNewUpdate = true
+              pendingLpsPoolsIds
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
@@ -208,30 +207,14 @@ object LiquidityPoolCombinerService {
         val updates = liquidityPoolUpdate :: oldState.onChain.updates
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId))
-          _ <- EitherT.fromEither[F](
-            liquidityPoolValidations.combinerContextualValidations(
-              oldState.calculated,
-              poolId,
-              pendingAllowSpendUpdate.update,
-              globalEpochProgress,
-              Map.empty,
-              List.empty,
-              isNewUpdate = false
-            )
-          )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
                 _ <- EitherT.fromEither[F](
-                  liquidityPoolValidations.combinerValidations(
-                    oldState.calculated,
-                    poolId,
+                  liquidityPoolValidations.pendingAllowSpendsValidations(
                     pendingAllowSpendUpdate.update,
                     globalEpochProgress,
-                    Map.empty,
-                    List.empty,
-                    isNewUpdate = false,
                     currencyId,
                     allowSpendTokenA,
                     allowSpendTokenB
@@ -303,14 +286,9 @@ object LiquidityPoolCombinerService {
             buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.tokenAId, signedLiquidityPoolUpdate.tokenBId)
           )
           _ <- EitherT.fromEither[F](
-            liquidityPoolValidations.combinerContextualValidations(
-              oldState.calculated,
-              poolId,
+            liquidityPoolValidations.pendingSpendActionsValidation(
               signedLiquidityPoolUpdate,
-              globalEpochProgress,
-              Map.empty,
-              List.empty,
-              isNewUpdate = false
+              globalEpochProgress
             )
           )
           sourceAddress = liquidityPoolUpdate.source

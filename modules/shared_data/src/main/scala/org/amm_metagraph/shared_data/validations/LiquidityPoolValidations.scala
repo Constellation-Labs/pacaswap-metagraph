@@ -33,27 +33,26 @@ trait LiquidityPoolValidations[F[_]] {
     state: AmmCalculatedState
   ): F[DataApplicationValidationErrorOr[Unit]]
 
-  def combinerContextualValidations(
+  def newUpdateValidations(
     oldState: AmmCalculatedState,
     poolId: PoolId,
     signedUpdate: Signed[LiquidityPoolUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
     confirmedLps: Map[String, LiquidityPool],
-    pendingLps: List[PoolId],
-    isNewUpdate: Boolean
+    pendingLps: List[PoolId]
   ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]
 
-  def combinerValidations(
-    oldState: AmmCalculatedState,
-    poolId: PoolId,
+  def pendingAllowSpendsValidations(
     signedUpdate: Signed[LiquidityPoolUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedLps: Map[String, LiquidityPool],
-    pendingLps: List[PoolId],
-    isNewUpdate: Boolean,
     currencyId: CurrencyId,
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
+  ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]
+
+  def pendingSpendActionsValidation(
+    signedUpdate: Signed[LiquidityPoolUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]
 
 }
@@ -115,14 +114,13 @@ object LiquidityPoolValidations {
           .productR(tokenBAllowSpendIsDuplicated)
     }
 
-    def combinerContextualValidations(
+    def newUpdateValidations(
       oldState: AmmCalculatedState,
       poolId: PoolId,
       signedUpdate: Signed[LiquidityPoolUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
       confirmedLps: Map[String, LiquidityPool],
-      pendingLps: List[PoolId],
-      isNewUpdate: Boolean
+      pendingLps: List[PoolId]
     ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
       val expireEpochProgress = EpochProgress(
         NonNegLong
@@ -143,7 +141,7 @@ object LiquidityPoolValidations {
         allAllowSpendsInUse
       )
 
-      if (isNewUpdate && (tokenAAllowSpendIsDuplicated.isInvalid || tokenBAllowSpendIsDuplicated.isInvalid)) {
+      if (tokenAAllowSpendIsDuplicated.isInvalid || tokenBAllowSpendIsDuplicated.isInvalid) {
         failWith(DuplicatedAllowSpend(signedUpdate), expireEpochProgress, signedUpdate)
       } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
@@ -154,56 +152,61 @@ object LiquidityPoolValidations {
       }
     }
 
-    def combinerValidations(
-      oldState: AmmCalculatedState,
-      poolId: PoolId,
+    def pendingAllowSpendsValidations(
       signedUpdate: Signed[LiquidityPoolUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedLps: Map[String, LiquidityPool],
-      pendingLps: List[PoolId],
-      isNewUpdate: Boolean,
       currencyId: CurrencyId,
       allowSpendTokenA: Hashed[AllowSpend],
       allowSpendTokenB: Hashed[AllowSpend]
-    ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] =
-      combinerContextualValidations(
-        oldState,
-        poolId,
-        signedUpdate,
-        lastSyncGlobalEpochProgress,
-        confirmedLps,
-        pendingLps,
-        isNewUpdate
-      ) match {
-        case Left(failedCalculatedState) => failedCalculatedState.asLeft
-        case Right(_) =>
-          val expireEpochProgress = EpochProgress(
-            NonNegLong
-              .from(
-                lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-              )
-              .getOrElse(NonNegLong.MinValue)
+    ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
           )
+          .getOrElse(NonNegLong.MinValue)
+      )
 
-          val update = signedUpdate.value
-          if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
-            failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
-          } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
-            failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
-          } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
-            failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
-          } else if (update.tokenAAmount.value > allowSpendTokenA.amount.value.value) {
-            failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
-          } else if (update.tokenBAmount.value > allowSpendTokenB.amount.value.value) {
-            failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
-          } else if (allowSpendTokenA.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-            failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
-          } else if (allowSpendTokenB.lastValidEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value) {
-            failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
-          } else {
-            Right(signedUpdate)
-          }
+      val update = signedUpdate.value
+      val allowSpendDelay = applicationConfig.allowSpendEpochBufferDelay.value.value
+
+      if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
+        failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
+      } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
+        failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
+      } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
+        failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
+      } else if (update.tokenAAmount.value > allowSpendTokenA.amount.value.value) {
+        failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
+      } else if (update.tokenBAmount.value > allowSpendTokenB.amount.value.value) {
+        failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
+      } else if (allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+        failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
+      } else if (allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+        failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
+      } else {
+        Right(signedUpdate)
       }
+    }
+
+    def pendingSpendActionsValidation(
+      signedUpdate: Signed[LiquidityPoolUpdate],
+      lastSyncGlobalEpochProgress: EpochProgress
+    ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
+      val expireEpochProgress = EpochProgress(
+        NonNegLong
+          .from(
+            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
+          )
+          .getOrElse(NonNegLong.MinValue)
+      )
+
+      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
+      } else {
+        signedUpdate.asRight
+      }
+    }
 
     private def validateIfTokensArePresent(
       liquidityPoolUpdate: LiquidityPoolUpdate

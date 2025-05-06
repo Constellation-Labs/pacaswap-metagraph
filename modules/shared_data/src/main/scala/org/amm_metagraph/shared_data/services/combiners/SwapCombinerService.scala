@@ -12,13 +12,10 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
-import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.cats.refTypeOrder
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
@@ -28,8 +25,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
-import org.amm_metagraph.shared_data.validations.{StakingValidations, SwapValidations}
+import org.amm_metagraph.shared_data.validations.SwapValidations
 
 trait SwapCombinerService[F[_]] {
   def combineNew(
@@ -60,11 +56,64 @@ trait SwapCombinerService[F[_]] {
 
 object SwapCombinerService {
   def make[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
     swapValidations: SwapValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): SwapCombinerService[F] =
     new SwapCombinerService[F] {
+      private def rollbackAmountInLPs(
+        pendingAllowSpend: PendingAction[SwapUpdate],
+        lastSyncGlobalSnapshotEpoch: EpochProgress,
+        maybePricingTokenInfo: Option[PricingTokenInfo],
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        currencyId: CurrencyId
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = maybePricingTokenInfo match {
+
+        case Some(SwapTokenInfo(primaryTokenInformationUpdated, pairTokenInformationUpdated, amountIn, grossReceived, _)) =>
+          (for {
+            poolId <- EitherT.liftF(
+              buildLiquidityPoolUniqueIdentifier(
+                primaryTokenInformationUpdated.identifier,
+                pairTokenInformationUpdated.identifier
+              )
+            )
+
+            liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
+
+            liquidityPool <- EitherT.liftF(
+              getLiquidityPoolByPoolId(liquidityPoolCalculatedState.confirmed.value, poolId)
+            )
+
+            updatedLiquidityPool <- EitherT.fromEither(
+              pricingService.rollbackSwapLiquidityPoolAmounts(
+                pendingAllowSpend.update,
+                pendingAllowSpend.updateHash,
+                lastSyncGlobalSnapshotEpoch,
+                liquidityPool,
+                amountIn,
+                grossReceived,
+                currencyId
+              )
+            )
+
+            updatedState = {
+              val newLiquidityPoolState = liquidityPoolCalculatedState
+                .focus(_.confirmed.value)
+                .modify(_.updated(poolId.value, updatedLiquidityPool))
+
+              val updatedCalculatedState = oldState.calculated
+                .focus(_.operations)
+                .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+
+              oldState.copy(calculated = updatedCalculatedState)
+            }
+          } yield updatedState).valueOrF(_ => oldState.pure)
+
+        case Some(_: WithdrawalTokenAmounts) => oldState.pure
+        case None                            => oldState.pure
+      }
+
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
         swapUpdate: Signed[SwapUpdate],
@@ -136,13 +185,12 @@ object SwapCombinerService {
 
         val combinedState = for {
           _ <- EitherT.fromEither(
-            swapValidations.combinerContextualValidations(
+            swapValidations.newUpdateValidations(
               oldState.calculated,
               signedUpdate,
               globalEpochProgress,
               confirmedSwaps,
-              pendingSwaps,
-              isNewUpdate = true
+              pendingSwaps
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
@@ -226,18 +274,7 @@ object SwapCombinerService {
         val updates = swapUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          _ <- EitherT.fromEither[F](
-            swapValidations.combinerContextualValidations(
-              oldState.calculated,
-              pendingAllowSpend.update,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              isNewUpdate = false
-            )
-          )
-
-          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
+          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(pendingAllowSpend.update, lastGlobalSnapshotsAllowSpends))
 
           result <- updateAllowSpends match {
             case Some(allowSpendToken) =>
@@ -256,13 +293,9 @@ object SwapCombinerService {
                 )
 
                 _ <- EitherT.fromEither[F](
-                  swapValidations.combinerValidations(
-                    oldState.calculated,
+                  swapValidations.pendingAllowSpendsValidations(
                     pendingAllowSpend.update,
                     globalEpochProgress,
-                    Set.empty,
-                    Set.empty,
-                    isNewUpdate = false,
                     currencyId,
                     updatedTokenInformation,
                     allowSpendToken
@@ -361,13 +394,9 @@ object SwapCombinerService {
 
           sourceAddress = signedSwapUpdate.source
           _ <- EitherT.fromEither[F](
-            swapValidations.combinerContextualValidations(
-              oldState.calculated,
+            swapValidations.pendingSpendActionsValidation(
               signedSwapUpdate,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              isNewUpdate = false
+              globalEpochProgress
             )
           )
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))

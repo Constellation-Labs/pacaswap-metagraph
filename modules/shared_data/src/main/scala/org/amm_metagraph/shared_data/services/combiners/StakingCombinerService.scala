@@ -27,7 +27,6 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
 import org.amm_metagraph.shared_data.validations.StakingValidations
 
 trait StakingCombinerService[F[_]] {
@@ -135,13 +134,12 @@ object StakingCombinerService {
         val updates = stakingUpdate :: oldState.onChain.updates
         val combinedState = for {
           _ <- EitherT.fromEither(
-            stakingValidations.combinerContextualValidations(
+            stakingValidations.newUpdateValidations(
               oldState.calculated,
               signedUpdate,
               globalEpochProgress,
               confirmedStakings,
-              pendingStakings,
-              isNewUpdate = true
+              pendingStakings
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
@@ -199,16 +197,6 @@ object StakingCombinerService {
         val updates = stakingUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          _ <- EitherT.fromEither[F](
-            stakingValidations.combinerContextualValidations(
-              oldState.calculated,
-              pendingAllowSpendUpdate.update,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              isNewUpdate = false
-            )
-          )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
@@ -216,13 +204,9 @@ object StakingCombinerService {
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
                 stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(pendingAllowSpendUpdate.update, poolId, globalEpochProgress))
                 _ <- EitherT.fromEither[F](
-                  stakingValidations.combinerValidations(
-                    oldState.calculated,
+                  stakingValidations.pendingAllowSpendsValidations(
                     pendingAllowSpendUpdate.update,
                     globalEpochProgress,
-                    Set.empty,
-                    Set.empty,
-                    isNewUpdate = false,
                     currencyId,
                     stakingTokenInfo,
                     allowSpendTokenA,
@@ -303,13 +287,9 @@ object StakingCombinerService {
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           _ <- EitherT.fromEither[F](
-            stakingValidations.combinerContextualValidations(
-              oldState.calculated,
-              signedStakingUpdate,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              isNewUpdate = false
+            stakingValidations.pendingSpendActionsValidation(
+              pendingSpendAction.update,
+              globalEpochProgress
             )
           )
           metagraphGeneratedSpendActionHash <- EitherT.liftF(
@@ -333,6 +313,7 @@ object StakingCombinerService {
                 )
                 sourceAddress = signedStakingUpdate.source
                 stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(signedStakingUpdate, poolId, globalEpochProgress))
+
                 liquidityPoolUpdated <- EitherT.fromEither[F](
                   pricingService.getUpdatedLiquidityPoolDueStaking(
                     liquidityPool,

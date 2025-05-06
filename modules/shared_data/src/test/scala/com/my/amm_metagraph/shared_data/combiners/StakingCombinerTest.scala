@@ -17,7 +17,6 @@ import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
@@ -786,7 +785,8 @@ object StakingCombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](config.copy(allowSpendEpochBufferDelay = bufferDelay), pricingService, jsonBase64BinaryCodec)
+      stakingValidations = StakingValidations.make[IO](config.copy(allowSpendEpochBufferDelay = bufferDelay))
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,

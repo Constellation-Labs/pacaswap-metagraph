@@ -818,7 +818,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
         state,

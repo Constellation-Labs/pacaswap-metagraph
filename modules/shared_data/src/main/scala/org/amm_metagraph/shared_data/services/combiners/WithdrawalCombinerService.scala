@@ -15,7 +15,6 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
@@ -48,6 +47,7 @@ trait WithdrawalCombinerService[F[_]] {
 
 object WithdrawalCombinerService {
   def make[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
     withdrawalValidations: WithdrawalValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
@@ -147,7 +147,6 @@ object WithdrawalCombinerService {
         }
 
         val combinedState = for {
-          _ <- EitherT.fromEither(withdrawalValidations.combinerContextualValidations(signedUpdate, globalEpochProgress))
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
           updateHashed <- EitherT.liftF(
@@ -170,7 +169,13 @@ object WithdrawalCombinerService {
             )
           )
 
-          _ <- EitherT.fromEither(validateUpdate(signedUpdate, globalEpochProgress, updatedPool.some))
+          _ <- EitherT.fromEither(
+            withdrawalValidations.newUpdateValidations(
+              signedUpdate,
+              globalEpochProgress,
+              updatedPool
+            )
+          )
 
           spendAction = generateSpendActionWithoutAllowSpends(
             signedUpdate.tokenAId,
@@ -234,7 +239,13 @@ object WithdrawalCombinerService {
               oldState.pure[F]
             } else {
               val processingState = for {
-                _ <- EitherT.fromEither(validateUpdate(signedWithdrawalUpdate, globalEpochProgress, none))
+                _ <- EitherT.fromEither(
+                  withdrawalValidations.pendingSpendActionsValidation(
+                    signedWithdrawalUpdate,
+                    globalEpochProgress
+                  )
+                )
+
                 withdrawalReference <- EitherT.liftF(
                   HasherSelector[F].withCurrent(implicit hs => WithdrawalReference.of(signedWithdrawalUpdate))
                 )
@@ -250,17 +261,6 @@ object WithdrawalCombinerService {
                     getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
                     pendingSpendAction.update
                   )
-                )
-                updatedPool <- EitherT.fromEither[F](
-                  pricingService.getUpdatedLiquidityPoolDueWithdrawal(
-                    signedWithdrawalUpdate,
-                    liquidityPool,
-                    withdrawalAmounts,
-                    globalEpochProgress
-                  )
-                )
-                _ <- EitherT.fromEither(
-                  withdrawalValidations.combinerContextualValidations(signedWithdrawalUpdate, globalEpochProgress, updatedPool.some)
                 )
 
                 withdrawalCalculatedStateAddress = WithdrawalCalculatedStateAddress(
