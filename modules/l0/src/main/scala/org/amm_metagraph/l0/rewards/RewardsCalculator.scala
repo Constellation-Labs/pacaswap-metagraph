@@ -13,7 +13,6 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.epochProgress.{epochProgress1Year, epochProgressOneDay}
 import org.amm_metagraph.shared_data.types.Governance.VotingWeight
 
 sealed trait RewardError extends Throwable
@@ -35,10 +34,11 @@ case class VotingPower(
 )
 
 object RewardCalculator {
-  def make(config: ApplicationConfig.Rewards): RewardCalculator = new RewardCalculator(config)
+  def make(config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): RewardCalculator =
+    new RewardCalculator(config, epochData)
 }
 
-class RewardCalculator(config: ApplicationConfig.Rewards) {
+class RewardCalculator(rewardConfig: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata) {
   private def toAmount(value: Long): Either[RewardError, Amount] =
     NonNegLong
       .from(value)
@@ -48,24 +48,24 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
       )
 
   private def getMonthStartProgress(progress: EpochProgress): Long = {
-    val monthNumber = progress.value.value / epochProgressOneDay / 30
-    monthNumber * epochProgressOneDay * 30L
+    val monthNumber = progress.value.value / epochData.epochProgressOneDay / 30
+    monthNumber * epochData.epochProgressOneDay * 30L
   }
 
   private def epochProgressToMonth(progress: EpochProgress): Either[RewardError, Month] = {
-    val month = ((progress.value.value / epochProgressOneDay / 30) % 12) + 1
+    val month = ((progress.value.value / epochData.epochProgressOneDay / 30) % 12) + 1
     refineV[MonthRefinement](month.toInt).leftMap(_ => InvalidMonthError(month.toInt))
   }
 
   private def isVoteFromCurrentMonth(currentProgress: EpochProgress, voteProgress: EpochProgress): Boolean = {
     val currentMonthStart = getMonthStartProgress(currentProgress)
-    val nextMonthStart = currentMonthStart + epochProgressOneDay * 30
+    val nextMonthStart = currentMonthStart + epochData.epochProgressOneDay * 30
     voteProgress.value >= currentMonthStart && voteProgress.value < nextMonthStart
   }
 
   private def isLastEpochInYear(currentEpoch: EpochProgress): Boolean = {
-    val epochsSinceStart = currentEpoch.value.value - config.initialEpoch.value.value
-    (epochsSinceStart + 1) % epochProgress1Year === 0
+    val epochsSinceStart = currentEpoch.value.value - rewardConfig.initialEpoch.value.value
+    (epochsSinceStart + 1) % epochData.epochProgress1Year === 0
   }
 
   private def calculateValidatorShare(
@@ -114,9 +114,9 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
     votingPowers: List[VotingPower],
     currentProgress: EpochProgress
   ): F[Either[RewardError, Map[Address, Amount]]] = {
-    val basePerEpoch = config.governancePool.value.value / epochProgress1Year
+    val basePerEpoch = rewardConfig.governancePool.value.value / epochData.epochProgress1Year
     val yearRemainder = if (isLastEpochInYear(currentProgress)) {
-      config.governancePool.value.value % epochProgress1Year
+      rewardConfig.governancePool.value.value % epochData.epochProgress1Year
     } else 0L
     val totalPower = votingPowers.map(_.power.total.value).sum
 
@@ -160,8 +160,8 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
     (for {
       currentMonth <- EitherT.fromEither[F](epochProgressToMonth(currentProgress))
 
-      epochTokens <- EitherT.fromEither[F](toAmount(config.totalAnnualTokens.value.value / epochProgress1Year))
-      yearRemainder = config.totalAnnualTokens.value.value % epochProgress1Year
+      epochTokens <- EitherT.fromEither[F](toAmount(rewardConfig.totalAnnualTokens.value.value / epochData.epochProgress1Year))
+      yearRemainder = rewardConfig.totalAnnualTokens.value.value % epochData.epochProgress1Year
 
       totalEpochTokens <- EitherT.fromEither[F](
         toAmount(
@@ -169,9 +169,9 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
         )
       )
 
-      validatorsPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * config.validatorWeight.value / 100L))
-      daoPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * config.daoWeight.value / 100L))
-      votingPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * config.votingWeight.value / 100L))
+      validatorsPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.validatorWeight.value / 100L))
+      daoPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.daoWeight.value / 100L))
+      votingPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.votingWeight.value / 100L))
 
       (validatorDistribution, validatorRemainder) <- EitherT.fromEither[F](calculateValidatorShare(validatorsPerEpoch, validators))
       (votingDistribution, votingRemainder) <- EitherT.fromEither[F](calculateVotingShare(votingPerEpoch, votingPowers, currentProgress))
@@ -188,7 +188,7 @@ class RewardCalculator(config: ApplicationConfig.Rewards) {
         epochProgress = currentProgress,
         month = currentMonth,
         validatorRewards = validatorDistribution,
-        daoRewards = config.daoAddress -> daoReward,
+        daoRewards = rewardConfig.daoAddress -> daoReward,
         votingRewards = votingDistribution,
         governanceRewards = governanceDistribution
       )).value

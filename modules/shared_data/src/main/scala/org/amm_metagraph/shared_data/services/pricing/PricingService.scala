@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data.services.pricing
 
+import cats.Semigroup
 import cats.effect.Async
 import cats.syntax.all._
 
@@ -9,6 +10,8 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
+import io.constellationnetwork.security.Hashed
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
@@ -19,12 +22,12 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.{StakingUpdate, SwapUpdate, WithdrawalUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.LiquidityPool.PoolShares.toPendingFeeShares
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingTokenInformation
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.{SwapQuote, SwapTokenInfo}
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalTokenAmounts
+import org.amm_metagraph.shared_data.types.Swap.SwapQuote
 
 trait PricingService[F[_]] {
   def getSwapQuote(
@@ -56,7 +59,8 @@ trait PricingService[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, LiquidityPool]
 
-  def getUpdatedLiquidityPoolDueSwap(
+  def getUpdatedLiquidityPoolDueNewSwap(
+    hashedSwapUpdate: Hashed[SwapUpdate],
     liquidityPool: LiquidityPool,
     fromTokenInfo: TokenInformation,
     toTokenInfo: TokenInformation,
@@ -64,7 +68,12 @@ trait PricingService[F[_]] {
     metagraphId: CurrencyId
   ): Either[FailedCalculatedState, LiquidityPool]
 
-  def getUpdatedLiquidityPoolDueWithdrawal(
+  def getUpdatedLiquidityPoolDueConfirmedSwap(
+    updateHash: Hash,
+    liquidityPool: LiquidityPool
+  ): Either[FailedCalculatedState, LiquidityPool]
+
+  def getUpdatedLiquidityPoolDueNewWithdrawal(
     signedUpdate: Signed[WithdrawalUpdate],
     liquidityPool: LiquidityPool,
     withdrawalAmounts: WithdrawalTokenAmounts,
@@ -77,6 +86,23 @@ trait PricingService[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, WithdrawalTokenAmounts]
 
+  def rollbackSwapLiquidityPoolAmounts(
+    signedUpdate: Signed[SwapUpdate],
+    updateHash: Hash,
+    lastSyncGlobalEpochProgress: EpochProgress,
+    liquidityPool: LiquidityPool,
+    tokenAAmountToReturn: SwapAmount,
+    tokenBAmountToReturn: SwapAmount,
+    metagraphId: CurrencyId
+  ): Either[FailedCalculatedState, LiquidityPool]
+
+  def rollbackWithdrawalLiquidityPoolAmounts(
+    signedUpdate: Signed[WithdrawalUpdate],
+    lastSyncGlobalEpochProgress: EpochProgress,
+    liquidityPool: LiquidityPool,
+    tokenAAmountToReturn: SwapAmount,
+    tokenBAmountToReturn: SwapAmount
+  ): Either[FailedCalculatedState, LiquidityPool]
 }
 
 object PricingService {
@@ -85,6 +111,7 @@ object PricingService {
     calculatedStateService: CalculatedStateService[F]
   ): PricingService[F] = {
     case class ReservesAndReceived(
+      swapAmount: BigInt,
       newInputReserveBeforeFee: BigInt,
       newOutputReserveBeforeFee: BigInt,
       estimatedReceivedBeforeFee: BigInt,
@@ -128,6 +155,7 @@ object PricingService {
           newInputReserveAfterFee = newInputReserveBeforeFee
         } yield
           ReservesAndReceived(
+            BigInt(amount.value),
             newInputReserveBeforeFee,
             newOutputReserveBeforeFee,
             estimatedReceivedBeforeFee,
@@ -259,6 +287,7 @@ object PricingService {
                 val swapTokenInfo = SwapTokenInfo(
                   fromTokenInfo.copy(amount = reservesAndReceived.newInputReserveAfterFee.toLong.toPosLongUnsafe),
                   toTokenInfo.copy(amount = reservesAndReceived.newOutputReserveAfterFee.toLong.toPosLongUnsafe),
+                  SwapAmount(PosLong.unsafeFrom(reservesAndReceived.swapAmount.toLong)),
                   SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedBeforeFee.toLong)),
                   SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedAfterFee.toLong))
                 )
@@ -390,12 +419,14 @@ object PricingService {
               PoolShares(
                 poolShares,
                 updatedAddressShares,
+                liquidityPool.poolShares.pendingFeeShares,
                 liquidityPool.poolShares.feeShares
               )
             )
       }
 
-      def getUpdatedLiquidityPoolDueSwap(
+      def getUpdatedLiquidityPoolDueNewSwap(
+        hashedSwapUpdate: Hashed[SwapUpdate],
         liquidityPool: LiquidityPool,
         fromTokenInfo: TokenInformation,
         toTokenInfo: TokenInformation,
@@ -415,7 +446,7 @@ object PricingService {
             metagraphId
           )
 
-          liquidityPool.poolShares.copy(feeShares = updateFeeShares)
+          liquidityPool.poolShares.copy(pendingFeeShares = toPendingFeeShares(updateFeeShares, hashedSwapUpdate.hash))
         }
 
         val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
@@ -432,7 +463,36 @@ object PricingService {
         )
       }
 
-      def getUpdatedLiquidityPoolDueWithdrawal(
+      def getUpdatedLiquidityPoolDueConfirmedSwap(
+        updateHash: Hash,
+        liquidityPool: LiquidityPool
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        implicit val semigroupNonNegLong: Semigroup[NonNegLong] =
+          Semigroup.instance((a, b) => NonNegLong.unsafeFrom(a.value + b.value))
+
+        def applyPendingFees: PoolShares = {
+          val pendingFeesToConfirm =
+            liquidityPool.poolShares.pendingFeeShares.getOrElse(updateHash, Map.empty[Address, NonNegLong])
+
+          liquidityPool.poolShares
+            .focus(_.feeShares)
+            .modify { existing =>
+              existing |+| pendingFeesToConfirm
+            }
+            .focus(_.pendingFeeShares)
+            .modify { existing =>
+              existing.removed(updateHash)
+            }
+        }
+
+        Right(
+          liquidityPool
+            .focus(_.poolShares)
+            .replace(applyPendingFees)
+        )
+      }
+
+      def getUpdatedLiquidityPoolDueNewWithdrawal(
         signedUpdate: Signed[WithdrawalUpdate],
         liquidityPool: LiquidityPool,
         withdrawalAmounts: WithdrawalTokenAmounts,
@@ -499,6 +559,7 @@ object PricingService {
             poolShares = PoolShares(
               totalSharesAmount,
               updatedAddressShares,
+              liquidityPool.poolShares.pendingFeeShares,
               liquidityPool.poolShares.feeShares
             )
           )
@@ -577,7 +638,88 @@ object PricingService {
               signedUpdate
             )
           )
-        } yield WithdrawalTokenAmounts(SwapAmount(tokenAAmount), SwapAmount(tokenBAmount))
+        } yield
+          WithdrawalTokenAmounts(
+            liquidityPool.tokenA.identifier,
+            SwapAmount(tokenAAmount),
+            liquidityPool.tokenB.identifier,
+            SwapAmount(tokenBAmount)
+          )
+      }
+
+      def rollbackSwapLiquidityPoolAmounts(
+        signedUpdate: Signed[SwapUpdate],
+        updateHash: Hash,
+        lastSyncGlobalEpochProgress: EpochProgress,
+        liquidityPool: LiquidityPool,
+        tokenAAmountToReturn: SwapAmount,
+        tokenBAmountToReturn: SwapAmount,
+        metagraphId: CurrencyId
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        val tokenAIsFrom = liquidityPool.tokenA.identifier === signedUpdate.swapFromPair
+        val tokenBIsTo = liquidityPool.tokenB.identifier === signedUpdate.swapToPair
+        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+
+        def error(msg: String): FailedCalculatedState =
+          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)
+
+        val newTokenAAmountEither: Either[FailedCalculatedState, PosLong] =
+          if (tokenAIsFrom)
+            (liquidityPool.tokenA.amount.value - tokenAAmountToReturn.value.value).toPosLong
+              .leftMap(_ => error("Rolling back token A results in negative balance"))
+          else if (tokenBIsTo)
+            (liquidityPool.tokenA.amount.value + tokenBAmountToReturn.value.value).toPosLong
+              .leftMap(_ => error("Rolling back token A results in invalid addition"))
+          else Right(liquidityPool.tokenA.amount)
+
+        val newTokenBAmountEither: Either[FailedCalculatedState, PosLong] =
+          if (tokenBIsTo)
+            (liquidityPool.tokenB.amount.value + tokenBAmountToReturn.value.value).toPosLong
+              .leftMap(_ => error("Rolling back token B results in invalid addition"))
+          else if (tokenAIsFrom)
+            (liquidityPool.tokenB.amount.value - tokenAAmountToReturn.value.value).toPosLong
+              .leftMap(_ => error("Rolling back token B results in negative balance"))
+          else Right(liquidityPool.tokenB.amount)
+
+        for {
+          newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
+          newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
+        } yield
+          liquidityPool
+            .focus(_.tokenA)
+            .replace(newTokenA)
+            .focus(_.tokenB)
+            .replace(newTokenB)
+            .focus(_.poolShares.pendingFeeShares)
+            .modify { existing =>
+              existing.removed(updateHash)
+            }
+      }
+
+      def rollbackWithdrawalLiquidityPoolAmounts(
+        signedUpdate: Signed[WithdrawalUpdate],
+        lastSyncGlobalEpochProgress: EpochProgress,
+        liquidityPool: LiquidityPool,
+        tokenAAmountToReturn: SwapAmount,
+        tokenBAmountToReturn: SwapAmount
+      ): Either[FailedCalculatedState, LiquidityPool] = {
+        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+
+        def error(msg: String): FailedCalculatedState =
+          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)
+
+        val newTokenAAmountEither: Either[FailedCalculatedState, PosLong] =
+          (liquidityPool.tokenA.amount.value + tokenAAmountToReturn.value.value).toPosLong
+            .leftMap(_ => error("Rolling back token A results in invalid addition"))
+
+        val newTokenBAmountEither: Either[FailedCalculatedState, PosLong] =
+          (liquidityPool.tokenB.amount.value + tokenBAmountToReturn.value.value).toPosLong
+            .leftMap(_ => error("Rolling back token B results in invalid addition"))
+
+        for {
+          newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
+          newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
+        } yield liquidityPool.copy(tokenA = newTokenA, tokenB = newTokenB)
       }
     }
   }

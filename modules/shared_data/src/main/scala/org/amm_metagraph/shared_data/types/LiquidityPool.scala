@@ -9,16 +9,17 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.CurrencyId
-import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.hash.Hash
 
 import derevo.cats.eqv
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
 import io.circe.refined._
+import io.circe.{KeyDecoder, KeyEncoder}
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
-import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
@@ -44,8 +45,20 @@ object LiquidityPool {
   case class PoolShares(
     totalShares: PosLong,
     addressShares: Map[Address, ShareAmount],
+    pendingFeeShares: Map[Hash, Map[Address, NonNegLong]],
     feeShares: Map[Address, NonNegLong]
   )
+
+  object PoolShares {
+    implicit val keyEncoderHash: KeyEncoder[Hash] = KeyEncoder.encodeKeyString.contramap(_.toString)
+    implicit val keyDecoderHash: KeyDecoder[Hash] = KeyDecoder.decodeKeyString.map(Hash(_))
+
+    def toPendingFeeShares(
+      feeShares: Map[Address, NonNegLong],
+      swapUpdateHash: Hash
+    ): Map[Hash, Map[Address, NonNegLong]] =
+      Map(swapUpdateHash -> feeShares)
+  }
 
   @derive(encoder, decoder)
   case class LiquidityPool(
@@ -94,15 +107,34 @@ object LiquidityPool {
 
   def getPendingAllowSpendsLiquidityPoolUpdates(
     state: AmmCalculatedState
-  ): Set[Signed[LiquidityPoolUpdate]] =
-    getLiquidityPoolCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[LiquidityPoolUpdate]) => signedUpdate
+  ): Set[PendingAllowSpend[AmmUpdate]] = {
+    val onlyPendingLiquidity = getLiquidityPoolCalculatedState(state).pending.collect {
+      case pending: PendingAllowSpend[LiquidityPoolUpdate] => pending
     }
+
+    onlyPendingLiquidity.toList.map { pendingAllowSpend =>
+      PendingAllowSpend[AmmUpdate](
+        pendingAllowSpend.update,
+        pendingAllowSpend.updateHash,
+        pendingAllowSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 
   def getPendingSpendActionLiquidityPoolUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[LiquidityPoolUpdate]] =
-    getLiquidityPoolCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[LiquidityPoolUpdate] => pendingSpend
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingLiquidity = getLiquidityPoolCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[LiquidityPoolUpdate] => pending
     }
+
+    onlyPendingLiquidity.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

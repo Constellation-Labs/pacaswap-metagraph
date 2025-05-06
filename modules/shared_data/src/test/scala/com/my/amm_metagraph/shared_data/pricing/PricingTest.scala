@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data.pricing
+package com.my.amm_metagraph.shared_data.pricing
 
 import cats.effect.IO
 import cats.syntax.all._
@@ -11,7 +11,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
 
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService

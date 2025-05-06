@@ -56,6 +56,7 @@ object GovernanceValidations {
         lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
         lastTransactionRef = lastTransactionRefValidation(rewardAllocationVoteUpdate, lastUserAllocation)
         dailyLimitAllocation = dailyLimitAllocationValidation(
+          applicationConfig,
           lastUserAllocation,
           lastSyncGlobalSnapshotEpochProgress
         )
@@ -108,18 +109,20 @@ object GovernanceValidations {
         }
     }
 
-    private def dailyLimitAllocationValidation(
-      lastUserAllocation: Option[UserAllocations],
-      lastCurrencySnapshotEpochProgress: EpochProgress
-    ): DataApplicationValidationErrorOr[Unit] =
-      lastUserAllocation.fold(valid) { allocation =>
-        getUpdatedCredits(
-          allocation.allocationGlobalEpochProgress.value.value,
-          allocation.credits,
-          lastCurrencySnapshotEpochProgress.value.value,
-          maxCredits
-        ).fold(_ => DailyAllocationExceed.invalid, _ => valid)
-      }
+  private def dailyLimitAllocationValidation(
+    applicationConfig: ApplicationConfig,
+    lastUserAllocation: Option[UserAllocations],
+    lastCurrencySnapshotEpochProgress: EpochProgress
+  ): DataApplicationValidationErrorOr[Unit] =
+    lastUserAllocation.fold(valid) { allocation =>
+      getUpdatedCredits(
+        allocation.allocationGlobalEpochProgress.value.value,
+        allocation.credits,
+        lastCurrencySnapshotEpochProgress.value.value,
+        maxCredits,
+        applicationConfig.epochInfo.epochProgressOneDay
+      ).fold(_ => DailyAllocationExceed.invalid, _ => valid)
+    }
 
     private def walletHasVotingWeightValidation(
       lastVotingWeights: Map[Address, VotingWeight],

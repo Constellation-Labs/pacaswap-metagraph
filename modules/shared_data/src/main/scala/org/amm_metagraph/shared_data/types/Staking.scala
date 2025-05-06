@@ -19,7 +19,7 @@ import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
 import org.amm_metagraph.shared_data.types.States._
 
@@ -78,15 +78,34 @@ object Staking {
 
   def getPendingAllowSpendsStakingUpdates(
     state: AmmCalculatedState
-  ): Set[Signed[StakingUpdate]] =
-    getStakingCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[StakingUpdate]) => signedUpdate
+  ): Set[PendingAllowSpend[AmmUpdate]] = {
+    val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
+      case pending: PendingAllowSpend[StakingUpdate] => pending
     }
+
+    onlyPendingStaking.toList.map { pendingAllow =>
+      PendingAllowSpend[AmmUpdate](
+        pendingAllow.update,
+        pendingAllow.updateHash,
+        pendingAllow.pricingTokenInfo
+      )
+    }.toSet
+  }
 
   def getPendingSpendActionStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[StakingUpdate]] =
-    getStakingCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[StakingUpdate] => pendingSpend
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[StakingUpdate] => pending
     }
+
+    onlyPendingStaking.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

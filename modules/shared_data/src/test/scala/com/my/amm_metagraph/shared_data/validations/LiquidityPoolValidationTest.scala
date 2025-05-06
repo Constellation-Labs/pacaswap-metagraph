@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data.validations
+package com.my.amm_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.NonEmptyList
@@ -7,6 +7,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.SortedMap
+import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
@@ -20,9 +21,9 @@ import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.dor_metagraph.shared_data.DummyL1Context.buildL1NodeContext
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
@@ -59,7 +60,9 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     ),
-    PosLong.unsafeFrom((100 * 1e8).toLong)
+    PosLong.unsafeFrom((100 * 1e8).toLong),
+    EpochProgress(NonNegLong.unsafeFrom(0L)),
+    EpochMetadata(43.seconds)
   )
 
   override def sharedResource: Resource[IO, Res] = for {

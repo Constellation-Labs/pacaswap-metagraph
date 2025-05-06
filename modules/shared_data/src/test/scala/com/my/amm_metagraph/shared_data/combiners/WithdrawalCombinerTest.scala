@@ -1,9 +1,10 @@
-package com.my.dor_metagraph.shared_data.combiners
+package com.my.amm_metagraph.shared_data.combiners
 
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -15,9 +16,12 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
+import io.constellationnetwork.security.hex.Hex
+import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -25,13 +29,13 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.combiners.WithdrawalCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalReference, getPendingSpendActionWithdrawalUpdates}
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
 object WithdrawalCombinerTest extends MutableIOSuite {
@@ -57,7 +61,9 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     ),
-    PosLong.unsafeFrom((1 * 1e8).toLong)
+    PosLong.unsafeFrom((1 * 1e8).toLong),
+    EpochProgress(NonNegLong.unsafeFrom(0L)),
+    EpochMetadata(43.seconds)
   )
 
   override def sharedResource: Resource[IO, Res] = for {
@@ -120,8 +126,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -132,9 +140,11 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -230,8 +240,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -242,9 +254,11 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -310,8 +324,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -383,8 +399,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -395,9 +413,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        PendingSpendAction(withdrawalUpdate, pending.head.updateHash, spendActions.head),
         withdrawalResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -466,8 +485,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -482,6 +503,108 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         result.calculated.operations(Withdrawal).pending.isEmpty,
         result.calculated.operations(Withdrawal).failed.nonEmpty,
         result.sharedArtifacts.isEmpty
+      )
+  }
+
+  test("Test withdrawal fail and return balances to the pool") { implicit res =>
+    implicit val (h, sp, hs) = res
+
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+
+      // Withdraw 0.5 shares = 50000000 in fixed-point
+      withdrawalUpdate = getFakeSignedUpdate(
+        WithdrawalUpdate(
+          CurrencyId(ownerAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+          WithdrawalReference.empty,
+          EpochProgress.MaxValue
+        )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+
+      withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
+        withdrawalUpdate,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
+        CurrencyId(ownerAddress)
+      )
+
+      spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
+
+      withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
+        PendingSpendAction(
+          withdrawalUpdate.copy(value = withdrawalUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
+          pendingActions.head.updateHash,
+          spendActions.head,
+          pending.pricingTokenInfo
+        ),
+        withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
+        EpochProgress.MaxValue,
+        spendActions,
+        SnapshotOrdinal.MinValue
+      )
+
+      lpsAfterSuccessNew = withdrawalResponsePendingSpendActionResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .confirmed
+        .asInstanceOf[ConfirmedLiquidityPoolCalculatedState]
+      lpsAfterFailurePending = withdrawalResponseConfirmedResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .confirmed
+        .asInstanceOf[ConfirmedLiquidityPoolCalculatedState]
+
+      initialLp = liquidityPoolCalculatedState.confirmed.value(poolId)
+      lpAfterSuccessNew = lpsAfterSuccessNew.value(poolId)
+      lpAfterFailurePending = lpsAfterFailurePending.value(poolId)
+
+    } yield
+      expect.all(
+        initialLp.tokenA.amount.value === lpAfterFailurePending.tokenA.amount.value,
+        initialLp.tokenB.amount.value === lpAfterFailurePending.tokenB.amount.value,
+        lpAfterSuccessNew.tokenA.amount.value < initialLp.tokenA.amount.value,
+        lpAfterSuccessNew.tokenB.amount.value < initialLp.tokenB.amount.value
       )
   }
 }

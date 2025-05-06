@@ -19,15 +19,11 @@ import eu.timepit.refined.cats._
 import eu.timepit.refined.types.all.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.States._
 
 object Withdrawal {
-  case class WithdrawalTokenAmounts(
-    tokenAAmount: SwapAmount,
-    tokenBAmount: SwapAmount
-  )
 
   @derive(encoder, decoder)
   case class WithdrawalCalculatedStateAddress(
@@ -72,8 +68,17 @@ object Withdrawal {
 
   def getPendingSpendActionWithdrawalUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[WithdrawalUpdate]] =
-    getWithdrawalCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[WithdrawalUpdate] => pendingSpend
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingWithdrawal = getWithdrawalCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[WithdrawalUpdate] => pending
     }
+    onlyPendingWithdrawal.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

@@ -22,11 +22,11 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
-import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.NonNegLong
 import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.refined.Percentage
-import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 
@@ -58,13 +58,6 @@ object Swap {
     priceImpactPercent: BigDecimal,
     estimatedReceived: BigInt,
     minimumReceived: BigInt
-  )
-
-  case class SwapTokenInfo(
-    primaryTokenInformation: TokenInformation,
-    pairTokenInformation: TokenInformation,
-    grossReceived: SwapAmount,
-    netReceived: SwapAmount
   )
 
   @derive(decoder, encoder, order, ordering)
@@ -102,15 +95,33 @@ object Swap {
 
   def getPendingAllowSpendsSwapUpdates(
     state: AmmCalculatedState
-  ): Set[Signed[SwapUpdate]] =
-    getSwapCalculatedState(state).pending.collect {
-      case PendingAllowSpend(signedUpdate: Signed[SwapUpdate]) => signedUpdate
+  ): Set[PendingAllowSpend[AmmUpdate]] = {
+    val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
+      case pending: PendingAllowSpend[SwapUpdate] => pending
     }
+
+    onlyPendingSwap.toList.map { pendingAllow =>
+      PendingAllowSpend[AmmUpdate](
+        pendingAllow.update,
+        pendingAllow.updateHash,
+        pendingAllow.pricingTokenInfo
+      )
+    }.toSet
+  }
 
   def getPendingSpendActionSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[SwapUpdate]] =
-    getSwapCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[SwapUpdate] => pendingSpend
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[SwapUpdate] => pending
     }
+    onlyPendingSwap.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

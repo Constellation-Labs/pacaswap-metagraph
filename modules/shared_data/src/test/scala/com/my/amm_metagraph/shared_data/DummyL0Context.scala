@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data
+package com.my.amm_metagraph.shared_data
 
 import java.security.KeyPair
 
