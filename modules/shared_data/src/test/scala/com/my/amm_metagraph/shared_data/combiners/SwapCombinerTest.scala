@@ -1,5 +1,6 @@
-package com.my.dor_metagraph.shared_data.combiners
+package com.my.amm_metagraph.shared_data.combiners
 
+import cats.data.EitherT
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -7,7 +8,7 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
-import io.constellationnetwork.json.JsonSerializer
+import io.constellationnetwork.json.{JsonSerializer, JsonSerializer => JsonBrotliBinaryCodec}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
@@ -17,8 +18,8 @@ import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.FeeDistributor
@@ -29,7 +30,7 @@ import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.SwapReference
+import org.amm_metagraph.shared_data.types.Swap.{SwapReference, getPendingSpendActionSwapUpdates}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
@@ -132,10 +133,11 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-        PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -255,11 +257,14 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
+
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
         PendingSpendAction(
           swapUpdate.copy(value = swapUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
+          pendingActions.head.updateHash,
           spendActions.head,
           pending.pricingTokenInfo
         ),
@@ -648,10 +653,11 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-        PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -818,10 +824,11 @@ object SwapCombinerTest extends MutableIOSuite {
 
         spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
         pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+        pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
         metagraphId <- context.getCurrencyId
 
         swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-          PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+          PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
           swapPendingSpendActionResponse,
           EpochProgress.MinValue,
           spendActions,
@@ -950,10 +957,11 @@ object SwapCombinerTest extends MutableIOSuite {
 
         spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
         pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+        pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
         metagraphId <- context.getCurrencyId
 
         swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-          PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+          PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
           swapPendingSpendActionResponse,
           EpochProgress.MinValue,
           spendActions,
@@ -1093,12 +1101,13 @@ object SwapCombinerTest extends MutableIOSuite {
 
           spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
           metagraphId <- context.getCurrencyId
+          pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
 
           swapConfirmedResponse <-
             if (spendActions.nonEmpty) {
               val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
               swapCombinerService.combinePendingSpendAction(
-                PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+                PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
                 swapPendingSpendActionResponse,
                 EpochProgress.MinValue,
                 spendActions,
@@ -1260,12 +1269,13 @@ object SwapCombinerTest extends MutableIOSuite {
 
           spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
           metagraphId <- context.getCurrencyId
+          pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
 
           swapConfirmedResponse <-
             if (spendActions.nonEmpty) {
               val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
               swapCombinerService.combinePendingSpendAction(
-                PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+                PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
                 swapPendingSpendActionResponse,
                 EpochProgress.MinValue,
                 spendActions,
@@ -1409,12 +1419,13 @@ object SwapCombinerTest extends MutableIOSuite {
 
       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       metagraphId <- context.getCurrencyId
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
 
       swapConfirmedResponse <-
         if (spendActions.nonEmpty) {
           val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
           swapCombinerService.combinePendingSpendAction(
-            PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+            PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
             swapPendingSpendActionResponse,
             EpochProgress.MinValue,
             spendActions,
@@ -1545,9 +1556,10 @@ object SwapCombinerTest extends MutableIOSuite {
                       metagraphId <- context.getCurrencyId
                       spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
                       pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+                      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
 
                       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-                        PendingSpendAction(swapUpdate, spendActions.head, pending.pricingTokenInfo),
+                        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
                         swapPendingSpendActionResponse,
                         EpochProgress.MinValue,
                         spendActions,
@@ -1576,5 +1588,176 @@ object SwapCombinerTest extends MutableIOSuite {
           }
       }
       .map(_._2)
+  }
+
+  test("Test swap - 0.3% fee correctly applies to the swap and revert the fees") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(
+      primaryToken,
+      pairToken,
+      ownerAddress,
+      None,
+      FeeDistributor.standard
+    )
+
+    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpend = AllowSpend(
+        sourceAddress,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = getFakeSignedUpdate(
+        SwapUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      hashedUpdate <- swapUpdate.toHashed(jsonBase64BinaryCodec.serialize)
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            sourceAddress -> SortedSet(signedAllowSpend.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
+        swapUpdate,
+        state,
+        EpochProgress.MinValue,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
+      metagraphId <- context.getCurrencyId
+
+      swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
+        PendingSpendAction(
+          swapUpdate.copy(value = swapUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
+          pendingActions.head.updateHash,
+          spendActions.head,
+          pending.pricingTokenInfo
+        ),
+        swapPendingSpendActionResponse,
+        EpochProgress.MaxValue,
+        spendActions,
+        SnapshotOrdinal.MinValue,
+        metagraphId
+      )
+
+      lpsAfterSuccessNew = swapPendingSpendActionResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+      newLiquidityPoolAfterNew = lpsAfterSuccessNew.confirmed.value(poolId)
+
+      oldLiquidityPoolCalculatedState = state.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+      oldLiquidityPool = oldLiquidityPoolCalculatedState.confirmed.value(poolId)
+
+      updatedLiquidityPoolCalculatedState: LiquidityPoolCalculatedState = swapConfirmedResponse.calculated
+        .operations(OperationType.LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
+      updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId)
+
+      fromTokenInfo =
+        if (swapUpdate.value.swapFromPair == oldLiquidityPool.tokenA.identifier) oldLiquidityPool.tokenA else oldLiquidityPool.tokenB
+      toTokenInfo =
+        if (swapUpdate.value.swapToPair == oldLiquidityPool.tokenA.identifier) oldLiquidityPool.tokenA else oldLiquidityPool.tokenB
+
+      swapAmount = swapUpdate.amountIn.value.value
+      newFromTokenReserve = BigInt(fromTokenInfo.amount.value) + BigInt(swapAmount)
+      toTokenReserveBeforeFee = (oldLiquidityPool.k / newFromTokenReserve).toLong
+
+      userReceivesAmountBeforeFee = toTokenInfo.amount.value - toTokenReserveBeforeFee
+
+      feeBreakdown = FeeDistributor.calculateFeeAmounts(
+        userReceivesAmountBeforeFee,
+        oldLiquidityPool.poolFees
+      )
+
+      providerFeeAmount = feeBreakdown.providers
+      operatorFeeAmount = feeBreakdown.operators
+
+      expectedUpdatedFeeShares = FeeDistributor.distributeProviderFees(
+        providerFeeAmount,
+        operatorFeeAmount,
+        oldLiquidityPool.poolShares,
+        metagraphId
+      )
+
+      expectedProviderFinalFeeShare = expectedUpdatedFeeShares(ownerAddress).value
+      expectedOperatorFinalFeeShare = expectedUpdatedFeeShares(metagraphId.value).value
+
+    } yield
+      expect.all(
+        newLiquidityPoolAfterNew.poolShares.pendingFeeShares.nonEmpty,
+        newLiquidityPoolAfterNew.poolShares.pendingFeeShares(hashedUpdate.hash)(ownerAddress).value === expectedProviderFinalFeeShare,
+        newLiquidityPoolAfterNew.poolShares.pendingFeeShares(hashedUpdate.hash)(metagraphId.value).value === expectedOperatorFinalFeeShare,
+        !updatedLiquidityPool.poolShares.feeShares.contains(metagraphId.value),
+        oldLiquidityPool.poolShares.feeShares(ownerAddress).value === updatedLiquidityPool.poolShares.feeShares(ownerAddress).value,
+        oldLiquidityPool.poolShares.feeShares.get(metagraphId.value) == updatedLiquidityPool.poolShares.feeShares.get(metagraphId.value),
+        updatedLiquidityPool.poolShares.pendingFeeShares.isEmpty
+      )
   }
 }

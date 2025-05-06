@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data
+package com.my.amm_metagraph.shared_data
 
 import cats.Eq
 import cats.data.NonEmptySet
@@ -81,7 +81,7 @@ object Shared {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares, feeShares),
+      PoolShares(totalShares, shares, Map.empty, feeShares),
       fees
     )
     (

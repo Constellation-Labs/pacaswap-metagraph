@@ -78,24 +78,34 @@ object Staking {
 
   def getPendingAllowSpendsStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingAllowSpend[AmmUpdate]] =
-    getStakingCalculatedState(state).pending.collect {
-      case pendingAllow: PendingAllowSpend[StakingUpdate] =>
-        PendingAllowSpend[AmmUpdate](
-          pendingAllow.update,
-          pendingAllow.pricingTokenInfo
-        )
+  ): Set[PendingAllowSpend[AmmUpdate]] = {
+    val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
+      case pending: PendingAllowSpend[StakingUpdate] => pending
     }
+
+    onlyPendingStaking.toList.map { pendingAllow =>
+      PendingAllowSpend[AmmUpdate](
+        pendingAllow.update,
+        pendingAllow.updateHash,
+        pendingAllow.pricingTokenInfo
+      )
+    }.toSet
+  }
 
   def getPendingSpendActionStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] =
-    getStakingCalculatedState(state).pending.collect {
-      case pendingSpend: PendingSpendAction[StakingUpdate] =>
-        PendingSpendAction[AmmUpdate](
-          pendingSpend.update,
-          pendingSpend.generatedSpendAction,
-          pendingSpend.pricingTokenInfo
-        )
+  ): Set[PendingSpendAction[AmmUpdate]] = {
+    val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
+      case pending: PendingSpendAction[StakingUpdate] => pending
     }
+
+    onlyPendingStaking.toList.map { pendingSpend =>
+      PendingSpendAction[AmmUpdate](
+        pendingSpend.update,
+        pendingSpend.updateHash,
+        pendingSpend.generatedSpendAction,
+        pendingSpend.pricingTokenInfo
+      )
+    }.toSet
+  }
 }

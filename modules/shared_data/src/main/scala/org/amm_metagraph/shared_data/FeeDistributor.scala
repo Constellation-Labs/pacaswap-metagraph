@@ -1,7 +1,7 @@
 package org.amm_metagraph.shared_data
 
 import cats.Order
-import cats.syntax.semigroup._
+import cats.syntax.all._
 
 import scala.math.BigDecimal.RoundingMode
 
@@ -14,7 +14,7 @@ import derevo.derive
 import eu.timepit.refined.types.all.NonNegLong
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.LiquidityPool.PoolShares
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, PoolShares}
 
 object FeeDistributor {
 

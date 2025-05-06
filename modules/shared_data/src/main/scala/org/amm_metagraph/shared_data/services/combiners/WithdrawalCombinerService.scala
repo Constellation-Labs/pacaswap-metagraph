@@ -25,7 +25,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpd
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalReference, getWithdrawalCalculatedState}
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 
 trait WithdrawalCombinerService[F[_]] {
   def combineNew(
@@ -48,7 +48,8 @@ trait WithdrawalCombinerService[F[_]] {
 object WithdrawalCombinerService {
   def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
-    pricingService: PricingService[F]
+    pricingService: PricingService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
       private def validateUpdate(
@@ -114,7 +115,7 @@ object WithdrawalCombinerService {
         pendingActions: Set[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): Set[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(
@@ -184,6 +185,9 @@ object WithdrawalCombinerService {
           _ <- EitherT.fromEither(validateUpdate(signedUpdate, globalEpochProgress))
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
+          updateHashed <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+          )
           withdrawalAmounts <- EitherT.fromEither[F](
             pricingService.calculateWithdrawalAmounts(
               signedUpdate,
@@ -193,7 +197,7 @@ object WithdrawalCombinerService {
           )
 
           updatedPool <- EitherT.fromEither[F](
-            pricingService.getUpdatedLiquidityPoolDueWithdrawal(
+            pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
               signedUpdate,
               liquidityPool,
               withdrawalAmounts,
@@ -218,7 +222,9 @@ object WithdrawalCombinerService {
 
           updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
             .focus(_.pending)
-            .replace(withdrawalCalculatedState.pending + PendingSpendAction(signedUpdate, spendAction, withdrawalAmounts.some))
+            .replace(
+              withdrawalCalculatedState.pending + PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, withdrawalAmounts.some)
+            )
 
           updatedCalculatedState = oldState.calculated
             .focus(_.operations)

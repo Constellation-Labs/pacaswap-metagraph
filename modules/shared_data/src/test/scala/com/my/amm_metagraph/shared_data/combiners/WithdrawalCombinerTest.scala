@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data.combiners
+package com.my.amm_metagraph.shared_data.combiners
 
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
@@ -20,8 +20,8 @@ import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -29,12 +29,12 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.combiners.WithdrawalCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.OperationType.Withdrawal
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalReference, getPendingSpendActionWithdrawalUpdates}
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import weaver.MutableIOSuite
 
 object WithdrawalCombinerTest extends MutableIOSuite {
@@ -125,7 +125,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -137,9 +138,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -235,7 +237,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -247,9 +250,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -315,7 +319,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -387,7 +392,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -398,9 +404,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, spendActions.head),
+        PendingSpendAction(withdrawalUpdate, pending.head.updateHash, spendActions.head),
         withdrawalResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -469,7 +476,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       result <- withdrawalCombinerService
         .combineNew(
@@ -538,7 +546,9 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
 
       withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
         withdrawalUpdate,
@@ -550,10 +560,12 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
         PendingSpendAction(
           withdrawalUpdate.copy(value = withdrawalUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
+          pendingActions.head.updateHash,
           spendActions.head,
           pending.pricingTokenInfo
         ),

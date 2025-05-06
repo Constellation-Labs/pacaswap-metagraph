@@ -25,7 +25,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 
 trait StakingCombinerService[F[_]] {
   def combineNew(
@@ -57,7 +57,8 @@ trait StakingCombinerService[F[_]] {
 object StakingCombinerService {
   def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
-    pricingService: PricingService[F]
+    pricingService: PricingService[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): StakingCombinerService[F] =
     new StakingCombinerService[F] {
       private def validateUpdate(
@@ -171,8 +172,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update, _) if update === signedStakingUpdate => true
-          case _                                                              => false
+          case PendingAllowSpend(update, _, _) if update === signedStakingUpdate => true
+          case _                                                                 => false
         }
 
       private def removePendingSpendAction(
@@ -180,8 +181,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _) if update === signedStakingUpdate => true
-          case _                                                                  => false
+          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                     => false
         }
 
       def combineNew(
@@ -213,9 +214,13 @@ object StakingCombinerService {
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
+          updateHashed <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+          )
+
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
-              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate)
+              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate, updateHashed.hash)
               val newStakingState = stakingCalculatedState
                 .focus(_.pending)
                 .replace(updatedPendingCalculatedState)
@@ -235,7 +240,7 @@ object StakingCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -319,7 +324,11 @@ object StakingCombinerService {
                   removePendingAllowSpend(stakingCalculatedState, pendingAllowSpendUpdate.update)
 
                 updatedPendingSpendActionCalculatedState =
-                  updatedPendingAllowSpendCalculatedState + PendingSpendAction(pendingAllowSpendUpdate.update, spendAction)
+                  updatedPendingAllowSpendCalculatedState + PendingSpendAction(
+                    pendingAllowSpendUpdate.update,
+                    pendingAllowSpendUpdate.updateHash,
+                    spendAction
+                  )
 
                 updatedStakingCalculatedState =
                   stakingCalculatedState

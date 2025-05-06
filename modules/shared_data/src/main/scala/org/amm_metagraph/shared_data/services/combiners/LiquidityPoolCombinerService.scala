@@ -28,7 +28,7 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -59,7 +59,8 @@ trait LiquidityPoolCombinerService[F[_]] {
 
 object LiquidityPoolCombinerService {
   def make[F[_]: Async: HasherSelector](
-    applicationConfig: ApplicationConfig
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
       private def validateUpdate(
@@ -160,8 +161,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                    => false
+          case PendingAllowSpend(update, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                       => false
         }
 
       private def removePendingSpendAction(
@@ -169,8 +170,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                        => false
+          case PendingSpendAction(update, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                           => false
         }
 
       def combineNew(
@@ -193,6 +194,9 @@ object LiquidityPoolCombinerService {
           pendingLpsPoolsIds <- EitherT.liftF(
             pendingLps.toList.traverse(pendingLp => buildLiquidityPoolUniqueIdentifier(pendingLp.tokenAId, pendingLp.tokenBId))
           )
+          updateHashed <- EitherT.liftF(
+            HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+          )
           _ <- EitherT.fromEither(
             validateUpdate(
               poolId,
@@ -209,7 +213,11 @@ object LiquidityPoolCombinerService {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
-              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate)
+              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState +
+                PendingAllowSpend(
+                  signedUpdate,
+                  updateHashed.hash
+                )
               val newStakingState = liquidityPoolsCalculatedState
                 .focus(_.pending)
                 .replace(updatedPendingCalculatedState)
@@ -228,7 +236,7 @@ object LiquidityPoolCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -297,10 +305,12 @@ object LiquidityPoolCombinerService {
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(liquidityPoolsCalculatedState, pendingAllowSpendUpdate.update)
-                updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + PendingSpendAction(
-                  pendingAllowSpendUpdate.update,
-                  spendAction
-                )
+                updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState +
+                  PendingSpendAction(
+                    pendingAllowSpendUpdate.update,
+                    pendingAllowSpendUpdate.updateHash,
+                    spendAction
+                  )
 
                 updatedLiquidityPoolCalculatedState =
                   liquidityPoolsCalculatedState
@@ -397,6 +407,7 @@ object LiquidityPoolCombinerService {
                 PoolShares(
                   poolTotalShares,
                   Map(sourceAddress -> ShareAmount(Amount(poolTotalShares))),
+                  Map.empty,
                   Map(sourceAddress -> initialFeeShares)
                 ),
                 fees

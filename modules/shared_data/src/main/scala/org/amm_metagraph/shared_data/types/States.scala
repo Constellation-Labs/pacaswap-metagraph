@@ -6,6 +6,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
 import derevo.circe.magnolia.{decoder, encoder}
@@ -79,8 +80,8 @@ object States {
 
     def getPendingUpdates: Set[Signed[UpdateType]] =
       pending.collect {
-        case PendingAllowSpend(update, _)     => update
-        case PendingSpendAction(update, _, _) => update
+        case PendingAllowSpend(update, _, _)     => update
+        case PendingSpendAction(update, _, _, _) => update
       }
   }
 
@@ -175,18 +176,21 @@ object States {
   @derive(encoder, decoder)
   sealed trait PendingAction[A <: AmmUpdate] {
     val update: Signed[A]
+    val updateHash: Hash
     val pricingTokenInfo: Option[PricingTokenInfo] = None
   }
 
   @derive(encoder, decoder)
   case class PendingAllowSpend[A <: AmmUpdate](
     update: Signed[A],
+    updateHash: Hash,
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
 
   @derive(encoder, decoder)
   case class PendingSpendAction[A <: AmmUpdate](
     update: Signed[A],
+    updateHash: Hash,
     generatedSpendAction: SpendAction,
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]

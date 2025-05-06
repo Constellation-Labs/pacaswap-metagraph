@@ -1,4 +1,4 @@
-package com.my.dor_metagraph.shared_data.validations
+package com.my.amm_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.Validated.{Invalid, Valid}
@@ -25,9 +25,9 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.dor_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.dor_metagraph.shared_data.DummyL1Context.buildL1NodeContext
-import com.my.dor_metagraph.shared_data.Shared._
+import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import com.my.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
+import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
@@ -95,6 +95,7 @@ object SwapValidationTest extends MutableIOSuite {
       PoolShares(
         1.toTokenAmountFormat.toPosLongUnsafe,
         Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
+        Map.empty,
         Map(owner -> 0L.toNonNegLongUnsafe)
       ),
       FeeDistributor.empty
