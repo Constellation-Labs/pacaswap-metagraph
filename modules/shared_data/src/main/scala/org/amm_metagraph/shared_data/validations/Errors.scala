@@ -4,6 +4,12 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.DataApplicationValidationError
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
+import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
+import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 
 object Errors {
   private type DataApplicationValidationType = DataApplicationValidationErrorOr[Unit]
@@ -145,4 +151,31 @@ object Errors {
   case object InvalidAMMMetagraphId extends DataApplicationValidationError {
     val message: String = "Invalid AMM Metagraph ID"
   }
+
+  @derive(encoder, decoder)
+  sealed trait FailedCalculatedStateReason
+
+  case class OperationExpired(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class AllowSpendExpired(allowSpend: AllowSpend) extends FailedCalculatedStateReason
+  case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailedCalculatedStateReason
+  case class SwapLessThanMinAmount() extends FailedCalculatedStateReason
+  case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailedCalculatedStateReason
+  case class CannotWithdrawAllShares() extends FailedCalculatedStateReason
+  case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
+      extends FailedCalculatedStateReason
+  case class ArithmeticError(message: String) extends FailedCalculatedStateReason
+  case class SwapWouldDrainPoolBalance() extends FailedCalculatedStateReason
+  case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailedCalculatedStateReason
+  case class WithdrawalWouldDrainPoolBalance() extends FailedCalculatedStateReason
+  case class InvalidLiquidityPool() extends FailedCalculatedStateReason
+  case class InvalidSwapTokenInfo(message: String) extends FailedCalculatedStateReason
+  case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedStakingRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedSwapRequest(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedAllowSpend(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class SourceAddressBetweenUpdateAndAllowSpendDifferent(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class AllowSpendsDestinationAddressInvalid() extends FailedCalculatedStateReason
+  case class MissingSwapTokenInfo() extends FailedCalculatedStateReason
+  case class MissingWithdrawalsAmount() extends FailedCalculatedStateReason
+  case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
 }

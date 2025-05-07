@@ -12,7 +12,7 @@ import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.States.{FailedCalculatedState, FailedCalculatedStateReason}
+import org.amm_metagraph.shared_data.types.States.FailedCalculatedState
 import org.amm_metagraph.shared_data.validations.Errors._
 
 object SharedValidations {

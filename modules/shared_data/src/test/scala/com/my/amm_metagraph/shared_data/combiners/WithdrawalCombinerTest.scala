@@ -58,7 +58,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
     ),
-    PosLong.unsafeFrom((1 * 1e8).toLong),
+    TokenLimits(
+      NonNegLong.unsafeFrom((1 * 1e8).toLong),
+      NonNegLong.unsafeFrom((9223372036854775000L * 1e8).toLong)
+    ),
     EpochProgress(NonNegLong.unsafeFrom(0L)),
     EpochMetadata(43.seconds)
   )
