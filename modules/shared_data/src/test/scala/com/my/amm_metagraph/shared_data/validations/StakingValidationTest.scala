@@ -36,7 +36,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingReference}
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
-import org.amm_metagraph.shared_data.validations.{Errors, ValidationService}
+import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
 object StakingValidationTest extends MutableIOSuite {
@@ -99,7 +99,20 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       response <- validationService.validateUpdate(stakingUpdate)(context)
     } yield expect.eql(Valid(()), response)
@@ -182,7 +195,21 @@ object StakingValidationTest extends MutableIOSuite {
         ownerAddress
       )
 
-      validationService = ValidationService.make[IO](config)
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      stakingValidations = StakingValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO]
+
+      validationService = ValidationService.make[IO](
+        config,
+        liquidityPoolValidations,
+        stakingValidations,
+        swapValidations,
+        withdrawalValidations,
+        governanceValidations
+      )
+
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
@@ -211,7 +238,20 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -283,7 +323,20 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -330,7 +383,20 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
-    val validationService = ValidationService.make[IO](config)
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
     for {
       response <- validationService.validateUpdate(stakingUpdate)(context)
     } yield {

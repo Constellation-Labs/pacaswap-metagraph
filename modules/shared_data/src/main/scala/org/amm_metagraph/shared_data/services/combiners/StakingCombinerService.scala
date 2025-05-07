@@ -17,6 +17,7 @@ import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
@@ -26,6 +27,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.validations.StakingValidations
 
 trait StakingCombinerService[F[_]] {
   def combineNew(
@@ -56,80 +58,11 @@ trait StakingCombinerService[F[_]] {
 
 object StakingCombinerService {
   def make[F[_]: Async: HasherSelector](
-    applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
+    stakingValidations: StakingValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): StakingCombinerService[F] =
     new StakingCombinerService[F] {
-      private def validateUpdate(
-        applicationConfig: ApplicationConfig,
-        signedUpdate: Signed[StakingUpdate],
-        maybeTokenInformation: Option[StakingTokenInformation],
-        maybeAllowSpendTokenA: Option[Hashed[AllowSpend]],
-        maybeAllowSpendTokenB: Option[Hashed[AllowSpend]],
-        lastSyncGlobalEpochProgress: EpochProgress,
-        confirmedStakings: Set[StakingCalculatedStateAddress],
-        pendingStakings: Set[Signed[StakingUpdate]],
-        currencyId: CurrencyId
-      ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-
-        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[StakingUpdate]] =
-          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          failWith(OperationExpired(signedUpdate))
-        } else {
-          val isDuplicated = confirmedStakings.exists(staking =>
-            staking.tokenAAllowSpend === signedUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === signedUpdate.tokenBAllowSpend
-          ) || pendingStakings.exists(staking =>
-            staking.value.tokenAAllowSpend === signedUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === signedUpdate.tokenBAllowSpend
-          )
-
-          if (isDuplicated) {
-            failWith(DuplicatedStakingRequest(signedUpdate))
-          } else {
-            (maybeTokenInformation, maybeAllowSpendTokenA, maybeAllowSpendTokenB) match {
-              case (Some(tokenInformation), Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
-                val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currencyId) {
-                  (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
-                } else {
-                  (tokenInformation.pairTokenInformation, tokenInformation.primaryTokenInformation)
-                }
-                if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
-                  failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate))
-                } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
-                  failWith(AllowSpendsDestinationAddressInvalid())
-                } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
-                  failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate))
-                } else if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
-                  failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value))
-                } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
-                  failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value))
-                } else if (
-                  allowSpendTokenA.lastValidEpochProgress.value.value + applicationConfig.allowSpendEpochBufferDelay.value.value < lastSyncGlobalEpochProgress.value.value
-                ) {
-                  failWith(AllowSpendExpired(allowSpendTokenA.signed.value))
-                } else if (
-                  allowSpendTokenB.lastValidEpochProgress.value.value + applicationConfig.allowSpendEpochBufferDelay.value.value < lastSyncGlobalEpochProgress.value.value
-                ) {
-                  failWith(AllowSpendExpired(allowSpendTokenB.signed.value))
-                } else {
-                  Right(signedUpdate)
-                }
-              case _ =>
-                Right(signedUpdate)
-            }
-          }
-        }
-      }
-
       private def getUpdateAllowSpends(
         stakingUpdate: StakingUpdate,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
@@ -201,16 +134,12 @@ object StakingCombinerService {
         val updates = stakingUpdate :: oldState.onChain.updates
         val combinedState = for {
           _ <- EitherT.fromEither(
-            validateUpdate(
-              applicationConfig,
+            stakingValidations.newUpdateValidations(
+              oldState.calculated,
               signedUpdate,
-              none,
-              none,
-              none,
               globalEpochProgress,
               confirmedStakings,
-              pendingStakings,
-              currencyId
+              pendingStakings
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
@@ -268,19 +197,6 @@ object StakingCombinerService {
         val updates = stakingUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          _ <- EitherT.fromEither[F](
-            validateUpdate(
-              applicationConfig,
-              pendingAllowSpendUpdate.update,
-              none,
-              none,
-              none,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              currencyId
-            )
-          )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
@@ -288,16 +204,13 @@ object StakingCombinerService {
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
                 stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(pendingAllowSpendUpdate.update, poolId, globalEpochProgress))
                 _ <- EitherT.fromEither[F](
-                  validateUpdate(
-                    applicationConfig,
+                  stakingValidations.pendingAllowSpendsValidations(
                     pendingAllowSpendUpdate.update,
-                    stakingTokenInfo.some,
-                    allowSpendTokenA.some,
-                    allowSpendTokenB.some,
                     globalEpochProgress,
-                    Set.empty,
-                    Set.empty,
-                    currencyId
+                    currencyId,
+                    stakingTokenInfo,
+                    allowSpendTokenA,
+                    allowSpendTokenB
                   )
                 )
                 (amountToSpendA, amountToSpendB) =
@@ -374,16 +287,9 @@ object StakingCombinerService {
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           _ <- EitherT.fromEither[F](
-            validateUpdate(
-              applicationConfig,
-              signedStakingUpdate,
-              none,
-              none,
-              none,
-              globalEpochProgress,
-              Set.empty,
-              Set.empty,
-              currencyId
+            stakingValidations.pendingSpendActionsValidation(
+              pendingSpendAction.update,
+              globalEpochProgress
             )
           )
           metagraphGeneratedSpendActionHash <- EitherT.liftF(
@@ -407,6 +313,7 @@ object StakingCombinerService {
                 )
                 sourceAddress = signedStakingUpdate.source
                 stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(signedStakingUpdate, poolId, globalEpochProgress))
+
                 liquidityPoolUpdated <- EitherT.fromEither[F](
                   pricingService.getUpdatedLiquidityPoolDueStaking(
                     liquidityPool,

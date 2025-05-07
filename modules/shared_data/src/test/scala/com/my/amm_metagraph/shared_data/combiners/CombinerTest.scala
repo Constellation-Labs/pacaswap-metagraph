@@ -4,7 +4,6 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -30,6 +29,7 @@ import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
 object CombinerTest extends MutableIOSuite {
@@ -129,12 +129,17 @@ object CombinerTest extends MutableIOSuite {
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
 
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      stakingValidations = StakingValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -265,12 +270,18 @@ object CombinerTest extends MutableIOSuite {
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
 
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      stakingValidations = StakingValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO]
+
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -410,12 +421,17 @@ object CombinerTest extends MutableIOSuite {
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
 
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      stakingValidations = StakingValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config)
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
-      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
-      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, jsonBase64BinaryCodec)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](

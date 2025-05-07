@@ -5,12 +5,14 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.States.{FailedCalculatedState, FailedCalculatedStateReason}
 import org.amm_metagraph.shared_data.validations.Errors._
 
 object SharedValidations {
@@ -24,6 +26,13 @@ object SharedValidations {
     val maxSignatureCount = 1L
     MultipleSignatures.unlessA(signed.proofs.size === maxSignatureCount)
   }
+
+  def failWith[A <: AmmUpdate](
+    reason: FailedCalculatedStateReason,
+    expireEpochProgress: EpochProgress,
+    signedUpdate: Signed[A]
+  ): Left[FailedCalculatedState, Signed[A]] =
+    Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
 
   def signatureValidations[F[_]: Async: SecurityProvider, A](
     signed: Signed[A],

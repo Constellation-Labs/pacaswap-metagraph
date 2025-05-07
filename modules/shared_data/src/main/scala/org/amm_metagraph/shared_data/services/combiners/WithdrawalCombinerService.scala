@@ -15,7 +15,6 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
@@ -26,6 +25,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalReference, getWithdrawalCalculatedState}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 
 trait WithdrawalCombinerService[F[_]] {
   def combineNew(
@@ -49,45 +49,10 @@ object WithdrawalCombinerService {
   def make[F[_]: Async: HasherSelector](
     applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
+    withdrawalValidations: WithdrawalValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
-      private def validateUpdate(
-        signedUpdate: Signed[WithdrawalUpdate],
-        lastSyncGlobalEpochProgress: EpochProgress,
-        maybeUpdatedPool: Option[LiquidityPool] = None
-      ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-
-        def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[WithdrawalUpdate]] =
-          Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-        if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-          failWith(OperationExpired(signedUpdate))
-        } else {
-          maybeUpdatedPool match {
-            case Some(withdrawalTokenAmounts) =>
-              if (
-                withdrawalTokenAmounts.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
-                withdrawalTokenAmounts.tokenB.amount < applicationConfig.minTokensLiquidityPool
-              ) {
-                failWith(WithdrawalWouldDrainPoolBalance())
-              } else {
-                Right(signedUpdate)
-              }
-
-            case None =>
-              Right(signedUpdate)
-          }
-        }
-      }
-
       private def handleFailedUpdate(
         updates: List[AmmUpdate],
         withdrawalUpdate: Signed[WithdrawalUpdate],
@@ -182,7 +147,6 @@ object WithdrawalCombinerService {
         }
 
         val combinedState = for {
-          _ <- EitherT.fromEither(validateUpdate(signedUpdate, globalEpochProgress))
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
           updateHashed <- EitherT.liftF(
@@ -205,7 +169,13 @@ object WithdrawalCombinerService {
             )
           )
 
-          _ <- EitherT.fromEither(validateUpdate(signedUpdate, globalEpochProgress, updatedPool.some))
+          _ <- EitherT.fromEither(
+            withdrawalValidations.newUpdateValidations(
+              signedUpdate,
+              globalEpochProgress,
+              updatedPool
+            )
+          )
 
           spendAction = generateSpendActionWithoutAllowSpends(
             signedUpdate.tokenAId,
@@ -269,7 +239,13 @@ object WithdrawalCombinerService {
               oldState.pure[F]
             } else {
               val processingState = for {
-                _ <- EitherT.fromEither(validateUpdate(signedWithdrawalUpdate, globalEpochProgress, none))
+                _ <- EitherT.fromEither(
+                  withdrawalValidations.pendingSpendActionsValidation(
+                    signedWithdrawalUpdate,
+                    globalEpochProgress
+                  )
+                )
+
                 withdrawalReference <- EitherT.liftF(
                   HasherSelector[F].withCurrent(implicit hs => WithdrawalReference.of(signedWithdrawalUpdate))
                 )
