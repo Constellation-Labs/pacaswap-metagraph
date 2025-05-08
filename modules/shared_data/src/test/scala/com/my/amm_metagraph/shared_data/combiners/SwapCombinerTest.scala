@@ -4,7 +4,6 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
@@ -16,7 +15,7 @@ import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
-
+import io.constellationnetwork.security.key.ops.PublicKeyOps
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
@@ -28,6 +27,7 @@ import org.amm_metagraph.shared_data.services.combiners.SwapCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.States.OperationType.Swap
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.{SwapReference, getPendingSpendActionSwapUpdates}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
@@ -2024,4 +2024,109 @@ object SwapCombinerTest extends MutableIOSuite {
         swapCalculatedState.failed.toList.head.reason == SwapHigherThanMaxAmount()
       )
   }
+
+  test("Failed because allowSpend source different than StakingUpdate source") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val tokenEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      keyPair2 <- KeyPairGenerator.makeKeyPair[IO]
+      address2 = keyPair2.getPublic.toAddress
+
+      allowSpend = AllowSpend(
+        address2,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = getFakeSignedUpdate(
+        SwapUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            sourceAddress -> SortedSet(signedAllowSpend.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapValidations = SwapValidations.make[IO](config)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
+        swapUpdate,
+        state,
+        tokenEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      swapCalculatedState = swapPendingSpendActionResponse.calculated.operations(Swap).asInstanceOf[SwapCalculatedState]
+    } yield
+      expect.all(
+        swapCalculatedState.failed.toList.length === 1,
+        swapCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(tokenEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
+        ),
+        swapCalculatedState.failed.toList.head.reason == SourceAddressBetweenUpdateAndAllowSpendDifferent(swapUpdate)
+      )
+  }
+
 }
