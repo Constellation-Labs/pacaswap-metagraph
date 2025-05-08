@@ -14,6 +14,10 @@ tags:
     description: Handles voting operations and weight calculations
   - name: Governance
     description: Manages reward allocations and governance
+  - name: Staking
+    description: Manages staking operations
+  - name: Withdrawals
+    description: Manages withdrawal operations and references
 paths:
   /swap/quote:
     post:
@@ -74,7 +78,23 @@ paths:
       tags:
         - LPs
       summary: List liquidity pools
-      description: List all liquidity pools
+      description: List all liquidity pools 
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: offset
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         200:
           description: Successful response
@@ -82,6 +102,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: ["data", "meta"]
                 properties:
                   data:
                     type: array
@@ -89,7 +110,7 @@ paths:
                       $ref: './components.yml#/components/schemas/LiquidityPool'
                   meta:
                     $ref: './components.yml#/components/schemas/Pagination'
-  /liquidity-pools/{poolID}:
+  /liquidity-pools/{poolId}:
     get:
       tags:
         - LPs
@@ -99,6 +120,7 @@ paths:
         - name: poolId
           in: path
           required: true
+          description: Unique identifier of the liquidity pool
           schema:
             type: string
       responses:
@@ -108,9 +130,58 @@ paths:
             application/json:
               schema:
                 type: object
+                required: ["data"]
                 properties:
                   data:
-                    $ref: './components.yml#/components/schemas/LiquidityPool'              
+                    $ref: './components.yml#/components/schemas/LiquidityPool'
+        404:
+          description: Liquidity pool not found
+  /liquidity-pools/{poolId}/shares/{address}:
+    get:
+      tags:
+        - LPs
+      summary: Get liquidity pool shares
+      description: Get the amount of shares an address holds in a specific liquidity pool
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          description: Unique identifier of the liquidity pool
+          schema:
+            type: string
+            minLength: 1
+        - name: address
+          in: path
+          required: true
+          description: Address to query shares for
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                required: ["data"]
+                properties:
+                  data:
+                    type: object
+                    required: ["poolId", "address", "shares"]
+                    properties:
+                      poolId:
+                        type: string
+                        description: Unique identifier of the liquidity pool
+                      address:
+                        type: string
+                        description: Address that owns the shares
+                      shares:
+                        type: integer
+                        description: Amount of shares owned by the address
+                        minimum: 0
+        404:
+          description: Liquidity pool not found
   /addresses/{address}/vote-info:
     get:
       tags:
@@ -184,6 +255,29 @@ paths:
                     $ref: './components.yml#/components/schemas/VotingWeight'
         404:
           description: Address not found
+  /addresses/{address}/withdrawals/last-reference:
+    get:
+      tags:
+        - Withdrawals
+      summary: Get last withdrawal reference
+      description: Retrieve the last withdrawal reference for a specific address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/WithdrawalReference'
   /governance/allocations/rewards:
     get:
       tags:
@@ -200,3 +294,26 @@ paths:
                 properties:
                   data:
                     $ref: './components.yml#/components/schemas/GovAllocationRewards'
+  /addresses/{address}/stakings/last-reference:
+    get:
+      tags:
+        - Staking
+      summary: Get last staking reference
+      description: Retrieve the last staking reference for a specific address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LastReference'

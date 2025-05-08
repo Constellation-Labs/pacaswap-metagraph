@@ -129,6 +129,18 @@ components:
           type: string
           description: Hash of the referenced state
 
+    StakingReference:
+      type: object
+      description: Reference to previous staking state
+      allOf:
+        - $ref: '#/components/schemas/LastReference'
+
+    WithdrawalReference:
+      type: object
+      description: Reference to previous withdrawal state
+      allOf:
+        - $ref: '#/components/schemas/LastReference'
+
     LiquidityPool:
       type: object
       description: Liquidity pool information
@@ -252,9 +264,13 @@ components:
             properties:
               weight:
                 type: integer
-                description: Weight amount
+                description: Weight of the lock
               tokenLock:
-                $ref: '#/components/schemas/TokenLock'
+                type: string
+                description: TokenLock reference
+              votedAtEpochProgress:
+                type: integer
+                description: epochProgress when the vote was accepted
 
     TokenLock:
       type: object
@@ -308,14 +324,13 @@ components:
         - fromTokenId
         - toTokenId
         - amount
-        - slippagePercent
       properties:
         fromTokenId:
           type: string
-          description: Currency ID of the token to swap from
+          description: Source token currency ID
         toTokenId:
           type: string
-          description: Currency ID of the token to swap to
+          description: Destination token currency ID
         amount:
           type: integer
           description: Amount of fromToken to swap
@@ -327,27 +342,17 @@ components:
 
     SwapQuote:
       type: object
-      description: Quote information for a potential swap
-      required:
-        - rate
-        - priceImpactPercent
-        - estimatedReceived
-        - minimumReceived
+      description: Quote information for a swap
       properties:
         fromTokenId:
           type: string
-          description: Currency ID of the token to swap from
+          description: Source token currency ID
         toTokenId:
           type: string
-          description: Currency ID of the token to swap to
+          description: Destination token currency ID
         amount:
           type: integer
           description: Amount of fromToken to swap
-        slippagePercent:
-          type: integer
-          description: Maximum acceptable slippage as a percentage
-          minimum: 0
-          maximum: 50
         rate:
           type: number
           description: Exchange rate between the tokens (toToken per fromToken)
@@ -363,13 +368,17 @@ components:
 
     Pagination:
       type: object
-      description: Optional pagination keys
+      description: Pagination metadata
       properties:
-        limit: 
-          type: integer
-        offset:
-          type: integer
         total:
           type: integer
-        has_more:
+          description: Total number of items available
+        limit:
+          type: integer
+          description: Number of items per page
+        offset:
+          type: integer
+          description: Number of items skipped
+        hasMore:
           type: boolean
+          description: Whether there are more items available
