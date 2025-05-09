@@ -40,7 +40,10 @@ object WithdrawalCombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], SecurityProvider[IO], HasherSelector[IO])
 
   private val config = ApplicationConfig(
-    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    ExpirationEpochProgresses(
+      EpochProgress(NonNegLong.unsafeFrom(30L)),
+      EpochProgress(NonNegLong.unsafeFrom(30L))
+    ),
     "NodeValidators",
     Dev,
     Governance(
@@ -174,7 +177,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.pending.isEmpty,
         withdrawalCalculatedState.failed.isEmpty,
-        withdrawalCalculatedState.confirmed.value.flatMap { case (_, s) => s }.exists(_.parent === reference),
+        withdrawalCalculatedState.confirmed.value.map { case (_, s) => s }.exists(_.values.head.value.parent === reference),
         withdrawalResponseConfirmedResponse.sharedArtifacts.isEmpty,
         // Should have 50.0 tokens remaining = 5000000000
         updatedLiquidityPool.tokenA.amount.value === toFixedPoint(50.0),
@@ -288,7 +291,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.pending.isEmpty,
         withdrawalCalculatedState.failed.isEmpty,
-        withdrawalCalculatedState.confirmed.value.flatMap { case (_, s) => s }.exists(_.parent === reference),
+        withdrawalCalculatedState.confirmed.value.map { case (_, s) => s }.exists(_.values.head.value.parent === reference),
         withdrawalResponseConfirmedResponse.sharedArtifacts.isEmpty,
         updatedLiquidityPool.poolShares.addressShares.size === 2,
         updatedLiquidityPool.poolShares.addressShares(ownerAddress).value.value.value === toFixedPoint(0.5),
@@ -634,6 +637,113 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
   }
 
+  test("Test successful withdrawal - single provider - cleanup provider") { implicit res =>
+    implicit val (h, sp, hs) = res
+
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+
+      // Withdraw 0.5 shares = 50000000 in fixed-point
+      withdrawalUpdate = getFakeSignedUpdate(
+        WithdrawalUpdate(
+          CurrencyId(ownerAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+          none,
+          none,
+          none,
+          none,
+          WithdrawalReference.empty,
+          EpochProgress.MaxValue
+        )
+      )
+
+      reference <- WithdrawalReference.of(withdrawalUpdate)
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+
+      withdrawalResponsePendingSpendActionResponse <- withdrawalCombinerService.combineNew(
+        withdrawalUpdate,
+        state,
+        EpochProgress.MinValue,
+        SortedMap.empty,
+        CurrencyId(ownerAddress)
+      )
+
+      spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
+      pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
+
+      withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
+        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue
+      )
+
+      withdrawalCleanupResponse = withdrawalCombinerService.cleanupExpiredOperations(
+        withdrawalResponseConfirmedResponse,
+        EpochProgress.MaxValue
+      )
+
+      withdrawalConfirmedState = withdrawalResponseConfirmedResponse.calculated
+        .operations(OperationType.Withdrawal)
+        .asInstanceOf[WithdrawalCalculatedState]
+        .confirmed
+        .value
+
+      withdrawalCleanupState = withdrawalCleanupResponse.calculated
+        .operations(OperationType.Withdrawal)
+        .asInstanceOf[WithdrawalCalculatedState]
+        .confirmed
+        .value
+
+    } yield
+      expect.all(
+        withdrawalConfirmedState.nonEmpty,
+        withdrawalCleanupState.nonEmpty,
+        withdrawalCleanupState.head._2.values.isEmpty
+      )
+  }
+
   test("Test fail withdrawal - tokenA min amount not reached") { implicit res =>
     implicit val (h, sp, hs) = res
 
@@ -709,7 +819,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.failed.toList.length === 1,
         withdrawalCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         withdrawalCalculatedState.failed.toList.head.reason == WithdrawalLessThanMinAmount()
       )
@@ -790,7 +900,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.failed.toList.length === 1,
         withdrawalCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         withdrawalCalculatedState.failed.toList.head.reason == WithdrawalLessThanMinAmount()
       )
@@ -871,7 +981,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.failed.toList.length === 1,
         withdrawalCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         withdrawalCalculatedState.failed.toList.head.reason == WithdrawalHigherThanMaxAmount()
       )
@@ -952,7 +1062,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       expect.all(
         withdrawalCalculatedState.failed.toList.length === 1,
         withdrawalCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         withdrawalCalculatedState.failed.toList.head.reason == WithdrawalHigherThanMaxAmount()
       )

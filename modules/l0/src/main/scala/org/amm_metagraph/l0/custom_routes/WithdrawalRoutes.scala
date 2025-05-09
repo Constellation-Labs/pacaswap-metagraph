@@ -20,16 +20,14 @@ case class WithdrawalRoutes[F[_]: Async](
 ) extends Http4sDsl[F] {
   private def getLastWithdrawalReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      calculatedState.state.operations
-        .get(OperationType.Withdrawal)
-        .collect {
-          case withdrawalCalculatedState: WithdrawalCalculatedState =>
-            withdrawalCalculatedState.confirmed.value
-              .get(address)
-              .flatMap(_.maxByOption(_.parent.ordinal))
-              .map(_.parent)
+      val maybeRef = for {
+        withdrawalState <- calculatedState.state.operations.get(OperationType.Withdrawal).collect {
+          case s: WithdrawalCalculatedState => s
         }
-        .fold(Ok(SingleResponse(WithdrawalReference.empty)))(lastRef => Ok(SingleResponse(lastRef)))
+        withdrawalData <- withdrawalState.confirmed.value.get(address)
+      } yield withdrawalData.lastReference
+
+      Ok(SingleResponse(maybeRef.getOrElse(WithdrawalReference.empty)))
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {

@@ -28,12 +28,22 @@ type StakingCalculatedStateAddress = {
     parent: LastRef
 }
 
+type StakingCalculatedStateValue = {
+    expiringEpochProgress: number,
+    value: StakingCalculatedStateAddress
+}
+
+type StakingCalculatedStateInfo = {
+    lastReference: LastRef,
+    values: StakingCalculatedStateValue[]
+}
+
 type StakingUpdateBody = {
     StakingUpdate: StakingUpdate
 }
 
 type ConfirmedStakingCalculatedState = {
-    value: Record<string, StakingCalculatedStateAddress[]>
+    value: Record<string, StakingCalculatedStateInfo>
 }
 
 const getLastStakingReference = async (
@@ -58,6 +68,9 @@ const createStakingUpdate = async (
     context: string
 ): Promise<Signed<StakingUpdateBody>> => {
     log(`Fetching last staking reference for wallet: ${account.address}`, "INFO", context);
+
+    const calculatedState = await getCalculatedState(l0Url)
+    log(`CALCULATED STATE: ${JSON.stringify(calculatedState, null, 2)}`)
 
     const lastRef = await getLastStakingReference(account.address, l0Url);
 
@@ -116,7 +129,8 @@ const validateStakingCreated = async (
 
     log(`Looking for confirmed stakings for wallet: ${account.address}`, "INFO", 'AMM')
 
-    const confirmedStaking = (confirmedStakings[account.address] || []).find(
+    const confirmedAddressStakings = confirmedStakings[account.address]?.values?.map(info => info.value) || []
+    const confirmedStaking = confirmedAddressStakings.find(
         (staking) =>
             staking.tokenA.identifier === tokenAId
             && staking.tokenB.identifier === tokenBId

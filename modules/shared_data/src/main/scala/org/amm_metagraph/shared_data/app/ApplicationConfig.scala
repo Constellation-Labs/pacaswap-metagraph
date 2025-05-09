@@ -9,7 +9,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import eu.timepit.refined.types.numeric.{NonNegLong, PosDouble, PosLong}
 
 case class ApplicationConfig(
-  failedOperationsExpirationEpochProgresses: EpochProgress,
+  expirationEpochProgresses: ApplicationConfig.ExpirationEpochProgresses,
   nodeValidatorsGovernanceAllocationId: String,
   environment: ApplicationConfig.Environment,
   governance: ApplicationConfig.Governance,
@@ -26,6 +26,11 @@ object ApplicationConfig {
   case object Testnet extends Environment
   case object Integrationnet extends Environment
   case object Mainnet extends Environment
+
+  case class ExpirationEpochProgresses(
+    confirmedOperations: EpochProgress,
+    failedOperations: EpochProgress
+  )
 
   case class VotingWeightMultipliers(
     lockForSixMonthsMultiplier: PosDouble,

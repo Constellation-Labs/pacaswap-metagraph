@@ -6,6 +6,7 @@ import cats.syntax.all._
 
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
@@ -37,6 +38,18 @@ object Withdrawal {
     maxAmountAOut: Option[SwapAmount],
     maxAmountBOut: Option[SwapAmount],
     parent: WithdrawalReference
+  )
+
+  @derive(encoder, decoder)
+  case class WithdrawalCalculatedStateValue(
+    expiringEpochProgress: EpochProgress,
+    value: WithdrawalCalculatedStateAddress
+  )
+
+  @derive(encoder, decoder)
+  case class WithdrawalCalculatedStateInfo(
+    lastReference: WithdrawalReference,
+    values: Set[WithdrawalCalculatedStateValue]
   )
 
   @derive(decoder, encoder, order, ordering)

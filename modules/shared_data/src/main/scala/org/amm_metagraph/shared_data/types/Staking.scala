@@ -7,6 +7,7 @@ import cats.syntax.all._
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
@@ -32,6 +33,18 @@ object Staking {
     tokenA: TokenInformation,
     tokenB: TokenInformation,
     parent: StakingReference
+  )
+
+  @derive(encoder, decoder)
+  case class StakingCalculatedStateValue(
+    expiringEpochProgress: EpochProgress,
+    value: StakingCalculatedStateAddress
+  )
+
+  @derive(encoder, decoder)
+  case class StakingCalculatedStateInfo(
+    lastReference: StakingReference,
+    values: Set[StakingCalculatedStateValue]
   )
 
   case class StakingTokenInformation(
@@ -62,8 +75,9 @@ object Staking {
   object StakingOrdinal {
     val first: StakingOrdinal = StakingOrdinal(1L)
   }
-  def getConfirmedStakings(state: AmmCalculatedState): Map[Address, Set[StakingCalculatedStateAddress]] =
-    state.operations.get(OperationType.Staking).fold(Map.empty[Address, Set[StakingCalculatedStateAddress]]) {
+
+  def getConfirmedStakings(state: AmmCalculatedState): Map[Address, StakingCalculatedStateInfo] =
+    state.operations.get(OperationType.Staking).fold(Map.empty[Address, StakingCalculatedStateInfo]) {
       case stakingCalculatedState: StakingCalculatedState => stakingCalculatedState.confirmed.value
       case _                                              => Map.empty
     }

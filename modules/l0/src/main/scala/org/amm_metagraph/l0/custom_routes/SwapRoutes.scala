@@ -200,9 +200,10 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
       result <- hashedPendingSwaps.find(_.hash === swapHash) match {
         case Some(found) => buildPendingSwapResponse(found.signed)
         case None =>
-          swapCalculatedState.confirmed.value.values.flatten
-            .find(_.swapHash === swapHash)
-            .map(buildConfirmedSwapResponse)
+          swapCalculatedState.confirmed.value.values
+            .flatMap(_.values)
+            .find(_.value.swapHash === swapHash)
+            .map(info => buildConfirmedSwapResponse(info.value))
             .getOrElse(NotFound())
       }
 
@@ -244,16 +245,14 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
 
   private def getLastSwapReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      calculatedState.state.operations
-        .get(OperationType.Swap)
-        .collect {
-          case swapCalculatedState: SwapCalculatedState =>
-            swapCalculatedState.confirmed.value
-              .get(address)
-              .flatMap(_.maxByOption(_.parent.ordinal))
-              .map(_.parent)
+      val maybeRef = for {
+        swapState <- calculatedState.state.operations.get(OperationType.Swap).collect {
+          case s: SwapCalculatedState => s
         }
-        .fold(Ok(SingleResponse(SwapReference.empty)))(lastRef => Ok(SingleResponse(lastRef)))
+        swapData <- swapState.confirmed.value.get(address)
+      } yield swapData.lastReference
+
+      Ok(SingleResponse(maybeRef.getOrElse(SwapReference.empty)))
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {

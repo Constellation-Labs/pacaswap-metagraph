@@ -33,7 +33,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingReference}
+import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations._
@@ -43,7 +43,10 @@ object StakingValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   private val config = ApplicationConfig(
-    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    ExpirationEpochProgresses(
+      EpochProgress(NonNegLong.unsafeFrom(30L)),
+      EpochProgress(NonNegLong.unsafeFrom(30L))
+    ),
     "NodeValidators",
     Dev,
     Governance(
@@ -294,15 +297,22 @@ object StakingValidationTest extends MutableIOSuite {
         OperationType.Staking -> StakingCalculatedState(
           ConfirmedStakingCalculatedState(
             Map(
-              signerAddress -> Set(
-                StakingCalculatedStateAddress(
-                  Hash("allowSpendA"),
-                  Hash("allowSpendB"),
-                  primaryToken,
-                  pairToken,
-                  StakingReference.empty
+              signerAddress ->
+                StakingCalculatedStateInfo(
+                  StakingReference.empty,
+                  Set(
+                    StakingCalculatedStateValue(
+                      EpochProgress.MaxValue,
+                      StakingCalculatedStateAddress(
+                        Hash("allowSpendA"),
+                        Hash("allowSpendB"),
+                        primaryToken,
+                        pairToken,
+                        StakingReference.empty
+                      )
+                    )
+                  )
                 )
-              )
             )
           ),
           Set.empty,

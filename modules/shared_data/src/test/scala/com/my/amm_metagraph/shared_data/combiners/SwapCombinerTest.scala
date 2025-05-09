@@ -149,7 +149,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).head
+      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).values.head.value
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -396,7 +396,7 @@ object SwapCombinerTest extends MutableIOSuite {
       expect.all(
         swapCalculatedState.failed.toList.length === 1,
         swapCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         swapCalculatedState.failed.toList.head.reason == SwapLessThanMinAmount()
       )
@@ -481,9 +481,11 @@ object SwapCombinerTest extends MutableIOSuite {
       pendingSwapResponseValue = pendingSwapResponse.head.update.value
 
     } yield
-      expect.eql(none, confirmedSwapResponse) &&
-        expect.eql(1, pendingSwapResponse.size) &&
-        expect.eql(swapUpdate.value.allowSpendReference, pendingSwapResponseValue.allowSpendReference)
+      expect.all(
+        confirmedSwapResponse.isEmpty,
+        pendingSwapResponse.size === 1,
+        swapUpdate.value.allowSpendReference === pendingSwapResponseValue.allowSpendReference
+      )
   }
 
   test("Test swap - ignore swap that exceed limit epoch progress") { implicit res =>
@@ -564,8 +566,10 @@ object SwapCombinerTest extends MutableIOSuite {
       pendingSwapResponse = swapCalculatedState.pending
 
     } yield
-      expect.eql(none, confirmedSwapResponse) &&
-        expect.eql(0, pendingSwapResponse.size)
+      expect.all(
+        confirmedSwapResponse.isEmpty,
+        pendingSwapResponse.size === 0
+      )
   }
 
   test("Test swap - 0.3% fee correctly applies to the swap") { implicit res =>
@@ -679,7 +683,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).head
+      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).values.head.value
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -858,7 +862,7 @@ object SwapCombinerTest extends MutableIOSuite {
         updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId)
       } yield
         if (swapCalculatedState.confirmed.value.nonEmpty) {
-          val confirmedSwap = swapCalculatedState.confirmed.value.head._2.head
+          val confirmedSwap = swapCalculatedState.confirmed.value.head._2.values.head.value
           expect.all(
             swapCalculatedState.confirmed.value.size === 1,
             swapCalculatedState.failed.isEmpty,
@@ -993,7 +997,7 @@ object SwapCombinerTest extends MutableIOSuite {
         updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value(poolId)
       } yield
         if (swapCalculatedState.confirmed.value.nonEmpty) {
-          val confirmedSwap = swapCalculatedState.confirmed.value.head._2.head
+          val confirmedSwap = swapCalculatedState.confirmed.value.head._2.values.head.value
           expect.all(
             swapCalculatedState.confirmed.value.size === 1,
             swapCalculatedState.failed.isEmpty,
@@ -1158,7 +1162,7 @@ object SwapCombinerTest extends MutableIOSuite {
               )
               .and {
                 if (successResult) {
-                  val confirmedSwap = swapCalculatedState.confirmed.value.head._2.head
+                  val confirmedSwap = swapCalculatedState.confirmed.value.head._2.values.head.value
                   val updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value.get(poolId)
 
                   expect.all(
@@ -1324,7 +1328,7 @@ object SwapCombinerTest extends MutableIOSuite {
               )
               .and {
                 if (successResult) {
-                  val confirmedSwap = swapCalculatedState.confirmed.value.head._2.head
+                  val confirmedSwap = swapCalculatedState.confirmed.value.head._2.values.head.value
                   val updatedLiquidityPool = updatedLiquidityPoolCalculatedState.confirmed.value.get(poolId)
                   expect.all(
                     confirmedSwap.netReceived.value.value >= fixedMinOutputAmount,
@@ -1791,6 +1795,134 @@ object SwapCombinerTest extends MutableIOSuite {
       )
   }
 
+  test("Test swap successfully when liquidity pool exists - cleanup expired") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpend = AllowSpend(
+        sourceAddress,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = getFakeSignedUpdate(
+        SwapUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            sourceAddress -> SortedSet(signedAllowSpend.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapValidations = SwapValidations.make[IO](config)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
+        swapUpdate,
+        state,
+        EpochProgress.MinValue,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      spendActions = swapPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
+      pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
+      metagraphId <- context.getCurrencyId
+
+      swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
+        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        swapPendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue,
+        metagraphId
+      )
+
+      swapCleanupResponse = swapCombinerService.cleanupExpiredOperations(
+        swapConfirmedResponse,
+        EpochProgress.MaxValue
+      )
+
+      swapConfirmedState = swapConfirmedResponse.calculated
+        .operations(OperationType.Swap)
+        .asInstanceOf[SwapCalculatedState]
+        .confirmed
+        .value
+
+      swapCleanupState = swapCleanupResponse.calculated
+        .operations(OperationType.Swap)
+        .asInstanceOf[SwapCalculatedState]
+        .confirmed
+        .value
+
+    } yield
+      expect.all(
+        swapConfirmedState.nonEmpty,
+        swapCleanupState.nonEmpty,
+        swapCleanupState.head._2.values.isEmpty
+      )
+  }
+
   test("Test swap successfully when liquidity pool exists") { implicit res =>
     implicit val (h, hs, sp) = res
 
@@ -1887,7 +2019,7 @@ object SwapCombinerTest extends MutableIOSuite {
       expect.all(
         swapCalculatedState.failed.toList.length === 1,
         swapCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         swapCalculatedState.failed.toList.head.reason == SwapHigherThanMaxAmount()
       )

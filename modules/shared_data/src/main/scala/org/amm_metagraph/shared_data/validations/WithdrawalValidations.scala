@@ -12,6 +12,7 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
@@ -102,13 +103,7 @@ object WithdrawalValidations {
       lastSyncGlobalEpochProgress: EpochProgress,
       updatedPool: LiquidityPool
     ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
@@ -136,13 +131,7 @@ object WithdrawalValidations {
       signedUpdate: Signed[WithdrawalUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
     ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
@@ -199,8 +188,7 @@ object WithdrawalValidations {
     ): DataApplicationValidationErrorOr[Unit] = {
       val lastConfirmed: Option[WithdrawalReference] = withdrawalCalculatedState.confirmed.value
         .get(address)
-        .flatMap(_.maxByOption(_.parent.ordinal))
-        .map(_.parent)
+        .map(_.lastReference)
 
       lastConfirmed match {
         case Some(last) if signedWithdrawal.ordinal =!= last.ordinal.next || signedWithdrawal.parent =!= last =>

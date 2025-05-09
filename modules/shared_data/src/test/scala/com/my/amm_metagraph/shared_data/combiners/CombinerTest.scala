@@ -137,7 +137,7 @@ object CombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
@@ -279,7 +279,7 @@ object CombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
@@ -429,7 +429,7 @@ object CombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
