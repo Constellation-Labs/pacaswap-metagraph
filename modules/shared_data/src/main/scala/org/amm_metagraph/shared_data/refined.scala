@@ -1,9 +1,15 @@
 package org.amm_metagraph.shared_data
 
+import cats.implicits.{catsSyntaxEitherId, catsSyntaxSemigroup, toBifunctorOps}
 import cats.{Eq, Order}
 
 import scala.math.BigDecimal.RoundingMode
+import scala.util.control.NoStackTrace
 
+import io.constellationnetwork.schema.epoch.EpochProgress
+
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}

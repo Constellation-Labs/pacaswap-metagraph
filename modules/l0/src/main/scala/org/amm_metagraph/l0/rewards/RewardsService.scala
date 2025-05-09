@@ -11,14 +11,14 @@ import io.constellationnetwork.node.shared.domain.rewards.Rewards
 import io.constellationnetwork.node.shared.infrastructure.consensus.trigger.ConsensusTrigger
 import io.constellationnetwork.node.shared.snapshot.currency.CurrencySnapshotEvent
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.Balance
+import io.constellationnetwork.schema.balance.{Amount, Balance}
 import io.constellationnetwork.schema.transaction.{RewardTransaction, Transaction, TransactionAmount}
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.syntax.sortedCollection._
 
 import eu.timepit.refined.types.all.PosLong
-import org.amm_metagraph.shared_data.app.ApplicationConfigOps
+import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 
 object RewardsService {
@@ -34,25 +34,21 @@ object RewardsService {
       maybeCalculatedState.collect {
         case ammCalculatedState: AmmCalculatedState => ammCalculatedState
       } match {
-        case Some(calculatedState) =>
-          for {
-            config <- ApplicationConfigOps.readDefault[F]
-            calculator = RewardCalculator.make(config.rewards, config.epochInfo)
-            facilitators <- lastArtifact.proofs.toList.traverse(_.id.toAddress[F])
-            votingPowers = calculatedState.votingWeights.toList.map { case (addr, weight) => VotingPower(addr, weight) }
-            distribution <- calculator.calculateEpochRewards[F](
-              lastArtifact.epochProgress,
-              facilitators,
-              votingPowers
-            )
+        case Some(calculatedState: AmmCalculatedState) =>
+          val currentEpoch = lastArtifact.epochProgress
 
-            rewardTransactions = distribution.toList.flatMap { dist =>
-              (dist.governanceRewards.toList ++ dist.votingRewards.toList ++ dist.validatorRewards.toList :+ dist.daoRewards).flatMap {
-                case (addr, amount) => PosLong.from(amount.value.value).map(pos => RewardTransaction(addr, TransactionAmount(pos))).toList
-              }
+          val addressesAndAmount: List[(Address, Amount)] =
+            calculatedState.rewards.withdraws.pending.getOrElse(currentEpoch, RewardInfo.empty).info.toList.map {
+              case (AddressAndRewardType(address, _), amount) => address -> amount
             }
 
-          } yield rewardTransactions.toSortedSet
+          val rewardTransactions: List[RewardTransaction] = addressesAndAmount.flatMap {
+            case (address, amount) =>
+              PosLong.from(amount.value.value).map(pos => RewardTransaction(address, TransactionAmount(pos))).toList
+          }
+
+          rewardTransactions.toSortedSet.pure[F]
+
         case None => SortedSet.empty[RewardTransaction].pure[F]
       }
 }

@@ -1,4 +1,4 @@
-package org.amm_metagraph.l0
+package org.amm_metagraph.shared_data
 
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval

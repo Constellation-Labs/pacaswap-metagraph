@@ -181,9 +181,9 @@ const voteAllocationTests = async (argsObject: object) => {
       
           const rewards = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId);
       
-          const expectedRewards = [95496, 232770];
+          const expectedRewards = [];
       
-          if (rewards.length !== 2 || rewards[0] !== expectedRewards[0] || rewards[1] !== expectedRewards[1]) {
+          if (rewards.length !== 0) {
             throw new Error(`Unexpected rewards for address ${address}: got ${JSON.stringify(rewards)}`);
           }
       

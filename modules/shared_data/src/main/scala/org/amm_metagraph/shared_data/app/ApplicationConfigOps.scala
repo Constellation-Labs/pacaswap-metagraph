@@ -39,7 +39,9 @@ object ConfigReaders {
       daoWeight = NonNegLong(20L),
       votingWeight = NonNegLong(75L),
       initialEpoch = _cfg.initialEpoch,
-      daoAddress = _cfg.daoAddress
+      daoAddress = _cfg.daoAddress,
+      rewardCalculationInterval = NonNegLong(100),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10))
     )
 
     Either.cond(

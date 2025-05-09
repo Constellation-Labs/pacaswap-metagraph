@@ -1,4 +1,4 @@
-package org.amm_metagraph.l0.rewards
+package org.amm_metagraph.shared_data.rewards
 
 import cats.data.EitherT
 import cats.effect.kernel.Async
@@ -9,12 +9,15 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
+import derevo.cats.show
+import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.Governance.VotingWeight
 
+@derive(show)
 sealed trait RewardError extends Throwable
 case class NegativeValueError(value: Long) extends RewardError
 case class InvalidMonthError(month: Int) extends RewardError
@@ -26,19 +29,43 @@ case class RewardDistribution(
   daoRewards: (Address, Amount),
   votingRewards: Map[Address, Amount],
   governanceRewards: Map[Address, Amount]
-)
+) {
+  def updateAllRewards(updateFun: NonNegLong => NonNegLong): RewardDistribution = {
+    def updateEntry[T](keyValue: (T, Amount)) = keyValue._1 -> Amount(updateFun(keyValue._2.value))
+
+    val newValidatorRewards = validatorRewards.map(updateEntry)
+    val newDaoRewards = updateEntry(daoRewards)
+    val newVotingRewards = votingRewards.map(updateEntry)
+    val newGovernanceRewards = governanceRewards.map(updateEntry)
+    this.copy(
+      validatorRewards = newValidatorRewards,
+      daoRewards = newDaoRewards,
+      votingRewards = newVotingRewards,
+      governanceRewards = newGovernanceRewards
+    )
+  }
+}
 
 case class VotingPower(
   address: Address,
   power: VotingWeight
 )
 
-object RewardCalculator {
-  def make(config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): RewardCalculator =
-    new RewardCalculator(config, epochData)
+trait RewardCalculator[F[_]] {
+  def calculateEpochRewards(
+    currentProgress: EpochProgress,
+    validators: List[Address],
+    votingPowers: List[VotingPower]
+  ): F[Either[RewardError, RewardDistribution]]
 }
 
-class RewardCalculator(rewardConfig: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata) {
+object RewardCalculator {
+  def make[F[_]: Async](config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): RewardCalculator[F] =
+    new RewardCalculatorImpl(config, epochData)
+}
+
+class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata)
+    extends RewardCalculator[F] {
   private def toAmount(value: Long): Either[RewardError, Amount] =
     NonNegLong
       .from(value)
@@ -110,7 +137,7 @@ class RewardCalculator(rewardConfig: ApplicationConfig.Rewards, epochData: Appli
     }
   }
 
-  private def calculateGovernanceRewards[F[_]: Async](
+  private def calculateGovernanceRewards(
     votingPowers: List[VotingPower],
     currentProgress: EpochProgress
   ): F[Either[RewardError, Map[Address, Amount]]] = {
@@ -152,7 +179,7 @@ class RewardCalculator(rewardConfig: ApplicationConfig.Rewards, epochData: Appli
      }).value
   }
 
-  def calculateEpochRewards[F[_]: Async](
+  def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: List[Address],
     votingPowers: List[VotingPower]

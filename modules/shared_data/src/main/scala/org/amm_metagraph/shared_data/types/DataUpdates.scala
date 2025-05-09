@@ -4,6 +4,7 @@ import io.constellationnetwork.currency.dataApplication.DataUpdate
 import io.constellationnetwork.ext.cats.syntax.next._
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
@@ -13,9 +14,10 @@ import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
-import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
+import org.amm_metagraph.shared_data.types.RewardWithdraw.{RewardWithdrawOrdinal, RewardWithdrawReference}
+import org.amm_metagraph.shared_data.types.Rewards.RewardType
 import org.amm_metagraph.shared_data.types.Staking.{StakingOrdinal, StakingReference}
 import org.amm_metagraph.shared_data.types.Swap.{SwapOrdinal, SwapReference}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalOrdinal, WithdrawalReference}
@@ -97,5 +99,16 @@ object DataUpdates {
     allocations: Seq[(String, PosLong)]
   ) extends AmmUpdate {
     val ordinal: RewardAllocationVoteOrdinal = parent.ordinal.next
+  }
+
+  @derive(decoder, encoder)
+  case class RewardWithdrawUpdate(
+    metagraphId: CurrencyId,
+    source: Address,
+    parent: RewardWithdrawReference,
+    rewardType: RewardType,
+    amount: Amount
+  ) extends AmmUpdate {
+    val ordinal: RewardWithdrawOrdinal = parent.ordinal.next
   }
 }
