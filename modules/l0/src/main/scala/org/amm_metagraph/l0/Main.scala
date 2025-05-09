@@ -19,6 +19,7 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
+import org.amm_metagraph.shared_data.rewards.RewardCalculator
 import org.amm_metagraph.shared_data.services.combiners._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
@@ -74,6 +75,9 @@ object Main
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
     withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+    rewardsCalculator = RewardCalculator.make[IO](config.rewards, config.epochInfo)
+    rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards)
+    rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards)
 
     combinerService = L0CombinerService
       .make[IO](
@@ -82,7 +86,9 @@ object Main
         liquidityPoolCombinerService,
         stakingCombinerService,
         swapCombinerService,
-        withdrawalCombinerService
+        withdrawalCombinerService,
+        rewardsCombinerService,
+        rewardsWithdrawService
       )
 
     l0Service = MetagraphL0Service

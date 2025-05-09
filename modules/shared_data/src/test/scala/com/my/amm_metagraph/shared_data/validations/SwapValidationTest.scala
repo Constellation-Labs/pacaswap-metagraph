@@ -67,7 +67,9 @@ object SwapValidationTest extends MutableIOSuite {
       NonNegLong.MinValue,
       NonNegLong.MinValue,
       EpochProgress.MinValue,
-      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+      rewardCalculationInterval = NonNegLong(100),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),
@@ -188,7 +190,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -266,7 +268,7 @@ object SwapValidationTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
@@ -332,7 +334,7 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )

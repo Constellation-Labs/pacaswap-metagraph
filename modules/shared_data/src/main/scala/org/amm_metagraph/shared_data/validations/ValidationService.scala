@@ -13,6 +13,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations.{rewardWithdrawValidationL0, rewardWithdrawValidationL1}
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateAmmMetagraphId
 
 trait ValidationService[F[_]] {
@@ -27,7 +28,7 @@ trait ValidationService[F[_]] {
 }
 
 object ValidationService {
-  def make[F[_]: Async: SecurityProvider: HasherSelector](
+  def make[F[_]: Async: SecurityProvider](
     applicationConfig: ApplicationConfig,
     liquidityPoolValidations: LiquidityPoolValidations[F],
     stakingValidations: StakingValidations[F],
@@ -49,6 +50,8 @@ object ValidationService {
           case swapUpdate: SwapUpdate => swapValidations.l1Validations(swapUpdate)
           case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
             governanceValidations.l1Validations(rewardAllocationVoteUpdate)
+          case rewardWithdrawUpdate: RewardWithdrawUpdate =>
+            rewardWithdrawValidationL1(rewardWithdrawUpdate)
         }
       } yield
         result
@@ -79,6 +82,8 @@ object ValidationService {
                 state,
                 lastSyncGlobalSnapshot.epochProgress
               )
+            case rewardWithdrawUpdate: RewardWithdrawUpdate =>
+              rewardWithdrawValidationL0(Signed(rewardWithdrawUpdate, signedUpdate.proofs), state)
           }
         } yield
           result

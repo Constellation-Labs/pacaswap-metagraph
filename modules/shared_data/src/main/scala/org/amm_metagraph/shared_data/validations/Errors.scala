@@ -4,12 +4,17 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.DataApplicationValidationError
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.balance.{Amount, BalanceArithmeticError}
+import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import org.amm_metagraph.shared_data.refined.NonNegLongArithmeticError
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
+import org.amm_metagraph.shared_data.types.Rewards.RewardType
 
 object Errors {
   private type DataApplicationValidationType = DataApplicationValidationErrorOr[Unit]
@@ -152,6 +157,14 @@ object Errors {
     val message: String = "Invalid AMM Metagraph ID"
   }
 
+  case object InvalidRewardWithdrawParent extends DataApplicationValidationError {
+    val message: String = "Reward withdrawal parent does not match last confirmed"
+  }
+
+  case object InvalidRewardWithdrawAmount extends DataApplicationValidationError {
+    val message: String = "Not enough available reward amount withdraw"
+  }
+
   @derive(encoder, decoder)
   sealed trait FailedCalculatedStateReason
 
@@ -181,4 +194,7 @@ object Errors {
   case class MissingSwapTokenInfo() extends FailedCalculatedStateReason
   case class MissingWithdrawalsAmount() extends FailedCalculatedStateReason
   case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class InvalidAddressRewardType(address: Address, rewardType: RewardType) extends FailedCalculatedStateReason
+  case object WrongRewardWithdrawEpoch extends FailedCalculatedStateReason
+  case class RewardWithdrawAmountError(currentAmount: Amount, error: String) extends FailedCalculatedStateReason
 }

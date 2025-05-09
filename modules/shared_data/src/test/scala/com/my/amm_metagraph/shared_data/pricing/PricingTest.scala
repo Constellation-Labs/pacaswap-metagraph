@@ -40,7 +40,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -82,7 +82,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -124,7 +124,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -166,7 +166,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -203,7 +203,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -240,7 +240,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -294,7 +294,7 @@ object PricingTest extends SimpleIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )

@@ -14,9 +14,9 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.key.ops.PublicKeyOps
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
-import io.constellationnetwork.security.key.ops.PublicKeyOps
 
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
@@ -58,7 +58,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -181,7 +181,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -308,7 +308,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState()
 
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -419,7 +419,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState()
 
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -530,7 +530,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -638,7 +638,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -748,7 +748,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -851,7 +851,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
