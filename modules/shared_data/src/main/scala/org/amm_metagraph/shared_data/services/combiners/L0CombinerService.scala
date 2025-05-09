@@ -306,7 +306,6 @@ object L0CombinerService {
           )
 
           lastSyncGlobal = context.getLastSynchronizedGlobalSnapshotCombined
-          _ <- logger.info(s"TESTING: ${lastSyncGlobal}")
           (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, lastSyncState) <- OptionT(lastSyncGlobal).map {
             case (snapshot, info) => (snapshot.epochProgress, snapshot.ordinal, info)
           }.getOrElseF {
