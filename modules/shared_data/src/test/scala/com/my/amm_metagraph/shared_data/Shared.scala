@@ -50,7 +50,9 @@ object Shared {
       NonNegLong.MinValue,
       NonNegLong.MinValue,
       EpochProgress.MinValue,
-      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+      rewardCalculationInterval = NonNegLong(100),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),

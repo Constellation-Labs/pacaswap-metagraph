@@ -49,7 +49,9 @@ object ApplicationConfig {
     daoWeight: NonNegLong,
     votingWeight: NonNegLong,
     initialEpoch: EpochProgress,
-    daoAddress: Address
+    daoAddress: Address,
+    rewardCalculationInterval: NonNegLong,
+    rewardWithdrawDelay: EpochProgress
   )
 
   case class TokenLimits(
