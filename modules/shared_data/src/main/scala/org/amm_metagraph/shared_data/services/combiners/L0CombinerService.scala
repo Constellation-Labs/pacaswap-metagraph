@@ -288,11 +288,14 @@ object L0CombinerService {
             globalSnapshotsStorage
           )
 
-          newState =
-            DataState(
-              AmmOnChainState(List.empty),
-              oldState.calculated
-            )
+          /*We should clean up the previous onChain and sharedArtifacts in every combine call, to avoid duplications.
+          In other words, we will preserve between the update batches, but we should clean at every call of the combine.
+           */
+          newState = oldState
+            .focus(_.onChain.updates)
+            .replace(Set.empty)
+            .focus(_.sharedArtifacts)
+            .replace(SortedSet.empty)
 
           pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
           pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)

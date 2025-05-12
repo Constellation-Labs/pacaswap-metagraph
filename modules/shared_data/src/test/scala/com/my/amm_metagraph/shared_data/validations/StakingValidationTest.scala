@@ -126,7 +126,7 @@ object StakingValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -220,7 +220,7 @@ object StakingValidationTest extends MutableIOSuite {
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
 
-    val ammOnChainState = AmmOnChainState(List.empty) // No pools initialized
+    val ammOnChainState = AmmOnChainState(Set.empty) // No pools initialized
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -284,7 +284,7 @@ object StakingValidationTest extends MutableIOSuite {
     val signerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(
         OperationType.LiquidityPool -> liquidityPoolCalculatedState,

@@ -66,7 +66,7 @@ object StakingCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -213,7 +213,7 @@ object StakingCombinerTest extends MutableIOSuite {
       Some(secondProviderAddress -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     )
 
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -345,7 +345,7 @@ object StakingCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -462,7 +462,7 @@ object StakingCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -581,7 +581,7 @@ object StakingCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -706,7 +706,7 @@ object StakingCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(List.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty)
     val ammCalculatedState = AmmCalculatedState(
       Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )

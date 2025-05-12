@@ -3,23 +3,16 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
-
-import scala.collection.immutable.{SortedMap, SortedSet}
-
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher}
-
-import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
-import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
@@ -28,6 +21,8 @@ import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.StakingValidations
+
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 trait StakingCombinerService[F[_]] {
   def combineNew(
@@ -78,7 +73,6 @@ object StakingCombinerService {
         }
 
       private def handleFailedUpdate(
-        updates: List[AmmUpdate],
         stakingUpdate: Signed[StakingUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
@@ -94,10 +88,11 @@ object StakingCombinerService {
           .focus(_.operations)
           .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
 
-        DataState(
-          AmmOnChainState(updates),
-          updatedCalculatedState
-        )
+        acc
+          .focus(_.onChain.updates)
+          .modify(current => current + stakingUpdate.value)
+          .focus(_.calculated)
+          .replace(updatedCalculatedState)
       }
 
       private def removePendingAllowSpend(
@@ -131,7 +126,6 @@ object StakingCombinerService {
         val pendingAllowSpendsCalculatedState = stakingCalculatedState.pending
 
         val stakingUpdate = signedUpdate.value
-        val updates = stakingUpdate :: oldState.onChain.updates
         val combinedState = for {
           _ <- EitherT.fromEither(
             stakingValidations.newUpdateValidations(
@@ -158,13 +152,13 @@ object StakingCombinerService {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.Staking, newStakingState))
 
-              val result = DataState(
-                AmmOnChainState(updates),
-                updatedCalculatedState,
-                oldState.sharedArtifacts
+              EitherT.rightT[F, FailedCalculatedState](
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + stakingUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
               )
-
-              EitherT.rightT[F, FailedCalculatedState](result)
 
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
@@ -180,7 +174,7 @@ object StakingCombinerService {
         } yield response
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, stakingCalculatedState)
+          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, stakingCalculatedState)
         }
       }
 
@@ -194,7 +188,6 @@ object StakingCombinerService {
 
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
         val stakingUpdate = pendingAllowSpendUpdate.update.value
-        val updates = stakingUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
@@ -252,13 +245,18 @@ object StakingCombinerService {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
 
-                updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](spendAction)
               } yield
-                DataState(
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  updatedSharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + stakingUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
+                  .focus(_.sharedArtifacts)
+                  .modify(current =>
+                    current ++ SortedSet[SharedArtifact](
+                      spendAction
+                    )
+                  )
 
             case _ =>
               EitherT.rightT[F, FailedCalculatedState](oldState)
@@ -266,7 +264,7 @@ object StakingCombinerService {
         } yield result
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, pendingAllowSpendUpdate.update, oldState, failedCalculatedState, stakingCalculatedState)
+          handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failedCalculatedState, stakingCalculatedState)
         }
       }
 
@@ -283,7 +281,6 @@ object StakingCombinerService {
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
 
         val stakingUpdate = signedStakingUpdate.value
-        val updates = stakingUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           _ <- EitherT.fromEither[F](
@@ -352,16 +349,16 @@ object StakingCombinerService {
                   .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
 
               } yield
-                DataState(
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  oldState.sharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + stakingUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
             }
         } yield result
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedStakingUpdate, oldState, failedCalculatedState, stakingCalculatedState)
+          handleFailedUpdate(signedStakingUpdate, oldState, failedCalculatedState, stakingCalculatedState)
         }
       }
     }

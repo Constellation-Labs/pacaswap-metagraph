@@ -115,7 +115,6 @@ object SwapCombinerService {
       }
 
       private def handleFailedUpdate(
-        updates: List[AmmUpdate],
         swapUpdate: Signed[SwapUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
@@ -131,10 +130,11 @@ object SwapCombinerService {
           .focus(_.operations)
           .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
 
-        DataState(
-          AmmOnChainState(updates),
-          updatedCalculatedState
-        )
+        acc
+          .focus(_.onChain.updates)
+          .modify(current => current + swapUpdate)
+          .focus(_.calculated)
+          .replace(updatedCalculatedState)
       }
 
       private def getUpdateAllowSpend(
@@ -181,8 +181,6 @@ object SwapCombinerService {
         val swapCalculatedStatePendingAllowSpend = swapCalculatedState.pending
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
 
-        val updates = swapUpdate :: oldState.onChain.updates
-
         val combinedState = for {
           _ <- EitherT.fromEither(
             swapValidations.newUpdateValidations(
@@ -219,11 +217,9 @@ object SwapCombinerService {
             .focus(_.operations)
             .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
-          updatedState = DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState,
-            oldState.sharedArtifacts
-          )
+          updatedLpState = oldState
+            .focus(_.calculated)
+            .replace(updatedCalculatedState)
 
           response <- updateAllowSpends match {
             case None =>
@@ -233,22 +229,24 @@ object SwapCombinerService {
                 .focus(_.pending)
                 .replace(updatedPendingSwapsCalculatedState)
 
-              val updatedCalculatedState = updatedState.calculated
+              val updatedCalculatedState = updatedLpState.calculated
                 .focus(_.operations)
                 .modify(_.updated(OperationType.Swap, newSwapState))
-
-              val result = DataState(
-                AmmOnChainState(updates),
-                updatedCalculatedState,
-                oldState.sharedArtifacts
+              
+              
+              EitherT.rightT[F, FailedCalculatedState](
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + swapUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
               )
-              EitherT.rightT[F, FailedCalculatedState](result)
 
             case Some(_) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
                   PendingAllowSpend(signedUpdate, updateHashed.hash, updatedTokenInformation.some),
-                  updatedState,
+                  updatedLpState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
                   currencyId
@@ -258,7 +256,7 @@ object SwapCombinerService {
         } yield response
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, swapCalculatedState)
+          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, swapCalculatedState)
         }
       }
 
@@ -271,7 +269,6 @@ object SwapCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
         val swapUpdate = pendingAllowSpend.update.value
-        val updates = swapUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(pendingAllowSpend.update, lastGlobalSnapshotsAllowSpends))
@@ -329,14 +326,19 @@ object SwapCombinerService {
                 updatedCalculatedState = oldState.calculated
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Swap, updatedPendingSwapCalculatedState))
-
-                updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](spendActionToken)
+                
               } yield
-                DataState(
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  updatedSharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + swapUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
+                  .focus(_.sharedArtifacts)
+                  .modify(current =>
+                    current ++ SortedSet[SharedArtifact](
+                      spendActionToken
+                    )
+                  )
 
             case None =>
               EitherT.rightT[F, FailedCalculatedState](oldState)
@@ -352,7 +354,6 @@ object SwapCombinerService {
             currencyId
           ).map { rolledBackState =>
             handleFailedUpdate(
-              updates,
               pendingAllowSpend.update,
               rolledBackState,
               failedCalculatedState,
@@ -373,9 +374,7 @@ object SwapCombinerService {
         val signedSwapUpdate = pendingSpendAction.update
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
-
         val swapUpdate = pendingSpendAction.update.value
-        val updates = swapUpdate :: oldState.onChain.updates
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           swapReference <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate)))
@@ -449,11 +448,11 @@ object SwapCombinerService {
             .focus(_.operations)
             .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
         } yield
-          DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState,
-            oldState.sharedArtifacts
-          )
+          oldState
+            .focus(_.onChain.updates)
+            .modify(current => current + swapUpdate)
+            .focus(_.calculated)
+            .replace(updatedCalculatedState)
 
         combinedState.valueOrF { failedCalculatedState =>
           rollbackAmountInLPs(
@@ -464,7 +463,6 @@ object SwapCombinerService {
             currencyId
           ).map { rolledBackState =>
             handleFailedUpdate(
-              updates,
               pendingSpendAction.update,
               rolledBackState,
               failedCalculatedState,
