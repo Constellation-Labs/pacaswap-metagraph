@@ -3,9 +3,9 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
-
-import scala.collection.immutable.{SortedMap, SortedSet}
-
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.numeric.NonNegLong
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
@@ -13,17 +13,11 @@ import io.constellationnetwork.schema.artifact.{SharedArtifact, SpendAction}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.{Hashed, Hasher}
-
-import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
-import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
-import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
@@ -31,7 +25,8 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
-import org.amm_metagraph.shared_data.validations.SharedValidations.validateIfAllowSpendsAreDuplicated
+
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -67,7 +62,6 @@ object LiquidityPoolCombinerService {
   ): LiquidityPoolCombinerService[F] =
     new LiquidityPoolCombinerService[F] {
       private def handleFailedUpdate(
-        updates: List[AmmUpdate],
         liquidityPoolUpdate: Signed[LiquidityPoolUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
@@ -83,10 +77,11 @@ object LiquidityPoolCombinerService {
           .focus(_.operations)
           .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
 
-        DataState(
-          AmmOnChainState(updates),
-          updatedCalculatedState
-        )
+        acc
+          .focus(_.onChain.updates)
+          .modify(current => current + liquidityPoolUpdate.value)
+          .focus(_.calculated)
+          .replace(updatedCalculatedState)
       }
 
       private def getUpdateAllowSpends(
@@ -134,8 +129,7 @@ object LiquidityPoolCombinerService {
 
         val pendingAllowSpendsCalculatedState = liquidityPoolsCalculatedState.pending
         val pendingLps = liquidityPoolsCalculatedState.getPendingUpdates
-
-        val updates = liquidityPoolUpdate :: oldState.onChain.updates
+        
         val combinedState = for {
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
           pendingLpsPoolsIds <- EitherT.liftF(
@@ -170,13 +164,13 @@ object LiquidityPoolCombinerService {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.LiquidityPool, newStakingState))
 
-              val result = DataState(
-                AmmOnChainState(updates),
-                updatedCalculatedState,
-                oldState.sharedArtifacts
+              EitherT.rightT[F, FailedCalculatedState](
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + liquidityPoolUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
               )
-
-              EitherT.rightT[F, FailedCalculatedState](result)
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
@@ -191,7 +185,7 @@ object LiquidityPoolCombinerService {
         } yield response
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
+          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
 
@@ -204,9 +198,8 @@ object LiquidityPoolCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val liquidityPoolUpdate = pendingAllowSpendUpdate.update.value
-        val updates = liquidityPoolUpdate :: oldState.onChain.updates
+        
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId))
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
@@ -248,23 +241,25 @@ object LiquidityPoolCombinerService {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
 
-                updatedSharedArtifacts = oldState.sharedArtifacts ++ SortedSet[SharedArtifact](
-                  spendAction
-                )
-
               } yield
-                DataState(
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  updatedSharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + liquidityPoolUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
+                  .focus(_.sharedArtifacts)
+                  .modify(current =>
+                    current ++ SortedSet[SharedArtifact](
+                      spendAction
+                    )
+                  )
             case _ =>
               EitherT.rightT[F, FailedCalculatedState](oldState)
           }
         } yield result
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, pendingAllowSpendUpdate.update, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
+          handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
 
@@ -280,7 +275,6 @@ object LiquidityPoolCombinerService {
 
         val signedLiquidityPoolUpdate = pendingSpendAction.update
         val liquidityPoolUpdate = pendingSpendAction.update.value
-        val updates = liquidityPoolUpdate :: oldState.onChain.updates
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           poolId <- EitherT.liftF(
             buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.tokenAId, signedLiquidityPoolUpdate.tokenBId)
@@ -344,17 +338,17 @@ object LiquidityPoolCombinerService {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
               EitherT.rightT[F, FailedCalculatedState](
-                DataState(
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  oldState.sharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + liquidityPoolUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
               )
             }
         } yield result
 
         combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(updates, signedLiquidityPoolUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
+          handleFailedUpdate(signedLiquidityPoolUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
       }
     }

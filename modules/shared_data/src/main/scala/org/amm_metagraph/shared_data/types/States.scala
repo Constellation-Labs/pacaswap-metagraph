@@ -22,7 +22,7 @@ import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateA
 object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
-    updates: List[AmmUpdate]
+    updates: Set[AmmUpdate]
   ) extends DataOnChainState
 
   @derive(encoder, decoder)

@@ -54,7 +54,6 @@ object WithdrawalCombinerService {
   ): WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
       private def handleFailedUpdate(
-        updates: List[AmmUpdate],
         withdrawalUpdate: Signed[WithdrawalUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
@@ -70,10 +69,11 @@ object WithdrawalCombinerService {
           .focus(_.operations)
           .modify(_.updated(OperationType.Withdrawal, updatedWithdrawalCalculatedState))
 
-        DataState(
-          AmmOnChainState(updates),
-          updatedCalculatedState
-        )
+        acc
+          .focus(_.onChain.updates)
+          .modify(current => current + withdrawalUpdate.value)
+          .focus(_.calculated)
+          .replace(updatedCalculatedState)
       }
 
       private def removePendingSpendAction(
@@ -140,7 +140,6 @@ object WithdrawalCombinerService {
         val withdrawalUpdate = signedUpdate.value
         val withdrawalCalculatedState = getWithdrawalCalculatedState(oldState.calculated)
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
-        val updates = withdrawalUpdate :: oldState.onChain.updates
 
         if (withdrawalCalculatedState.pending.exists(_.update === signedUpdate)) {
           return oldState.pure[F]
@@ -201,17 +200,22 @@ object WithdrawalCombinerService {
             .modify(_.updated(OperationType.Withdrawal, updatedPendingWithdrawalCalculatedState))
             .focus(_.operations)
             .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-          updatedSharedArtifacts = oldState.sharedArtifacts + spendAction
 
         } yield
-          DataState(
-            AmmOnChainState(updates),
-            updatedCalculatedState,
-            updatedSharedArtifacts
-          )
+          oldState
+            .focus(_.onChain.updates)
+            .modify(current => current + withdrawalUpdate)
+            .focus(_.calculated)
+            .replace(updatedCalculatedState)
+            .focus(_.sharedArtifacts)
+            .modify(current =>
+              current ++ SortedSet[SharedArtifact](
+                spendAction
+              )
+            )
 
         combinedState.valueOr(failedCalculatedState =>
-          handleFailedUpdate(updates, signedUpdate, oldState, failedCalculatedState, withdrawalCalculatedState)
+          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, withdrawalCalculatedState)
         )
       }
 
@@ -225,7 +229,6 @@ object WithdrawalCombinerService {
         val withdrawalCalculatedState = getWithdrawalCalculatedState(oldState.calculated)
         val signedWithdrawalUpdate = pendingSpendAction.update
         val withdrawalUpdate = pendingSpendAction.update.value
-        val updates = withdrawalUpdate :: oldState.onChain.updates
 
         for {
           metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
@@ -286,11 +289,11 @@ object WithdrawalCombinerService {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Withdrawal, newWithdrawalState))
               } yield
-                DataState[AmmOnChainState, AmmCalculatedState](
-                  AmmOnChainState(updates),
-                  updatedCalculatedState,
-                  oldState.sharedArtifacts
-                )
+                oldState
+                  .focus(_.onChain.updates)
+                  .modify(current => current + withdrawalUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
 
               processingState.valueOrF { failedCalculatedState =>
                 rollbackAmountInLPs(
@@ -300,7 +303,6 @@ object WithdrawalCombinerService {
                   oldState
                 ).map { rolledBackState =>
                   handleFailedUpdate(
-                    updates,
                     pendingSpendAction.update,
                     rolledBackState,
                     failedCalculatedState,
