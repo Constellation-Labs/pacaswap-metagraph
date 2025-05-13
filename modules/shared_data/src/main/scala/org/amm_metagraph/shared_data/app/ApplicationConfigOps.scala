@@ -28,6 +28,7 @@ object ConfigReaders {
   implicit val epochProgressReader: ConfigReader[EpochProgress] = ConfigReader[NonNegLong].map(EpochProgress(_))
 
   implicit val votingWeightMultipliersConfigReader: ConfigReader[ApplicationConfig.VotingWeightMultipliers] = deriveReader
+  implicit val expirationEpochProgressesConfigReader: ConfigReader[ApplicationConfig.ExpirationEpochProgresses] = deriveReader
   implicit val tokenLimitsConfigReader: ConfigReader[ApplicationConfig.TokenLimits] = deriveReader
   implicit val governanceConfigReader: ConfigReader[ApplicationConfig.Governance] = deriveReader
   implicit val rewardsConfigReader: ConfigReader[ApplicationConfig.Rewards] = deriveReader[ApplicationConfig.Rewards].emap { _cfg =>

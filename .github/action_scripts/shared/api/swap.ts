@@ -34,12 +34,22 @@ type SwapCalculatedStateAddress = {
     parent: LastRef
 }
 
+type SwapCalculatedStateValue = {
+    expiringEpochProgress: number,
+    value: SwapCalculatedStateAddress
+}
+
+type SwapCalculatedStateInfo = {
+    lastReference: LastRef,
+    values: SwapCalculatedStateValue[]
+}
+
 type SwapUpdateBody = {
     SwapUpdate: SwapUpdate
 }
 
 type ConfirmedSwapCalculatedState = {
-    value: Record<string, SwapCalculatedStateAddress[]>
+    value: Record<string, SwapCalculatedStateInfo>
 }
 
 const createSwapUpdate = async (
@@ -116,9 +126,8 @@ const validateSwapCreated = async (
 
     log(`Looking for confirmed swaps for wallet: ${account.address}`, "INFO", 'AMM')
 
-    logObject(swapCalculatedState)
-
-    const isConfirmedSwap = (confirmedSwaps[account.address] || []).some(
+    const confirmedAddressSwaps = confirmedSwaps[account.address]?.values?.map(info => info.value) || []
+    const isConfirmedSwap = confirmedAddressSwaps.some(
         (swap) =>
             swap.fromToken.identifier === fromPair
             && swap.toToken.identifier === toPair

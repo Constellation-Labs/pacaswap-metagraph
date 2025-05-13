@@ -261,6 +261,26 @@ object L0CombinerService {
             }
         }
 
+      private def cleanupExpiredOperations(
+        stateCombinedByPendingSpendTransactions: DataState[AmmOnChainState, AmmCalculatedState],
+        lastSyncGlobalEpochProgress: EpochProgress
+      ) = {
+        val stakesCleanupState = stakingCombinerService.cleanupExpiredOperations(
+          stateCombinedByPendingSpendTransactions,
+          lastSyncGlobalEpochProgress
+        )
+
+        val swapsCleanupState = swapCombinerService.cleanupExpiredOperations(
+          stakesCleanupState,
+          lastSyncGlobalEpochProgress
+        )
+
+        withdrawalCombinerService.cleanupExpiredOperations(
+          swapsCleanupState,
+          lastSyncGlobalEpochProgress
+        )
+      }
+
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
@@ -344,8 +364,13 @@ object L0CombinerService {
               currencyId
             )
 
-          stateCombinedGovernanceRewards = governanceCombinerService.handleMonthlyGovernanceRewards(
+          stateCombinedByCleanupOperations = cleanupExpiredOperations(
             stateCombinedByPendingSpendActions,
+            lastSyncGlobalEpochProgress
+          )
+
+          stateCombinedGovernanceRewards = governanceCombinerService.handleMonthlyGovernanceRewards(
+            stateCombinedByCleanupOperations,
             lastSyncGlobalEpochProgress,
             currentSnapshotEpochProgress
           )

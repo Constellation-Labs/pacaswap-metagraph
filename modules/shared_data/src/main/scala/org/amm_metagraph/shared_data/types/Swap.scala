@@ -50,6 +50,18 @@ object Swap {
   )
 
   @derive(encoder, decoder)
+  case class SwapCalculatedStateValue(
+    expiringEpochProgress: EpochProgress,
+    value: SwapCalculatedStateAddress
+  )
+
+  @derive(encoder, decoder)
+  case class SwapCalculatedStateInfo(
+    lastReference: SwapReference,
+    values: Set[SwapCalculatedStateValue]
+  )
+
+  @derive(encoder, decoder)
   case class SwapQuote(
     fromTokenId: Option[CurrencyId],
     toTokenId: Option[CurrencyId],

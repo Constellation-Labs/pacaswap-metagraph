@@ -15,15 +15,15 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalReference, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
@@ -44,6 +44,11 @@ trait WithdrawalCombinerService[F[_]] {
     spendActions: List[SpendAction],
     currentSnapshotOrdinal: SnapshotOrdinal
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
+
+  def cleanupExpiredOperations(
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    globalEpochProgress: EpochProgress
+  ): DataState[AmmOnChainState, AmmCalculatedState]
 }
 
 object WithdrawalCombinerService {
@@ -281,12 +286,30 @@ object WithdrawalCombinerService {
                   withdrawalReference
                 )
 
+                expirationEpochProgress = getConfirmedExpireEpochProgress(applicationConfig, globalEpochProgress)
+                withdrawalCalculatedStateValue = WithdrawalCalculatedStateValue(
+                  expirationEpochProgress,
+                  withdrawalCalculatedStateAddress
+                )
+
                 newWithdrawalState = withdrawalCalculatedState
                   .focus(_.confirmed.value)
                   .modify(current =>
                     current.updatedWith(signedWithdrawalUpdate.source) {
-                      case Some(confirmedWithdrawals) => Some(confirmedWithdrawals + withdrawalCalculatedStateAddress)
-                      case None                       => Some(Set(withdrawalCalculatedStateAddress))
+                      case Some(confirmedWithdrawals) =>
+                        Some(
+                          WithdrawalCalculatedStateInfo(
+                            withdrawalReference,
+                            confirmedWithdrawals.values + withdrawalCalculatedStateValue
+                          )
+                        )
+                      case None =>
+                        Some(
+                          WithdrawalCalculatedStateInfo(
+                            withdrawalReference,
+                            Set(withdrawalCalculatedStateValue)
+                          )
+                        )
                     }
                   )
                   .focus(_.pending)
@@ -320,18 +343,28 @@ object WithdrawalCombinerService {
         } yield combinedState
       }
 
-      private def getFailureExpireEpochProgress(
-        applicationConfig: ApplicationConfig,
-        lastSyncGlobalEpochProgress: EpochProgress
-      ) = {
-        val expireEpochProgress = EpochProgress(
-          NonNegLong
-            .from(
-              lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-            )
-            .getOrElse(NonNegLong.MinValue)
-        )
-        expireEpochProgress
+      def cleanupExpiredOperations(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        globalEpochProgress: EpochProgress
+      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+        val withdrawalCalculatedState = getWithdrawalCalculatedState(oldState.calculated)
+        val unexpiredFailed = withdrawalCalculatedState.failed.filter(_.expiringEpochProgress > globalEpochProgress)
+        val unexpiredConfirmed = withdrawalCalculatedState.confirmed.value.collect {
+          case (address, infos) =>
+            address -> infos
+              .focus(_.values)
+              .modify(_.filter(_.expiringEpochProgress > globalEpochProgress))
+        }
+
+        val updatedWithdrawalCalculatedState = withdrawalCalculatedState
+          .focus(_.failed)
+          .replace(unexpiredFailed)
+          .focus(_.confirmed.value)
+          .replace(unexpiredConfirmed)
+
+        oldState
+          .focus(_.calculated.operations)
+          .modify(_.updated(OperationType.Withdrawal, updatedWithdrawalCalculatedState))
       }
     }
 }

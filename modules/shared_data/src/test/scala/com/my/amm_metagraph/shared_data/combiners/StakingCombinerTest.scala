@@ -22,6 +22,7 @@ import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import monocle.syntax.all._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.StakingCombinerService
@@ -144,7 +145,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -290,7 +291,7 @@ object StakingCombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
       stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -426,7 +427,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -440,7 +441,7 @@ object StakingCombinerTest extends MutableIOSuite {
       expect.all(
         stakingCalculatedState.failed.toList.length === 1,
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         stakingCalculatedState.failed.toList.head.reason == AmountGreaterThanAllowSpendLimit(allowSpendTokenA)
       )
@@ -543,7 +544,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -557,7 +558,7 @@ object StakingCombinerTest extends MutableIOSuite {
       expect.all(
         stakingCalculatedState.failed.toList.length === 1,
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         stakingCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
       )
@@ -659,7 +660,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -682,7 +683,7 @@ object StakingCombinerTest extends MutableIOSuite {
       expect.all(
         stakingCalculatedState.failed.toList.length === 1,
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         stakingCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(stakingUpdate)
       )
@@ -787,7 +788,7 @@ object StakingCombinerTest extends MutableIOSuite {
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       stakingValidations = StakingValidations.make[IO](config.copy(allowSpendEpochBufferDelay = bufferDelay))
-      stakingCombinerService = StakingCombinerService.make[IO](pricingService, stakingValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
         state,
@@ -800,9 +801,152 @@ object StakingCombinerTest extends MutableIOSuite {
       expect.all(
         stakingCalculatedState.failed.toList.length === 1,
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(currentEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(currentEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         stakingCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
+      )
+  }
+
+  test("Test successful staking - single provider - clean state") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        pairToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          PosLong.unsafeFrom(toFixedPoint(100.0)),
+          pairToken.identifier,
+          StakingReference.empty,
+          EpochProgress.MaxValue
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        pairToken.identifier.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      stakingValidations = StakingValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
+
+      stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
+        stakingUpdate,
+        state,
+        EpochProgress.MinValue,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
+      pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
+
+      stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
+        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head),
+        stakeResponsePendingSpendActionResponse,
+        EpochProgress.MinValue,
+        spendActions,
+        SnapshotOrdinal.MinValue,
+        CurrencyId(destinationAddress)
+      )
+
+      stakeCleanupResponse = stakingCombinerService.cleanupExpiredOperations(
+        stakeResponseConfirmedResponse,
+        EpochProgress.MaxValue
+      )
+
+      stakeConfirmedState = stakeResponseConfirmedResponse.calculated
+        .operations(OperationType.Staking)
+        .asInstanceOf[StakingCalculatedState]
+        .confirmed
+        .value
+
+      stakeCleanupState = stakeCleanupResponse.calculated
+        .operations(OperationType.Staking)
+        .asInstanceOf[StakingCalculatedState]
+        .confirmed
+        .value
+
+    } yield
+      expect.all(
+        stakeConfirmedState.nonEmpty,
+        stakeCleanupState.nonEmpty,
+        stakeCleanupState.head._2.values.isEmpty
       )
   }
 }

@@ -1,11 +1,9 @@
 import axios from "axios";
 import { createAccount, getPublicKey } from "./account";
-import { log, Logger, logObject, throwInContext } from "../log";
+import { log, Logger, throwInContext } from "../log";
 import { serializeBase64 } from "../serialize";
 import { dag4 } from "@stardust-collective/dag4";
-import { getCalculatedState, isPendingAllowSpend, TokenInformation } from "./calculated-state";
-import { ConfirmedStakingCalculatedState } from "./staking";
-import { createStakingUpdate, StakingCalculatedStateAddress, validateStakingCreated } from "./staking";
+import { getCalculatedState, isPendingAllowSpend } from "./calculated-state";
 import { singleResponseSchema } from "./response";
 import { LastRef, lastRefSchema } from "./last-ref";
 import { Signed } from "./signed";
@@ -41,8 +39,18 @@ type WithdrawalUpdateBody = {
     WithdrawalUpdate: WithdrawalUpdate
 }
 
+type WithdrawalCalculatedStateValue = {
+    expiringEpochProgress: number,
+    value: WithdrawalCalculatedStateAddress
+}
+
+type WithdrawalCalculatedStateInfo = {
+    lastReference: LastRef,
+    values: WithdrawalCalculatedStateValue[]
+}
+
 type ConfirmedWithdrawalCalculatedState = {
-    value: Record<string, WithdrawalCalculatedStateAddress[]>
+    value: Record<string, WithdrawalCalculatedStateInfo>
 }
 
 const getLastWithdrawalReference = async (
@@ -124,7 +132,8 @@ const validateWithdrawalCreated = async (
 
     log(`Looking for confirmed withdrawals for wallet: ${account.address}`, "INFO", 'AMM')
 
-    const confirmedWithdrawal = (confirmedWithdrawals[account.address] || []).find(
+    const confirmedAddressWithdrawals = confirmedWithdrawals[account.address]?.values?.map(info => info.value) || []
+    const confirmedWithdrawal = confirmedAddressWithdrawals.find(
         (withdrawal) =>
             withdrawal.tokenAId === tokenAId
             && withdrawal.tokenBId === tokenBId

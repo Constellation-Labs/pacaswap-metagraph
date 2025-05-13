@@ -396,7 +396,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       expect.all(
         liquidityPoolCalculatedState.failed.toList.length === 1,
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == AmountGreaterThanAllowSpendLimit(allowSpendTokenA)
       )
@@ -506,7 +506,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       expect.all(
         liquidityPoolCalculatedState.failed.toList.length === 1,
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
       )
@@ -620,7 +620,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       expect.all(
         liquidityPoolCalculatedState.failed.toList.length === 1,
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == DuplicatedLiquidityPoolRequest(liquidityPoolUpdate)
       )
@@ -728,7 +728,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       expect.all(
         liquidityPoolCalculatedState.failed.toList.length === 1,
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(liquidityPoolUpdate)
       )
@@ -834,7 +834,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       expect.all(
         liquidityPoolCalculatedState.failed.toList.length === 1,
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
-          NonNegLong.unsafeFrom(currentEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+          NonNegLong.unsafeFrom(currentEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
         liquidityPoolCalculatedState.failed.toList.head.reason == AllowSpendExpired(allowSpendTokenA)
       )

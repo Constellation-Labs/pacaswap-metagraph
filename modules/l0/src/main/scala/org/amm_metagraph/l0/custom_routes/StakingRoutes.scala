@@ -20,16 +20,14 @@ case class StakingRoutes[F[_]: Async](
 ) extends Http4sDsl[F] {
   private def getLastStakingReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      calculatedState.state.operations
-        .get(OperationType.Staking)
-        .collect {
-          case stakingCalculatedState: StakingCalculatedState =>
-            stakingCalculatedState.confirmed.value
-              .get(address)
-              .flatMap(_.maxByOption(_.parent.ordinal))
-              .map(_.parent)
+      val maybeRef = for {
+        stakingState <- calculatedState.state.operations.get(OperationType.Staking).collect {
+          case s: StakingCalculatedState => s
         }
-        .fold(Ok(SingleResponse(StakingReference.empty)))(lastRef => Ok(SingleResponse(lastRef)))
+        stakingData <- stakingState.confirmed.value.get(address)
+      } yield stakingData.lastReference
+
+      Ok(SingleResponse(maybeRef.getOrElse(StakingReference.empty)))
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {

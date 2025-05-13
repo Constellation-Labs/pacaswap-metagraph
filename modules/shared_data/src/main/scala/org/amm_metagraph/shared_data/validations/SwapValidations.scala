@@ -12,9 +12,9 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
 import eu.timepit.refined.cats.refTypeEq
-import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
@@ -36,7 +36,7 @@ trait SwapValidations[F[_]] {
     oldState: AmmCalculatedState,
     signedUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedSwaps: Set[SwapCalculatedStateAddress],
+    confirmedSwaps: Set[SwapCalculatedStateValue],
     pendingSwaps: Set[Signed[SwapUpdate]]
   ): Either[FailedCalculatedState, Signed[SwapUpdate]]
 
@@ -91,7 +91,10 @@ object SwapValidations {
         )
         transactionAlreadyExists = validateIfTransactionAlreadyExists(
           swapUpdate,
-          swapCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
+          swapCalculatedState.confirmed.value
+            .get(sourceAddress)
+            .map(_.values)
+            .getOrElse(Set.empty),
           swapCalculatedState.getPendingUpdates
         )
         lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
@@ -109,7 +112,7 @@ object SwapValidations {
       oldState: AmmCalculatedState,
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedSwaps: Set[SwapCalculatedStateAddress],
+      confirmedSwaps: Set[SwapCalculatedStateValue],
       pendingSwaps: Set[Signed[SwapUpdate]]
     ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
@@ -119,13 +122,7 @@ object SwapValidations {
         allAllowSpendsInUse
       )
 
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
         Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
@@ -135,7 +132,7 @@ object SwapValidations {
       } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate))
       } else if (
-        confirmedSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference) ||
+        confirmedSwaps.exists(swap => swap.value.allowSpendReference === signedUpdate.allowSpendReference) ||
         pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
       ) {
         failWith(DuplicatedSwapRequest(signedUpdate))
@@ -151,13 +148,7 @@ object SwapValidations {
       tokenInformation: SwapTokenInfo,
       allowSpendToken: Hashed[AllowSpend]
     ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (allowSpendToken.source =!= signedUpdate.source) {
         failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
@@ -192,13 +183,7 @@ object SwapValidations {
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
     ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
@@ -240,8 +225,7 @@ object SwapValidations {
     ): DataApplicationValidationErrorOr[Unit] = {
       val lastConfirmed: Option[SwapReference] = swapCalculatedState.confirmed.value
         .get(address)
-        .flatMap(_.maxByOption(_.parent.ordinal))
-        .map(_.parent)
+        .map(_.lastReference)
 
       lastConfirmed match {
         case Some(last) if signedSwap.ordinal.value =!= last.ordinal.next.value || signedSwap.parent =!= last =>
@@ -252,11 +236,11 @@ object SwapValidations {
 
     private def validateIfTransactionAlreadyExists(
       swapUpdate: SwapUpdate,
-      confirmedSwaps: Set[SwapCalculatedStateAddress],
+      confirmedSwaps: Set[SwapCalculatedStateValue],
       pendingSwaps: Set[Signed[SwapUpdate]]
     ): DataApplicationValidationErrorOr[Unit] =
       SwapTransactionAlreadyExists.whenA(
-        confirmedSwaps.exists(swap => swap.allowSpendReference === swapUpdate.allowSpendReference) ||
+        confirmedSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference) ||
           pendingSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference)
       )
   }

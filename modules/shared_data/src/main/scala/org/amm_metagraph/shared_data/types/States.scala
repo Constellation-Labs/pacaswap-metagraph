@@ -14,10 +14,10 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
-import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateAddress
-import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateAddress
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateAddress
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, ShareAmount, TokenInformation}
+import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
+import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
+import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
 import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateReason
 
 object States {
@@ -47,7 +47,7 @@ object States {
 
   @derive(encoder, decoder)
   case class ConfirmedStakingCalculatedState(
-    value: Map[Address, Set[StakingCalculatedStateAddress]]
+    value: Map[Address, StakingCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   object ConfirmedStakingCalculatedState {
@@ -56,7 +56,7 @@ object States {
 
   @derive(encoder, decoder)
   case class ConfirmedWithdrawalCalculatedState(
-    value: Map[Address, Set[WithdrawalCalculatedStateAddress]]
+    value: Map[Address, WithdrawalCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   private object ConfirmedWithdrawalCalculatedState {
@@ -65,7 +65,7 @@ object States {
 
   @derive(encoder, decoder)
   case class ConfirmedSwapCalculatedState(
-    value: Map[Address, Set[SwapCalculatedStateAddress]]
+    value: Map[Address, SwapCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   private object ConfirmedSwapCalculatedState {

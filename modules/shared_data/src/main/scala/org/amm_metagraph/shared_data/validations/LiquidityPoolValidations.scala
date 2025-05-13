@@ -13,6 +13,7 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.AllowSpends._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
@@ -122,13 +123,7 @@ object LiquidityPoolValidations {
       confirmedLps: Map[String, LiquidityPool],
       pendingLps: List[PoolId]
     ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
@@ -159,13 +154,7 @@ object LiquidityPoolValidations {
       allowSpendTokenA: Hashed[AllowSpend],
       allowSpendTokenB: Hashed[AllowSpend]
     ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       val update = signedUpdate.value
       val allowSpendDelay = applicationConfig.allowSpendEpochBufferDelay.value.value
@@ -193,13 +182,7 @@ object LiquidityPoolValidations {
       signedUpdate: Signed[LiquidityPoolUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
     ): Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)

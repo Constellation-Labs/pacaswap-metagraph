@@ -17,6 +17,8 @@ import io.constellationnetwork.security.signature.Signed
 
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.getConfirmedExpireEpochProgress
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
@@ -51,10 +53,16 @@ trait StakingCombinerService[F[_]] {
     currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
+
+  def cleanupExpiredOperations(
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    globalEpochProgress: EpochProgress
+  ): DataState[AmmOnChainState, AmmCalculatedState]
 }
 
 object StakingCombinerService {
   def make[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
     stakingValidations: StakingValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
@@ -123,7 +131,11 @@ object StakingCombinerService {
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
-        val confirmedStakings = stakingCalculatedState.confirmed.value.getOrElse(signedUpdate.source, Set.empty)
+        val confirmedStakings = stakingCalculatedState.confirmed.value
+          .get(signedUpdate.source)
+          .map(_.values)
+          .getOrElse(Set.empty)
+
         val pendingStakings = stakingCalculatedState.getPendingUpdates
         val pendingAllowSpendsCalculatedState = stakingCalculatedState.pending
 
@@ -330,12 +342,28 @@ object StakingCombinerService {
                   stakingReference
                 )
                 updatedPendingCalculatedState = removePendingSpendAction(stakingCalculatedState, signedStakingUpdate)
-
+                expirationEpochProgress = getConfirmedExpireEpochProgress(applicationConfig, globalEpochProgress)
+                stakingCalculatedStateValue = StakingCalculatedStateValue(
+                  expirationEpochProgress,
+                  stakingCalculatedStateAddress
+                )
                 updatedStakingCalculatedState = stakingCalculatedState
                   .focus(_.confirmed.value)
                   .modify(_.updatedWith(sourceAddress) {
-                    case Some(confirmedSwaps) => Some(confirmedSwaps + stakingCalculatedStateAddress)
-                    case None                 => Some(Set(stakingCalculatedStateAddress))
+                    case Some(confirmedSwaps) =>
+                      Some(
+                        StakingCalculatedStateInfo(
+                          stakingReference,
+                          confirmedSwaps.values + stakingCalculatedStateValue
+                        )
+                      )
+                    case None =>
+                      Some(
+                        StakingCalculatedStateInfo(
+                          stakingReference,
+                          Set(stakingCalculatedStateValue)
+                        )
+                      )
                   })
                   .focus(_.pending)
                   .replace(updatedPendingCalculatedState)
@@ -362,6 +390,29 @@ object StakingCombinerService {
         combinedState.valueOr { failedCalculatedState =>
           handleFailedUpdate(signedStakingUpdate, oldState, failedCalculatedState, stakingCalculatedState)
         }
+      }
+
+      def cleanupExpiredOperations(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        globalEpochProgress: EpochProgress
+      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+        val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
+        val unexpiredFailed = stakingCalculatedState.failed.filter(_.expiringEpochProgress > globalEpochProgress)
+        val unexpiredConfirmed = stakingCalculatedState.confirmed.value.collect {
+          case (address, infos) =>
+            address -> infos
+              .focus(_.values)
+              .modify(_.filter(_.expiringEpochProgress > globalEpochProgress))
+        }
+
+        val updatedStakingCalculatedState = stakingCalculatedState
+          .focus(_.failed)
+          .replace(unexpiredFailed)
+          .focus(_.confirmed.value)
+          .replace(unexpiredConfirmed)
+        oldState
+          .focus(_.calculated.operations)
+          .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
       }
     }
 }

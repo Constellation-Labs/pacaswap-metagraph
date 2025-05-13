@@ -30,7 +30,10 @@ object Shared {
   val sourceAddress: Address = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
   val config = ApplicationConfig(
-    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    ExpirationEpochProgresses(
+      EpochProgress(NonNegLong.unsafeFrom(30L)),
+      EpochProgress(NonNegLong.unsafeFrom(30L))
+    ),
     "NodeValidators",
     Dev,
     Governance(

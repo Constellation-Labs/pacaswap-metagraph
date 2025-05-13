@@ -47,7 +47,10 @@ object SwapValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   private val config = ApplicationConfig(
-    EpochProgress(NonNegLong.unsafeFrom(30L)),
+    ExpirationEpochProgresses(
+      EpochProgress(NonNegLong.unsafeFrom(30L)),
+      EpochProgress(NonNegLong.unsafeFrom(30L))
+    ),
     "NodeValidators",
     Dev,
     Governance(

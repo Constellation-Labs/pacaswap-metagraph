@@ -20,6 +20,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -208,14 +209,6 @@ object PricingService {
             minimumReceived = minimumReceived
           )
 
-      private def getExpireEpochProgress(lastSyncGlobalEpochProgress: EpochProgress): EpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
-
       override def getSwapQuote(
         fromTokenId: Option[CurrencyId],
         toTokenId: Option[CurrencyId],
@@ -262,7 +255,7 @@ object PricingService {
       ): F[Either[FailedCalculatedState, SwapTokenInfo]] = for {
         liquidityPools <- getConfirmedLiquidityPools
         swapUpdate = signedUpdate.value
-        expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
         result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
           case Left(_) =>
             Left(
@@ -322,7 +315,7 @@ object PricingService {
       ): F[Either[FailedCalculatedState, StakingTokenInformation]] = for {
         liquidityPools <- getConfirmedLiquidityPools
         stakingUpdate = signedUpdate.value
-        expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
         result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
           case Left(_) =>
             Left(
@@ -371,7 +364,7 @@ object PricingService {
         val primaryToken = stakingTokenInformation.primaryTokenInformation
         val pairToken = stakingTokenInformation.pairTokenInformation
         val newlyIssuedShares = stakingTokenInformation.newlyIssuedShares
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         val tokenA = if (liquidityPool.tokenA.identifier == primaryToken.identifier) primaryToken else pairToken
         val tokenB = if (liquidityPool.tokenB.identifier == pairToken.identifier) pairToken else primaryToken
@@ -502,7 +495,7 @@ object PricingService {
         val tokenAValue = liquidityPool.tokenA.amount.value - withdrawalAmounts.tokenAAmount.value
         val tokenBValue = liquidityPool.tokenB.amount.value - withdrawalAmounts.tokenBAmount.value
         val totalSharesValue = liquidityPool.poolShares.totalShares.value - signedUpdate.shareToWithdraw.value.value
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         for {
           tokenAAmount <- PosLong
@@ -571,7 +564,7 @@ object PricingService {
         liquidityPool: LiquidityPool,
         lastSyncGlobalEpochProgress: EpochProgress
       ): Either[FailedCalculatedState, WithdrawalTokenAmounts] = {
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         val PRECISION = 8
         val SCALING_FACTOR = BigInt(10).pow(PRECISION)
@@ -659,7 +652,7 @@ object PricingService {
       ): Either[FailedCalculatedState, LiquidityPool] = {
         val tokenAIsFrom = liquidityPool.tokenA.identifier === signedUpdate.swapFromPair
         val tokenBIsTo = liquidityPool.tokenB.identifier === signedUpdate.swapToPair
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         def error(msg: String): FailedCalculatedState =
           FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)
@@ -704,7 +697,7 @@ object PricingService {
         tokenAAmountToReturn: SwapAmount,
         tokenBAmountToReturn: SwapAmount
       ): Either[FailedCalculatedState, LiquidityPool] = {
-        val expireEpochProgress = getExpireEpochProgress(lastSyncGlobalEpochProgress)
+        val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         def error(msg: String): FailedCalculatedState =
           FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)

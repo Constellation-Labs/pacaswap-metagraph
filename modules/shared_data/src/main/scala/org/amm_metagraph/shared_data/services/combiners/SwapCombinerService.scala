@@ -14,10 +14,10 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 
-import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -53,6 +53,11 @@ trait SwapCombinerService[F[_]] {
     currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
+
+  def cleanupExpiredOperations(
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    globalEpochProgress: EpochProgress
+  ): DataState[AmmOnChainState, AmmCalculatedState]
 }
 
 object SwapCombinerService {
@@ -177,7 +182,10 @@ object SwapCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val swapUpdate = signedUpdate.value
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
-        val confirmedSwaps = swapCalculatedState.confirmed.value.getOrElse(signedUpdate.source, Set.empty)
+        val confirmedSwaps = swapCalculatedState.confirmed.value
+          .get(signedUpdate.source)
+          .map(_.values)
+          .getOrElse(Set.empty)
         val pendingSwaps = swapCalculatedState.getPendingUpdates
         val swapCalculatedStatePendingAllowSpend = swapCalculatedState.pending
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
@@ -416,14 +424,31 @@ object SwapCombinerService {
             currentSnapshotOrdinal,
             swapReference
           )
+          expirationEpochProgress = getConfirmedExpireEpochProgress(applicationConfig, globalEpochProgress)
+          swapCalculatedStateValue = SwapCalculatedStateValue(
+            expirationEpochProgress,
+            swapCalculatedStateAddress
+          )
 
           updatedPendingCalculatedState = removePendingSpendAction(swapCalculatedState, signedSwapUpdate)
           newSwapState = swapCalculatedState
             .focus(_.confirmed.value)
             .modify(current =>
               current.updatedWith(sourceAddress) {
-                case Some(confirmedSwaps) => Some(confirmedSwaps + swapCalculatedStateAddress)
-                case None                 => Some(Set(swapCalculatedStateAddress))
+                case Some(confirmedSwaps) =>
+                  Some(
+                    SwapCalculatedStateInfo(
+                      swapReference,
+                      confirmedSwaps.values + swapCalculatedStateValue
+                    )
+                  )
+                case None =>
+                  Some(
+                    SwapCalculatedStateInfo(
+                      swapReference,
+                      Set(swapCalculatedStateValue)
+                    )
+                  )
               }
             )
             .focus(_.pending)
@@ -472,19 +497,29 @@ object SwapCombinerService {
           }
         }
       }
-    }
 
-  private def getFailureExpireEpochProgress(
-    applicationConfig: ApplicationConfig,
-    lastSyncGlobalEpochProgress: EpochProgress
-  ) = {
-    val expireEpochProgress = EpochProgress(
-      NonNegLong
-        .from(
-          lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-        )
-        .getOrElse(NonNegLong.MinValue)
-    )
-    expireEpochProgress
-  }
+      def cleanupExpiredOperations(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        globalEpochProgress: EpochProgress
+      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+        val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
+        val unexpiredFailed = swapCalculatedState.failed.filter(_.expiringEpochProgress > globalEpochProgress)
+        val unexpiredConfirmed = swapCalculatedState.confirmed.value.collect {
+          case (address, infos) =>
+            address -> infos
+              .focus(_.values)
+              .modify(_.filter(_.expiringEpochProgress > globalEpochProgress))
+        }
+
+        val updatedSwapCalculatedState = swapCalculatedState
+          .focus(_.failed)
+          .replace(unexpiredFailed)
+          .focus(_.confirmed.value)
+          .replace(unexpiredConfirmed)
+
+        oldState
+          .focus(_.calculated.operations)
+          .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
+      }
+    }
 }

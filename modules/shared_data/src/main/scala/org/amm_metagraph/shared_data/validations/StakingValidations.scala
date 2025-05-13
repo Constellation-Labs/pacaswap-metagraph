@@ -10,9 +10,9 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
-import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
@@ -34,7 +34,7 @@ trait StakingValidations[F[_]] {
     oldState: AmmCalculatedState,
     signedUpdate: Signed[StakingUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedStakings: Set[StakingCalculatedStateAddress],
+    confirmedStakings: Set[StakingCalculatedStateValue],
     pendingStakings: Set[Signed[StakingUpdate]]
   ): Either[FailedCalculatedState, Signed[StakingUpdate]]
 
@@ -79,7 +79,10 @@ object StakingValidations {
 
         transactionAlreadyExists = validateIfTransactionAlreadyExists(
           stakingUpdate,
-          stakingCalculatedState.confirmed.value.getOrElse(sourceAddress, Set.empty),
+          stakingCalculatedState.confirmed.value
+            .get(sourceAddress)
+            .map(_.values)
+            .getOrElse(Set.empty),
           stakingCalculatedState.getPendingUpdates
         )
 
@@ -115,7 +118,7 @@ object StakingValidations {
       oldState: AmmCalculatedState,
       signedUpdate: Signed[StakingUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedStakings: Set[StakingCalculatedStateAddress],
+      confirmedStakings: Set[StakingCalculatedStateValue],
       pendingStakings: Set[Signed[StakingUpdate]]
     ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
@@ -130,18 +133,12 @@ object StakingValidations {
       )
 
       val isDuplicated = confirmedStakings.exists(staking =>
-        staking.tokenAAllowSpend === signedUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === signedUpdate.tokenBAllowSpend
+        staking.value.tokenAAllowSpend === signedUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === signedUpdate.tokenBAllowSpend
       ) || pendingStakings.exists(staking =>
         staking.value.tokenAAllowSpend === signedUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === signedUpdate.tokenBAllowSpend
       )
 
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (tokenAAllowSpendIsDuplicated.isInvalid || tokenBAllowSpendIsDuplicated.isInvalid) {
         failWith(DuplicatedAllowSpend(signedUpdate), expireEpochProgress, signedUpdate)
@@ -162,13 +159,7 @@ object StakingValidations {
       allowSpendTokenA: Hashed[AllowSpend],
       allowSpendTokenB: Hashed[AllowSpend]
     ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currencyId) {
         (tokenInformation.primaryTokenInformation, tokenInformation.pairTokenInformation)
@@ -202,13 +193,7 @@ object StakingValidations {
       signedUpdate: Signed[StakingUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
     ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
-      val expireEpochProgress = EpochProgress(
-        NonNegLong
-          .from(
-            lastSyncGlobalEpochProgress.value.value + applicationConfig.failedOperationsExpirationEpochProgresses.value.value
-          )
-          .getOrElse(NonNegLong.MinValue)
-      )
+      val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
@@ -219,12 +204,12 @@ object StakingValidations {
 
     private def validateIfTransactionAlreadyExists(
       stakingUpdate: StakingUpdate,
-      confirmedStakings: Set[StakingCalculatedStateAddress],
+      confirmedStakings: Set[StakingCalculatedStateValue],
       pendingStakings: Set[Signed[StakingUpdate]]
     ): DataApplicationValidationErrorOr[Unit] =
       StakingTransactionAlreadyExists.whenA(
         confirmedStakings.exists(staking =>
-          staking.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
+          staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
         ) ||
           pendingStakings.exists(staking =>
             staking.value.tokenAAllowSpend === stakingUpdate.tokenAAllowSpend || staking.value.tokenBAllowSpend === stakingUpdate.tokenBAllowSpend
@@ -246,8 +231,7 @@ object StakingValidations {
     ): DataApplicationValidationErrorOr[Unit] = {
       val lastConfirmed: Option[StakingReference] = stakingCalculatedState.confirmed.value
         .get(address)
-        .flatMap(_.maxByOption(_.parent.ordinal))
-        .map(_.parent)
+        .map(_.lastReference)
 
       lastConfirmed match {
         case Some(last) if signedStaking.ordinal =!= last.ordinal.next || signedStaking.parent =!= last =>
