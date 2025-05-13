@@ -14,6 +14,7 @@ type SwapUpdate = {
     allowSpendReference: string
     amountIn: number
     amountOutMinimum: number
+    amountOutMaximum: number | null
     maxValidGsEpochProgress: number
     parent: string
 }
@@ -26,6 +27,7 @@ type SwapCalculatedStateAddress = {
     allowSpendReference: string
     amountIn: number
     amountOutMinimum: number
+    amountOutMaximum: number | null
     maxValidGsEpochProgress: number
     poolId?: string
     ordinal: number
@@ -70,6 +72,7 @@ const createSwapUpdate = async (
             allowSpendReference,
             amountIn,
             amountOutMinimum,
+            amountOutMaximum: null,
             maxValidGsEpochProgress: 1000,
             parent: lastRef,
         }

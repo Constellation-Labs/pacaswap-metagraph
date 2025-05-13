@@ -32,6 +32,10 @@ object Withdrawal {
     tokenBId: Option[CurrencyId],
     tokenBAmount: SwapAmount,
     shareToWithdraw: ShareAmount,
+    minAmountAOut: Option[SwapAmount],
+    minAmountBOut: Option[SwapAmount],
+    maxAmountAOut: Option[SwapAmount],
+    maxAmountBOut: Option[SwapAmount],
     parent: WithdrawalReference
   )
 

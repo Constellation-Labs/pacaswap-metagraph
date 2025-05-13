@@ -42,6 +42,7 @@ object Swap {
     grossReceived: SwapAmount,
     netReceived: SwapAmount,
     amountOutMinimum: SwapAmount,
+    amountOutMaximum: Option[SwapAmount],
     maxValidGsEpochProgress: EpochProgress,
     poolId: Option[PoolId],
     ordinal: SnapshotOrdinal,

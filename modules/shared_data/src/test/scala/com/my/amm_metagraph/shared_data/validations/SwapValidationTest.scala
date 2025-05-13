@@ -152,6 +152,7 @@ object SwapValidationTest extends MutableIOSuite {
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      none,
       EpochProgress.MinValue,
       SwapReference.empty
     )
@@ -214,6 +215,7 @@ object SwapValidationTest extends MutableIOSuite {
         signedAllowSpend.hash,
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
         SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+        none,
         EpochProgress.MinValue,
         SwapReference.empty
       )
@@ -272,6 +274,7 @@ object SwapValidationTest extends MutableIOSuite {
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      none,
       EpochProgress.MinValue,
       SwapReference.empty
     )
@@ -339,6 +342,7 @@ object SwapValidationTest extends MutableIOSuite {
       Hash.empty,
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
       SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
+      none,
       EpochProgress.MinValue,
       SwapReference.empty
     )

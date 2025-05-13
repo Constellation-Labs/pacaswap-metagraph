@@ -159,6 +159,7 @@ object Errors {
   case class AllowSpendExpired(allowSpend: AllowSpend) extends FailedCalculatedStateReason
   case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailedCalculatedStateReason
   case class SwapLessThanMinAmount() extends FailedCalculatedStateReason
+  case class SwapHigherThanMaxAmount() extends FailedCalculatedStateReason
   case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailedCalculatedStateReason
   case class CannotWithdrawAllShares() extends FailedCalculatedStateReason
   case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
@@ -167,6 +168,8 @@ object Errors {
   case class SwapWouldDrainPoolBalance() extends FailedCalculatedStateReason
   case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailedCalculatedStateReason
   case class WithdrawalWouldDrainPoolBalance() extends FailedCalculatedStateReason
+  case class WithdrawalLessThanMinAmount() extends FailedCalculatedStateReason
+  case class WithdrawalHigherThanMaxAmount() extends FailedCalculatedStateReason
   case class InvalidLiquidityPool() extends FailedCalculatedStateReason
   case class InvalidSwapTokenInfo(message: String) extends FailedCalculatedStateReason
   case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailedCalculatedStateReason

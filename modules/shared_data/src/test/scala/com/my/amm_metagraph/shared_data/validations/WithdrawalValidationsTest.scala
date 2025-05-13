@@ -79,6 +79,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+          none,
+          none,
+          none,
+          none,
           WithdrawalReference.empty,
           EpochProgress.MaxValue
         )
@@ -120,6 +124,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
           Some(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"))),
           Some(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5"))),
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+          none,
+          none,
+          none,
+          none,
           WithdrawalReference.empty,
           EpochProgress.MaxValue
         )
@@ -173,6 +181,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(2.0)))), // More than owned
+          none,
+          none,
+          none,
+          none,
           WithdrawalReference.empty,
           EpochProgress.MaxValue
         )
@@ -226,6 +238,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
           primaryToken.identifier,
           pairToken.identifier,
           ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))),
+          none,
+          none,
+          none,
+          none,
           WithdrawalReference.empty,
           EpochProgress.MaxValue
         )
@@ -271,6 +287,10 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         primaryToken.identifier,
         pairToken.identifier,
         ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(0.5)))),
+        none,
+        none,
+        none,
+        none,
         WithdrawalReference.empty,
         EpochProgress.MaxValue
       )
