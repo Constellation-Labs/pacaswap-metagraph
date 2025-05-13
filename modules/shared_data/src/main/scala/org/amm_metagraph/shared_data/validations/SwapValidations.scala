@@ -169,6 +169,8 @@ object SwapValidations {
         failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
       } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
         failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate)
+      } else if (signedUpdate.amountOutMaximum.exists(_ < tokenInformation.netReceived)) {
+        failWith(SwapHigherThanMaxAmount(), expireEpochProgress, signedUpdate)
       } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
       } else if (

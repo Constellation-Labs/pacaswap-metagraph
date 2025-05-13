@@ -172,6 +172,7 @@ object WithdrawalCombinerService {
           _ <- EitherT.fromEither(
             withdrawalValidations.newUpdateValidations(
               signedUpdate,
+              withdrawalAmounts,
               globalEpochProgress,
               updatedPool
             )
@@ -273,6 +274,10 @@ object WithdrawalCombinerService {
                   withdrawalUpdate.tokenBId,
                   withdrawalAmounts.tokenBAmount,
                   withdrawalUpdate.shareToWithdraw,
+                  withdrawalUpdate.minAmountAOut,
+                  withdrawalUpdate.minAmountBOut,
+                  withdrawalUpdate.maxAmountAOut,
+                  withdrawalUpdate.maxAmountBOut,
                   withdrawalReference
                 )
 

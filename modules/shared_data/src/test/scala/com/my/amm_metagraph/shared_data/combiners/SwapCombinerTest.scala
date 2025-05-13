@@ -95,6 +95,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -220,6 +221,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -349,6 +351,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -440,6 +443,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(100000L),
           SwapAmount(100000L),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -523,6 +527,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(100000L),
           SwapAmount(100000L),
+          none,
           EpochProgress.MinValue,
           SwapReference.empty
         )
@@ -620,6 +625,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -792,6 +798,7 @@ object SwapCombinerTest extends MutableIOSuite {
             signedAllowSpend.hash,
             SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
             SwapAmount(PosLong.unsafeFrom(fixedMinOutputAmount)),
+            none,
             EpochProgress.MaxValue,
             SwapReference.empty
           )
@@ -926,6 +933,7 @@ object SwapCombinerTest extends MutableIOSuite {
             signedAllowSpend.hash,
             SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
             SwapAmount(PosLong.unsafeFrom(fixedMinOutputAmount)),
+            none,
             EpochProgress.MaxValue,
             SwapReference.empty
           )
@@ -1071,6 +1079,7 @@ object SwapCombinerTest extends MutableIOSuite {
               signedAllowSpend.hash,
               SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
               SwapAmount(PosLong.unsafeFrom(fixedMinOutputAmount)),
+              none,
               EpochProgress.MaxValue,
               SwapReference.empty
             )
@@ -1241,6 +1250,7 @@ object SwapCombinerTest extends MutableIOSuite {
               signedAllowSpend.hash,
               SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
               SwapAmount(PosLong.unsafeFrom(fixedMinOutputAmount)),
+              none,
               EpochProgress.MaxValue,
               SwapReference.empty
             )
@@ -1391,6 +1401,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
           SwapAmount(PosLong.unsafeFrom(fixedMinOutputAmount)), // Expected min output
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -1518,6 +1529,7 @@ object SwapCombinerTest extends MutableIOSuite {
                     signedAllowSpend.hash,
                     SwapAmount(PosLong.unsafeFrom(fixedSwapAmount)),
                     SwapAmount(PosLong.MinValue),
+                    none,
                     EpochProgress.MaxValue,
                     SwapReference.empty
                   )
@@ -1561,7 +1573,10 @@ object SwapCombinerTest extends MutableIOSuite {
                     IO.pure(
                       (
                         swapPendingSpendActionResponse,
-                        expect(swapPendingSpendActionResponse.sharedArtifacts.nonEmpty, s"Expected swap $i to fail due to pool depletion") // we had previous swaps that should be processed with sharedArtifacts
+                        expect(
+                          swapPendingSpendActionResponse.sharedArtifacts.nonEmpty,
+                          s"Expected swap $i to fail due to pool depletion"
+                        ) // we had previous swaps that should be processed with sharedArtifacts
                       )
                     )
                   } else {
@@ -1660,6 +1675,7 @@ object SwapCombinerTest extends MutableIOSuite {
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )
@@ -1772,6 +1788,108 @@ object SwapCombinerTest extends MutableIOSuite {
         oldLiquidityPool.poolShares.feeShares(ownerAddress).value === updatedLiquidityPool.poolShares.feeShares(ownerAddress).value,
         oldLiquidityPool.poolShares.feeShares.get(metagraphId.value) == updatedLiquidityPool.poolShares.feeShares.get(metagraphId.value),
         updatedLiquidityPool.poolShares.pendingFeeShares.isEmpty
+      )
+  }
+
+  test("Test swap successfully when liquidity pool exists") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val sourceAddress = Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc")
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpend = AllowSpend(
+        sourceAddress,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpend <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      swapUpdate = getFakeSignedUpdate(
+        SwapUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          SwapAmount(PosLong.MinValue).some,
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            sourceAddress -> SortedSet(signedAllowSpend.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      swapValidations = SwapValidations.make[IO](config)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+
+      futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+      swapPendingSpendActionResponse <- swapCombinerService.combineNew(
+        swapUpdate,
+        state,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+      swapCalculatedState = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
+
+    } yield
+      expect.all(
+        swapCalculatedState.failed.toList.length === 1,
+        swapCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.failedOperationsExpirationEpochProgresses.value.value)
+        ),
+        swapCalculatedState.failed.toList.head.reason == SwapHigherThanMaxAmount()
       )
   }
 }

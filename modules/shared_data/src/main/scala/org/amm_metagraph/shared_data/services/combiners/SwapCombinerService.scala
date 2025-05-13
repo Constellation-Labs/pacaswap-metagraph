@@ -233,8 +233,7 @@ object SwapCombinerService {
               val updatedCalculatedState = updatedLpState.calculated
                 .focus(_.operations)
                 .modify(_.updated(OperationType.Swap, newSwapState))
-              
-              
+
               EitherT.rightT[F, FailedCalculatedState](
                 oldState
                   .focus(_.onChain.updates)
@@ -327,7 +326,7 @@ object SwapCombinerService {
                 updatedCalculatedState = oldState.calculated
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Swap, updatedPendingSwapCalculatedState))
-                
+
               } yield
                 oldState
                   .focus(_.onChain.updates)
@@ -411,6 +410,7 @@ object SwapCombinerService {
             updatedTokenInformation.grossReceived,
             updatedTokenInformation.netReceived,
             swapUpdate.amountOutMinimum,
+            swapUpdate.amountOutMaximum,
             swapUpdate.maxValidGsEpochProgress,
             poolId.some,
             currentSnapshotOrdinal,

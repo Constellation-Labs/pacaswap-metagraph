@@ -63,6 +63,10 @@ object DataUpdates {
     tokenAId: Option[CurrencyId],
     tokenBId: Option[CurrencyId],
     shareToWithdraw: ShareAmount,
+    minAmountAOut: Option[SwapAmount],
+    minAmountBOut: Option[SwapAmount],
+    maxAmountAOut: Option[SwapAmount],
+    maxAmountBOut: Option[SwapAmount],
     parent: WithdrawalReference,
     maxValidGsEpochProgress: EpochProgress
   ) extends AmmUpdate {
@@ -78,6 +82,7 @@ object DataUpdates {
     allowSpendReference: Hash,
     amountIn: SwapAmount,
     amountOutMinimum: SwapAmount,
+    amountOutMaximum: Option[SwapAmount],
     maxValidGsEpochProgress: EpochProgress,
     parent: SwapReference
   ) extends AmmUpdate {

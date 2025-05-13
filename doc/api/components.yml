@@ -51,6 +51,14 @@ components:
           type: string
         shareToWithdraw: 
           type: integer
+        minAmountAOut:
+          type: integer
+        minAmountBOut:
+          type: integer
+        maxAmountAOut:
+          type: integer
+        maxAmountBOut:
+          type: integer
         maxValidGsEpochProgress: 
           type: integer
         parent:
@@ -58,6 +66,8 @@ components:
     SwapUpdate:
       type: object
       properties:
+        metagraphId:
+          type: string
         source:
           type: string
         swapFromPair:
@@ -66,16 +76,16 @@ components:
           type: string
         allowSpendReference:
           type: string
-        minAmount:
+        amountIn:
           type: integer
-        maxAmount:
+        amountOutMinimum:
+          type: integer
+        amountOutMaximum:
           type: integer
         maxValidGsEpochProgress:
           type: integer
-        minPrice:
-          type: integer
-        maxPrice:
-          type: integer
+        parent:
+          $ref: '#/components/schemas/LastReference'
     RewardAllocationVoteUpdate:
       type: object
       properties:

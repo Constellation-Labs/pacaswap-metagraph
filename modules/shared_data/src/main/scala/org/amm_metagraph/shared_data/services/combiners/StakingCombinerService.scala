@@ -3,6 +3,9 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
+
+import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
@@ -11,6 +14,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
+
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
@@ -21,8 +25,6 @@ import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.StakingValidations
-
-import scala.collection.immutable.{SortedMap, SortedSet}
 
 trait StakingCombinerService[F[_]] {
   def combineNew(

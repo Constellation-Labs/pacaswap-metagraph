@@ -31,6 +31,7 @@ trait WithdrawalValidations[F[_]] {
 
   def newUpdateValidations(
     signedUpdate: Signed[WithdrawalUpdate],
+    withdrawalAmounts: WithdrawalTokenAmounts,
     lastSyncGlobalEpochProgress: EpochProgress,
     updatedPool: LiquidityPool
   ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]]
@@ -97,6 +98,7 @@ object WithdrawalValidations {
 
     def newUpdateValidations(
       signedUpdate: Signed[WithdrawalUpdate],
+      withdrawalAmounts: WithdrawalTokenAmounts,
       lastSyncGlobalEpochProgress: EpochProgress,
       updatedPool: LiquidityPool
     ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
@@ -108,16 +110,23 @@ object WithdrawalValidations {
           .getOrElse(NonNegLong.MinValue)
       )
 
-      def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[WithdrawalUpdate]] =
-        Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate))
+        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
       } else if (
         updatedPool.tokenA.amount < applicationConfig.tokenLimits.minTokens ||
         updatedPool.tokenB.amount < applicationConfig.tokenLimits.minTokens
       ) {
-        failWith(WithdrawalWouldDrainPoolBalance())
+        failWith(WithdrawalWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
+      } else if (
+        signedUpdate.minAmountAOut.exists(_ > withdrawalAmounts.tokenAAmount) ||
+        signedUpdate.minAmountBOut.exists(_ > withdrawalAmounts.tokenBAmount)
+      ) {
+        failWith(WithdrawalLessThanMinAmount(), expireEpochProgress, signedUpdate)
+      } else if (
+        signedUpdate.maxAmountAOut.exists(_ < withdrawalAmounts.tokenAAmount) ||
+        signedUpdate.maxAmountBOut.exists(_ < withdrawalAmounts.tokenBAmount)
+      ) {
+        failWith(WithdrawalHigherThanMaxAmount(), expireEpochProgress, signedUpdate)
       } else {
         Right(signedUpdate)
       }
@@ -135,11 +144,8 @@ object WithdrawalValidations {
           .getOrElse(NonNegLong.MinValue)
       )
 
-      def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[WithdrawalUpdate]] =
-        Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate))
+        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
       } else {
         Right(signedUpdate)
       }

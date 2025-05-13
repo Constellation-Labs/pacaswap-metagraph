@@ -261,6 +261,7 @@ object PricingTest extends SimpleIOSuite {
           Hash.empty,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(50.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(45.0))),
+          none,
           EpochProgress.MaxValue,
           SwapReference.empty
         )

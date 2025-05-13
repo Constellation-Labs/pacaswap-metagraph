@@ -3,9 +3,9 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
-import eu.timepit.refined.auto._
-import eu.timepit.refined.types.all.PosLong
-import eu.timepit.refined.types.numeric.NonNegLong
+
+import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
@@ -15,6 +15,10 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
+
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.PosLong
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
@@ -25,8 +29,6 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
-
-import scala.collection.immutable.{SortedMap, SortedSet}
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -129,7 +131,7 @@ object LiquidityPoolCombinerService {
 
         val pendingAllowSpendsCalculatedState = liquidityPoolsCalculatedState.pending
         val pendingLps = liquidityPoolsCalculatedState.getPendingUpdates
-        
+
         val combinedState = for {
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
           pendingLpsPoolsIds <- EitherT.liftF(
@@ -198,7 +200,7 @@ object LiquidityPoolCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val liquidityPoolUpdate = pendingAllowSpendUpdate.update.value
-        
+
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {

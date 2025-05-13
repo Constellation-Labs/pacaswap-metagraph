@@ -16,6 +16,10 @@ type WithdrawalUpdate = {
     tokenAId: string | null
     tokenBId: string | null
     shareToWithdraw: number
+    minAmountAOut: number | null
+    minAmountBOut: number | null
+    maxAmountAOut: number | null
+    maxAmountBOut: number | null
     parent: LastRef
     maxValidGsEpochProgress: number
 }
@@ -26,6 +30,10 @@ type WithdrawalCalculatedStateAddress = {
     tokenBId: string | null
     tokenBAmount: number
     shareToWithdraw: number
+    minAmountAOut: number | null
+    minAmountBOut: number | null
+    maxAmountAOut: number | null
+    maxAmountBOut: number | null
     parent: LastRef
 }
 
@@ -70,6 +78,10 @@ const createWithdrawalUpdate = async (
             tokenAId,
             tokenBId,
             shareToWithdraw,
+            minAmountAOut: null,
+            minAmountBOut: null,
+            maxAmountAOut: null,
+            maxAmountBOut: null,
             parent: lastRef,
         }
     };
