@@ -172,10 +172,15 @@ object SwapValidations {
       } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
       } else if (
-        tokenInformation.primaryTokenInformationUpdated.amount.value < applicationConfig.minTokensLiquidityPool.value ||
-        tokenInformation.pairTokenInformationUpdated.amount.value < applicationConfig.minTokensLiquidityPool.value
+        tokenInformation.primaryTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value ||
+        tokenInformation.pairTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value
       ) {
         failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
+      } else if (
+        tokenInformation.grossReceived.value.value > applicationConfig.tokenLimits.maxTokens.value ||
+        signedUpdate.amountIn.value.value > applicationConfig.tokenLimits.maxTokens.value
+      ) {
+        failWith(SwapExceedsMaxTokensLimit(signedUpdate.value, tokenInformation.grossReceived), expireEpochProgress, signedUpdate)
       } else {
         Right(signedUpdate)
       }

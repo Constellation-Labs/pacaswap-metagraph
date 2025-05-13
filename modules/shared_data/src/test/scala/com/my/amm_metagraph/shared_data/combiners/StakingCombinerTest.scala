@@ -33,6 +33,7 @@ import org.amm_metagraph.shared_data.types.States.OperationType.Staking
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
+import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.StakingValidations
 import weaver.MutableIOSuite
 

@@ -14,7 +14,7 @@ case class ApplicationConfig(
   environment: ApplicationConfig.Environment,
   governance: ApplicationConfig.Governance,
   rewards: ApplicationConfig.Rewards,
-  minTokensLiquidityPool: PosLong,
+  tokenLimits: ApplicationConfig.TokenLimits,
   allowSpendEpochBufferDelay: EpochProgress,
   epochInfo: ApplicationConfig.EpochMetadata
 )
@@ -45,6 +45,11 @@ object ApplicationConfig {
     votingWeight: NonNegLong,
     initialEpoch: EpochProgress,
     daoAddress: Address
+  )
+
+  case class TokenLimits(
+    minTokens: NonNegLong,
+    maxTokens: NonNegLong
   )
 
   case class EpochMetadata(oneEpochProgress: FiniteDuration) {

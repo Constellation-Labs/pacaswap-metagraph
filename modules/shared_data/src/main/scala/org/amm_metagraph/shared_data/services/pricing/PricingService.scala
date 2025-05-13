@@ -28,6 +28,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingTokenInformation
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.SwapQuote
+import org.amm_metagraph.shared_data.validations.Errors._
 
 trait PricingService[F[_]] {
   def getSwapQuote(

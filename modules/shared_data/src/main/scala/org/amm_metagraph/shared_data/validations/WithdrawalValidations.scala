@@ -114,8 +114,8 @@ object WithdrawalValidations {
       if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
         failWith(OperationExpired(signedUpdate))
       } else if (
-        updatedPool.tokenA.amount < applicationConfig.minTokensLiquidityPool ||
-        updatedPool.tokenB.amount < applicationConfig.minTokensLiquidityPool
+        updatedPool.tokenA.amount < applicationConfig.tokenLimits.minTokens ||
+        updatedPool.tokenB.amount < applicationConfig.tokenLimits.minTokens
       ) {
         failWith(WithdrawalWouldDrainPoolBalance())
       } else {
