@@ -952,4 +952,118 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
   }
 
+  test("Test failure lp creation - duplicated allow spend") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val tokenAId = CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some
+    val tokenAAmount = PosLong.unsafeFrom(100L.toTokenAmountFormat)
+    val tokenBId = CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some
+    val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+    
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      allowSpendTokenA = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenAId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        ownerAddress,
+        destinationAddress,
+        tokenBId,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
+        .flatMap(_.toHashed[IO])
+
+      liquidityPoolUpdate = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MaxValue,
+          None
+        )
+      )
+
+      allowSpends = SortedMap(
+        tokenAId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        tokenBId.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
+
+      liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
+        liquidityPoolUpdate,
+        state,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      liquidityPoolPendingSpendActionResponse2 <-  liquidityPoolCombinerService.combineNew(
+        liquidityPoolUpdate,
+        liquidityPoolPendingSpendActionResponse,
+        futureEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      lpCalculatedState = liquidityPoolPendingSpendActionResponse2.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+    } yield
+      expect.all(
+        lpCalculatedState.failed.toList.length === 1,
+        lpCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
+        ),
+        lpCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(liquidityPoolUpdate)
+      )
+  }
+
+
 }
