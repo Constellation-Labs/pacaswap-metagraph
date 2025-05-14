@@ -5,6 +5,7 @@ import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global
 const InputsSchema = z
     .object({
         privateKey: z.string().min(1, "key cannot be empty"),
+        secondPrivateKey: z.string().min(1, "key cannot be empty"),
         tokenAAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenBAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenAAmountToStake: z.number().min(1, "amount must be greater than 0"),
@@ -16,6 +17,7 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
+    secondPrivateKey: "e70e7972630a49f90b0bfb55557287634dbdeb1a6147bba90ac8e3a65e0b41e8",
     tokenAAllowSpendAmount: 50 * 1e8,
     tokenBAllowSpendAmount: 100 * 1e8,
     tokenAAmountToStake: 25 * 1e8,
@@ -38,9 +40,10 @@ const processStakingCreation = async (
     tokenB: TokenConfig<{
         allowSpendAmount: number;
     }>,
+    allowSpendsPrivateKey: string,
+    dataUpdatePrivateKey: string
 ) => {
-    const privateKey = config.inputs.privateKey;
-    const stakingProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+    const stakingProviderAccount = createAccount(allowSpendsPrivateKey, config.ammMl0Url, config.ammMl0Url);
     log("Created staking provider account", "INFO", 'AMM');
 
     const initialBalanceA = await getBalance(tokenA);
@@ -60,7 +63,7 @@ const processStakingCreation = async (
     const tokenBPoolBalance = createdLiquidityPool.data.tokenB.amount;
 
     const signedAllowSpendA = await createSignedAllowSpend(
-        privateKey,
+        allowSpendsPrivateKey,
         tokenA,
         config.ammMetagraphId,
     );
@@ -74,7 +77,7 @@ const processStakingCreation = async (
     );
 
     const signedAllowSpendB = await createSignedAllowSpend(
-        privateKey,
+        allowSpendsPrivateKey,
         tokenB,
         config.ammMetagraphId,
         tokenA.tokenId === tokenB.tokenId ? signedAllowSpendA : undefined // Note: For same currency we reference the previous ref directly
@@ -96,7 +99,7 @@ const processStakingCreation = async (
         config.ammMetagraphId,
         tokenA.amountToSpend,
         stakingProviderAccount,
-        privateKey,
+        dataUpdatePrivateKey,
         config.ammMl0Url,
         'AMM'
     );
@@ -211,7 +214,7 @@ const stakingCurrencyToCurrencyTest = async (config: StakingConfig) => {
         }
     );
 
-    await processStakingCreation(config, tokenA, tokenB);
+    await processStakingCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
 }
 
 const stakingDagToCurrencyTest = async (config: StakingConfig) => {
@@ -242,7 +245,7 @@ const stakingDagToCurrencyTest = async (config: StakingConfig) => {
         }
     );
 
-    await processStakingCreation(config, tokenA, tokenB);
+    await processStakingCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
 }
 
 const stakingDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
@@ -274,7 +277,7 @@ const stakingDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
     );
 
     try {
-        await processStakingCreation(config, tokenA, tokenB);
+        await processStakingCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
         throw new Error("Expected DAG to DAG staking creation to fail, but it succeeded");
     } catch (error) {
         log("DAG to DAG staking creation failed as expected", "INFO", 'AMM');
@@ -310,10 +313,49 @@ const stakingSameCurrencyTest = async (config: ReturnType<typeof createConfig>) 
     );
 
     try {
-        await processStakingCreation(config, tokenA, tokenB);
+        await processStakingCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
         throw new Error("Expected same currency staking creation to fail, but it succeeded");
     } catch (error) {
         log("Same currency staking creation failed as expected", "INFO", 'AMM');
+    }
+}
+
+const stakingSourceMismatchAllowSpendAndStakingUpdate = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting staking test (Source mismatch allow spend and Staking Update - should fail)".toUpperCase());
+
+    const allowSpendsPrivateKey = config.inputs.secondPrivateKey;
+    const dataUpdatesPrivateKey = config.inputs.privateKey;
+
+    const tokenA = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenAMl0Url,
+        config.tokenACl1Url,
+        'A',
+        config.tokenAId,
+        true,
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAAmountToStake
+        }
+    );
+
+    const tokenB = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenBMl0Url,
+        config.tokenBCl1Url,
+        'B',
+        config.tokenBId,
+        true,
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount
+        }
+    );
+
+    try {
+        await processStakingCreation(config, tokenA, tokenB, allowSpendsPrivateKey, dataUpdatesPrivateKey);
+        throw new Error("Expected source mismatch between allow spends and data update to fail, but it succeeded");
+    } catch (error) {
+        log("ource mismatch between allow spends and data update failed as expected", "INFO", 'AMM');
     }
 }
 
@@ -333,6 +375,9 @@ export default async (baseConfig: BaseConfig) => {
     log("=".repeat(80), "INFO");
 
     await stakingSameCurrencyTest(config);
+    log("=".repeat(80), "INFO");
+
+    await stakingSourceMismatchAllowSpendAndStakingUpdate(config);
     log("=".repeat(80), "INFO");
 
     log("All staking creation tests passed!", "INFO", 'AMM');

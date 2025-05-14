@@ -35,6 +35,7 @@ import { lastGlobalSnapshotIncreasingTest } from "../../shared/tests/last-global
 const InputsSchema = z
     .object({
         privateKey: z.string().min(1, "key cannot be empty"),
+        secondPrivateKey: z.string().min(1, "key cannot be empty"),
         tokenAAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenBAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenAToSwapAmount: z.number().min(1, "amount must be greater than 0"),
@@ -46,6 +47,7 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
+    secondPrivateKey: "e70e7972630a49f90b0bfb55557287634dbdeb1a6147bba90ac8e3a65e0b41e8",
     tokenAAllowSpendAmount: 50 * 1e8,
     tokenBAllowSpendAmount: 100 * 1e8,
     tokenAToSwapAmount: 25 * 1e8,
@@ -63,11 +65,12 @@ const processSwapCreation = async (
     config: SwapConfig,
     tokenA: TokenConfig,
     tokenB: TokenConfig,
+    allowSpendsPrivateKey: string,
+    dataUpdatePrivateKey: string
 ) => {
     log("Starting swap creation process", "INFO");
-    
-    const privateKey = config.inputs.privateKey;
-    const swapProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+
+    const swapProviderAccount = createAccount(allowSpendsPrivateKey, config.ammMl0Url, config.ammMl0Url);
 
     const poolId = buildLiquidityPoolUniqueIdentifier(tokenA.tokenId, tokenB.tokenId);
     log(`Looking for liquidity pool with ID: ${poolId}`, "INFO", 'AMM');
@@ -91,7 +94,7 @@ const processSwapCreation = async (
     log(`Initial balance for Token B: ${initialAmmBalanceB}`, "INFO", tokenB.context);
 
     const signedAllowSpend = await createSignedAllowSpend(
-        privateKey,
+        allowSpendsPrivateKey,
         { ...tokenA, allowSpendAmount: config.inputs.tokenAAllowSpendAmount },
         config.ammMetagraphId,
     );
@@ -127,7 +130,7 @@ const processSwapCreation = async (
         swapQuote.amount,
         swapQuote.minimumReceived,
         swapProviderAccount,
-        privateKey,
+        dataUpdatePrivateKey,
         config.ammMl0Url,
         'AMM'
     );
@@ -225,7 +228,7 @@ const swapCurrencyToCurrencyTest = async (config: SwapConfig) => {
         { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
-    await processSwapCreation(config, tokenA, tokenB);
+    await processSwapCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
 }
 
 const swapDagToCurrencyTest = async (config: SwapConfig) => {
@@ -251,7 +254,41 @@ const swapDagToCurrencyTest = async (config: SwapConfig) => {
         { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
     );
 
-    await processSwapCreation(config, tokenA, tokenB);
+    await processSwapCreation(config, tokenA, tokenB, config.inputs.privateKey, config.inputs.privateKey);
+}
+
+const swapSourceMismatchAllowSpendAndStakingUpdate = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting swap test (Source mismatch allow spend and Staking Update - should fail)".toUpperCase());
+
+    const allowSpendsPrivateKey = config.inputs.secondPrivateKey;
+    const dataUpdatesPrivateKey = config.inputs.privateKey;
+
+    const tokenA = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenAMl0Url,
+        config.tokenACl1Url,
+        'A',
+        config.tokenAId,
+        true,
+        { allowSpendAmount: config.inputs.tokenAAllowSpendAmount }
+    );
+
+    const tokenB = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenBMl0Url,
+        config.tokenBCl1Url,
+        'B',
+        config.tokenBId,
+        true,
+        { allowSpendAmount: config.inputs.tokenBAllowSpendAmount }
+    );
+
+    try {
+        await processSwapCreation(config, tokenA, tokenB, allowSpendsPrivateKey, dataUpdatesPrivateKey);
+        throw new Error("Expected source mismatch between allow spends and data update to fail, but it succeeded");
+    } catch (error) {
+        log("ource mismatch between allow spends and data update failed as expected", "INFO", 'AMM');
+    }
 }
 
 export default async (baseConfig: BaseConfig) => {
@@ -264,6 +301,9 @@ export default async (baseConfig: BaseConfig) => {
     log("=".repeat(80), "INFO");
 
     await swapDagToCurrencyTest(config);
+    log("=".repeat(80), "INFO");
+
+    await swapSourceMismatchAllowSpendAndStakingUpdate(config);
     log("=".repeat(80), "INFO");
 
     log("All swap creation tests passed!", "INFO", 'AMM');

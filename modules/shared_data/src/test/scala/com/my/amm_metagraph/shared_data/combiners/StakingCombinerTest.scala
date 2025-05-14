@@ -17,6 +17,7 @@ import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.key.ops.PublicKeyOps
 
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
@@ -949,4 +950,127 @@ object StakingCombinerTest extends MutableIOSuite {
         stakeCleanupState.head._2.values.isEmpty
       )
   }
+
+  test("Failed because allowSpend source different than StakingUpdate source") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    // 100.0 tokens = 10000000000 in fixed-point
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(100.0))
+    )
+
+    // 50.0 tokens = 5000000000 in fixed-point
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(50.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammCalculatedState = AmmCalculatedState(
+      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+    val tokenEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      keyPair2 <- KeyPairGenerator.makeKeyPair[IO]
+      address2 = keyPair2.getPublic.toAddress
+
+      allowSpendTokenA = AllowSpend(
+        address2,
+        destinationAddress,
+        primaryToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(200.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+      allowSpendTokenB = AllowSpend(
+        address2,
+        destinationAddress,
+        pairToken.identifier,
+        SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair2)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair2)
+        .flatMap(_.toHashed[IO])
+
+      stakingUpdate = getFakeSignedUpdate(
+        StakingUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          PosLong.unsafeFrom(toFixedPoint(100.0)),
+          pairToken.identifier,
+          StakingReference.empty,
+          tokenEpoch
+        )
+      )
+
+      allowSpends = SortedMap(
+        primaryToken.identifier.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendA.signed)
+          ),
+        pairToken.identifier.get.value.some ->
+          SortedMap(
+            ownerAddress -> SortedSet(signedAllowSpendB.signed)
+          )
+      )
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        allowSpends,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        destinationAddress
+      )
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+
+      stakingValidations = StakingValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
+
+      stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
+        stakingUpdate,
+        state,
+        tokenEpoch,
+        allowSpends,
+        CurrencyId(destinationAddress)
+      )
+
+      stakingCalculatedState = stakeResponsePendingSpendActionResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
+
+    } yield
+      expect.all(
+        stakingCalculatedState.failed.toList.length === 1,
+        stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
+          NonNegLong.unsafeFrom(tokenEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
+        ),
+        stakingCalculatedState.failed.toList.head.reason == SourceAddressBetweenUpdateAndAllowSpendDifferent(stakingUpdate)
+      )
+  }
+
 }

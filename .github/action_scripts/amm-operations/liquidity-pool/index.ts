@@ -25,6 +25,7 @@ import { lastGlobalSnapshotIncreasingTest } from '../../shared/tests/last-global
 const InputsSchema = z
     .object({
         privateKey: z.string().min(1, "key cannot be empty"),
+        secondPrivateKey: z.string().min(1, "key cannot be empty"),
         tokenAAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenBAllowSpendAmount: z.number().min(1, "amount must be greater than 0"),
         tokenAToSpend: z.number().min(1, "amount must be greater than 0"),
@@ -41,6 +42,7 @@ const InputsSchema = z
 
 const inputs = InputsSchema.parse({
     privateKey: "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
+    secondPrivateKey: "e70e7972630a49f90b0bfb55557287634dbdeb1a6147bba90ac8e3a65e0b41e8",
     tokenAAllowSpendAmount: 2000 * 1e8,
     tokenBAllowSpendAmount: 4000 * 1e8,
     tokenAToSpend: 1000 * 1e8,
@@ -66,9 +68,10 @@ const processLiquidityPoolCreation = async (
         allowSpendAmount: number;
         amountToSpend: number;
     }>,
+    allowSpendsPrivateKey: string,
+    dataUpdatePrivateKey: string
 ) => {
-    const privateKey = config.inputs.privateKey;
-    const lpProviderAccount = createAccount(privateKey, config.ammMl0Url, config.ammMl0Url);
+    const lpProviderAccount = createAccount(allowSpendsPrivateKey, config.ammMl0Url, config.ammMl0Url);
 
     const initialBalanceA = await getBalance(tokenA);
     log(`Initial balance: ${initialBalanceA}`, "INFO", tokenA.context);
@@ -78,13 +81,13 @@ const processLiquidityPoolCreation = async (
     log("Created LP provider account", "INFO", 'AMM');
 
     const signedAllowSpendA = await createSignedAllowSpend(
-        privateKey,
+        allowSpendsPrivateKey,
         tokenA,
         config.ammMetagraphId,
     );
 
     const signedAllowSpendB = await createSignedAllowSpend(
-        privateKey,
+        allowSpendsPrivateKey,
         tokenB,
         config.ammMetagraphId,
         tokenA.tokenId === tokenB.tokenId ? signedAllowSpendA : undefined // Note: For same currency we reference the previous ref directly
@@ -114,7 +117,7 @@ const processLiquidityPoolCreation = async (
         config.ammMetagraphId,
         tokenA.amountToSpend,
         tokenB.amountToSpend,
-        privateKey,
+        dataUpdatePrivateKey,
         lpProviderAccount,
     );
 
@@ -220,7 +223,13 @@ const lpCreationCurrencyToCurrencyTest = async (config: LiquidityPoolConfig) => 
         }
     );
 
-    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    await processLiquidityPoolCreation(
+        config,
+        tokenA,
+        tokenB,
+        config.inputs.privateKey,
+        config.inputs.privateKey
+    );
 }
 
 const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfig>) => {
@@ -252,7 +261,13 @@ const lpCreationDagToCurrencyTest = async (config: ReturnType<typeof createConfi
         }
     );
 
-    await processLiquidityPoolCreation(config, tokenA, tokenB);
+    await processLiquidityPoolCreation(
+        config,
+        tokenA,
+        tokenB,
+        config.inputs.privateKey,
+        config.inputs.privateKey
+    );
 }
 
 const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) => {
@@ -285,7 +300,13 @@ const lpCreationDagToDagTest = async (config: ReturnType<typeof createConfig>) =
     );
 
     try {
-        await processLiquidityPoolCreation(config, tokenA, tokenB);
+        await processLiquidityPoolCreation(
+            config,
+            tokenA,
+            tokenB,
+            config.inputs.privateKey,
+            config.inputs.privateKey
+        );
         throw new Error("Expected DAG to DAG liquidity pool creation to fail, but it succeeded");
     } catch (error) {
         log("DAG to DAG liquidity pool creation failed as expected", "INFO", 'AMM');
@@ -322,10 +343,62 @@ const lpCreationSameCurrencyTest = async (config: ReturnType<typeof createConfig
     );
 
     try {
-        await processLiquidityPoolCreation(config, tokenA, tokenB);
+        await processLiquidityPoolCreation(
+            config,
+            tokenA,
+            tokenB,
+            config.inputs.privateKey,
+            config.inputs.privateKey
+        );
         throw new Error("Expected same currency liquidity pool creation to fail, but it succeeded");
     } catch (error) {
         log("Same currency liquidity pool creation failed as expected", "INFO", 'AMM');
+    }
+}
+
+const lpCreationSourceMismatchAllowSpendAndLpUpdate = async (config: ReturnType<typeof createConfig>) => {
+    log("Starting liquidity pool creation test (Source mismatch allow spend and LP Update - should fail)".toUpperCase());
+
+    const allowSpendsPrivateKey = config.inputs.secondPrivateKey;
+    const dataUpdatesPrivateKey = config.inputs.privateKey;
+
+    const tokenA = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenAMl0Url,
+        config.tokenACl1Url,
+        'A',
+        config.tokenAId,
+        true,
+        {
+            allowSpendAmount: config.inputs.tokenAAllowSpendAmount,
+            amountToSpend: config.inputs.tokenAToSpend
+        }
+    );
+
+    const tokenB = await createTokenConfig(
+        allowSpendsPrivateKey,
+        config.tokenBMl0Url,
+        config.tokenBCl1Url,
+        'B',
+        config.tokenBId,
+        true,
+        {
+            allowSpendAmount: config.inputs.tokenBAllowSpendAmount,
+            amountToSpend: config.inputs.tokenBToSpend
+        }
+    );
+
+    try {
+        await processLiquidityPoolCreation(
+            config,
+            tokenA,
+            tokenB,
+            allowSpendsPrivateKey,
+            dataUpdatesPrivateKey
+        );
+        throw new Error("Expected source mismatch between allow spends and data updates pool creation to fail, but it succeeded");
+    } catch (error) {
+        log("Source mismatch between allow spends and data updates pool creation failed as expected", "INFO", 'AMM');
     }
 }
 
@@ -345,6 +418,9 @@ export default async (baseConfig: BaseConfig) => {
     log("=".repeat(80), "INFO");
 
     await lpCreationDagToDagTest(config);
+    log("=".repeat(80), "INFO");
+
+    await lpCreationSourceMismatchAllowSpendAndLpUpdate(config);
     log("=".repeat(80), "INFO");
 
     log("All liquidity pool creation tests passed!", "INFO", 'AMM');
