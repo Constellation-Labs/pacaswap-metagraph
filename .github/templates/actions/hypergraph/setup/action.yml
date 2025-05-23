@@ -95,9 +95,13 @@ runs:
         cd tessellation
         git checkout ${{ steps.get-commit-hash.outputs.commit_hash }}
         echo "TESSELLATION VERSION=$RELEASE_TAG"
+<<<<<<< HEAD
         
         export RELEASE_TAG=${{ steps.get-tessellation-version.outputs.tessellation_version }}
         sbt --error clean compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
+=======
+        sbt compile dagL0/assembly dagL1/assembly keytool/assembly wallet/assembly sdk/publishM2
+>>>>>>> 0d24e93 (fix: fixing e2e tests)
         
         mv modules/dag-l0/target/scala-2.13/tessellation-dag-l0-assembly-* ../hypergraph/dag-l0.jar
         mv modules/dag-l1/target/scala-2.13/tessellation-dag-l1-assembly-* ../hypergraph/dag-l1.jar
