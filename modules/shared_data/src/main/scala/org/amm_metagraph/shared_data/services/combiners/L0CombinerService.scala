@@ -379,6 +379,7 @@ object L0CombinerService {
             .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
             .replace(lastSyncGlobalOrdinal)
 
+          _ <- logger.info(s"SpendTxnProduced: ${stateUpdatedByLastGlobalSync.sharedArtifacts}")
         } yield stateUpdatedByLastGlobalSync).handleErrorWith { e =>
           logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
         }

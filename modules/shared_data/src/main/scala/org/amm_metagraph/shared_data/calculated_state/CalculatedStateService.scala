@@ -59,7 +59,7 @@ object CalculatedStateService {
         override def hash(
           state: AmmCalculatedState
         ): F[Hash] = Async[F].delay {
-          val jsonState = state.asJson.deepDropNullValues.noSpaces
+          val jsonState = state.operations.asJson.deepDropNullValues.noSpaces
           Hash.fromBytes(jsonState.getBytes(StandardCharsets.UTF_8))
         }
       }
