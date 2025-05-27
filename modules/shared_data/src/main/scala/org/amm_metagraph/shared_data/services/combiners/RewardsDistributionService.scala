@@ -46,16 +46,31 @@ object RewardsDistributionService {
         currentEpoch: EpochProgress
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         // Clean any existed reward distribution, we use them for indexer only
-        val clearedState = state.focus(_.onChain.rewardsUpdate).replace(None)
+        val updatedState =
+          state
+            .focus(_.onChain.rewardsUpdate)
+            .replace(None)
+            .focus(_.calculated.rewards.lastProcessedEpoch)
+            .replace(currentEpoch)
 
-        if (currentEpoch.value.value % interval.value == 0) {
-          // We don't calculate rewards every epoch,
-          // instead we skip "interval" epochs but increase rewards distribution to "interval".
-          // Therefore, we get more or less the same value for rewards as we calculate them every epoch
-          val rewardsMultiplier = interval.value
-          doUpdateRewardState(lastArtifact, clearedState, rewardsMultiplier, currentEpoch)
-        } else {
-          clearedState.pure[F]
+        val currentEpochNumber = currentEpoch.value.value
+        val newEpoch = currentEpochNumber > state.calculated.rewards.lastProcessedEpoch.value.value
+        val rewardDistributionEpoch = currentEpochNumber % interval.value == 0
+
+        (newEpoch, rewardDistributionEpoch) match {
+          case (false, _) =>
+            logger.info(show"Skip reward distribution for epoch $currentEpochNumber. Epoch had been processed already") >>
+              updatedState.pure[F]
+          case (true, false) =>
+            logger.info(show"Skip reward distribution for epoch $currentEpochNumber. Not an epoch for distribution") >>
+              updatedState.pure[F]
+          case (true, true) =>
+            // We don't calculate rewards every epoch,
+            // instead we skip "interval" epochs but increase rewards distribution to "interval".
+            // Therefore, we get more or less the same value for rewards as we calculate them every epoch
+            val rewardsMultiplier = interval.value
+            logger.info(show"Start reward distribution. Current epoch $currentEpochNumber, interval ${interval.value}") >>
+              doUpdateRewardState(lastArtifact, updatedState, rewardsMultiplier, currentEpoch)
         }
       }
 

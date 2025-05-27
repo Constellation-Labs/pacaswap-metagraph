@@ -1,4 +1,4 @@
-package com.my.amm_metagraph.shared_data.validations
+package org.amm_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.NonEmptyList
@@ -21,13 +21,13 @@ import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
-import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
 import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.types.DataUpdates._

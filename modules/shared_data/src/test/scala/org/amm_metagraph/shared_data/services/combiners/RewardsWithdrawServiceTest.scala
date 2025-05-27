@@ -15,12 +15,12 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.Shared
-import com.my.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import monocle.Monocle._
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.Shared
+import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardWithdrawUpdate
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._

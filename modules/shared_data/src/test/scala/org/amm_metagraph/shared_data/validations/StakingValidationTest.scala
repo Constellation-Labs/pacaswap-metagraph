@@ -1,8 +1,8 @@
-package com.my.amm_metagraph.shared_data.validations
+package org.amm_metagraph.shared_data.validations
 
 import cats.Eq
+import cats.data.NonEmptyList
 import cats.data.Validated.{Invalid, Valid}
-import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
@@ -13,37 +13,33 @@ import io.constellationnetwork.currency.dataApplication.dataApplication.DataAppl
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
-import io.constellationnetwork.schema.ID.Id
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
-import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
-import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
-import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
-import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
+import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.SwapUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.SwapReference
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
-object SwapValidationTest extends MutableIOSuite {
+object StakingValidationTest extends MutableIOSuite {
   type Res = (Hasher[IO], codecs.HasherSelector[IO], SecurityProvider[IO])
 
   private val config = ApplicationConfig(
@@ -86,62 +82,12 @@ object SwapValidationTest extends MutableIOSuite {
     hs = codecs.HasherSelector.forSync(h, h)
   } yield (h, hs, sp)
 
-  def buildLiquidityPoolCalculatedState(
-    tokenA: TokenInformation,
-    tokenB: TokenInformation,
-    owner: Address
-  ): (String, LiquidityPoolCalculatedState) = {
-    val primaryAddressAsString = tokenA.identifier.fold("")(address => address.value.value)
-    val pairAddressAsString = tokenB.identifier.fold("")(address => address.value.value)
-    val poolId = org.amm_metagraph.shared_data.types.LiquidityPool.PoolId(s"$primaryAddressAsString-$pairAddressAsString")
-    val liquidityPool = LiquidityPool(
-      poolId,
-      tokenA,
-      tokenB,
-      owner,
-      BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(
-        1.toTokenAmountFormat.toPosLongUnsafe,
-        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
-        Map.empty,
-        Map(owner -> 0L.toNonNegLongUnsafe)
-      ),
-      FeeDistributor.empty
-    )
-    (
-      poolId.value,
-      LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
-      )
-    )
-  }
-
-  def getFakeSignedUpdate(
-    update: SwapUpdate
-  ): Signed[SwapUpdate] =
-    Signed(
-      update,
-      NonEmptySet.one(
-        SignatureProof(
-          Id(
-            Hex(
-              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
-            )
-          ),
-          Signature(
-            Hex(
-              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
-            )
-          )
-        )
-      )
-    )
-
   implicit val eqDataApplicationValidationErrorOr: Eq[DataApplicationValidationErrorOr[Unit]] =
     Eq.fromUniversalEquals
 
   test("Validate update successfully") { implicit res =>
-    implicit val (_, hs, sp) = res
+    implicit val (h, hs, sp) = res
+
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
 
@@ -149,17 +95,16 @@ object SwapValidationTest extends MutableIOSuite {
       ammMetagraphId
     )
 
-    val stakingUpdate = SwapUpdate(
+    val stakingUpdate = StakingUpdate(
       ammMetagraphIdAsCurrencyId,
       sourceAddress,
-      primaryToken.identifier,
-      pairToken.identifier,
       Hash.empty,
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      none,
-      EpochProgress.MinValue,
-      SwapReference.empty
+      Hash.empty,
+      primaryToken.identifier,
+      100L.toPosLongUnsafe,
+      pairToken.identifier,
+      StakingReference.empty,
+      EpochProgress.MaxValue
     )
 
     val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
@@ -183,10 +128,9 @@ object SwapValidationTest extends MutableIOSuite {
 
   test("Validate data successfully") { implicit res =>
     implicit val (h, hs, sp) = res
-    val primaryToken =
-      TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val pairToken =
-      TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
+
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
@@ -198,8 +142,8 @@ object SwapValidationTest extends MutableIOSuite {
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      allowSpend = AllowSpend(
-        ownerAddress,
+      allowSpendTokenA = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
         primaryToken.identifier,
         SwapAmount(PosLong.MinValue),
@@ -208,30 +152,47 @@ object SwapValidationTest extends MutableIOSuite {
         EpochProgress.MaxValue,
         List.empty
       )
-      signedAllowSpend <- Signed
-        .forAsyncHasher[IO, AllowSpend](allowSpend, keyPair)
+      allowSpendTokenB = AllowSpend(
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc"),
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+        pairToken.identifier,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, Hash.empty),
+        EpochProgress.MaxValue,
+        List.empty
+      )
+
+      signedAllowSpendA <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenA, keyPair)
+        .flatMap(_.toHashed[IO])
+      signedAllowSpendB <- Signed
+        .forAsyncHasher[IO, AllowSpend](allowSpendTokenB, keyPair)
         .flatMap(_.toHashed[IO])
 
-      swapUpdate = SwapUpdate(
+      stakingUpdate = StakingUpdate(
         CurrencyId(ownerAddress),
-        ownerAddress,
+        sourceAddress,
+        signedAllowSpendA.hash,
+        signedAllowSpendB.hash,
         primaryToken.identifier,
+        100L.toPosLongUnsafe,
         pairToken.identifier,
-        signedAllowSpend.hash,
-        SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-        SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-        none,
-        EpochProgress.MinValue,
-        SwapReference.empty
+        StakingReference.empty,
+        EpochProgress.MaxValue
       )
-      fakeSignedUpdate = getFakeSignedUpdate(swapUpdate)
 
+      fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
         keyPair,
         SortedMap(
-          ownerAddress.some ->
+          primaryToken.identifier.get.value.some ->
             SortedMap(
-              ownerAddress -> SortedSet(signedAllowSpend.signed)
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendA.signed)
+            ),
+          pairToken.identifier.get.value.some ->
+            SortedMap(
+              Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMc") -> SortedSet(signedAllowSpendB.signed)
             )
         ),
         EpochProgress.MinValue,
@@ -256,33 +217,33 @@ object SwapValidationTest extends MutableIOSuite {
         withdrawalValidations,
         governanceValidations
       )
+
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
   }
 
-  test("Validate data fail - Liquidity pool does not exists") { implicit res =>
+  test("Validate data fails - Liquidity pool does not exist") { implicit res =>
     implicit val (h, hs, sp) = res
-    val primaryToken =
-      TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val pairToken =
-      TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
-    val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val ammOnChainState = AmmOnChainState(Set.empty, None) // No pools initialized
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val stakingUpdate = SwapUpdate(
-      CurrencyId(ownerAddress),
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val stakingUpdate = StakingUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
-      primaryToken.identifier,
-      pairToken.identifier,
       Hash.empty,
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      none,
-      EpochProgress.MinValue,
-      SwapReference.empty
+      Hash.empty,
+      primaryToken.identifier,
+      100L.toPosLongUnsafe,
+      pairToken.identifier,
+      StakingReference.empty,
+      EpochProgress.MaxValue
     )
+
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
     val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
@@ -314,43 +275,67 @@ object SwapValidationTest extends MutableIOSuite {
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
-        case Invalid(errors) if errors.exists {
-              case Errors.SwapLiquidityPoolDoesNotExists | Errors.SwapLiquidityPoolNotEnoughTokens => true
-              case _                                                                               => false
-            } =>
+        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.StakingLiquidityPoolDoesNotExists.type]) =>
           true
-        case _ => false
+        case _ =>
+          false
       }
       expect(expectedError)
     }
   }
 
-  test("Validate data fail - Not enough tokens") { implicit res =>
+  test("Validate data fails - Txn already exists") { implicit res =>
     implicit val (h, hs, sp) = res
-    val primaryToken =
-      TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 1L.toTokenAmountFormat.toPosLongUnsafe)
-    val pairToken =
-      TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2L.toTokenAmountFormat.toPosLongUnsafe)
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val signerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      Map(
+        OperationType.LiquidityPool -> liquidityPoolCalculatedState,
+        OperationType.Staking -> StakingCalculatedState(
+          ConfirmedStakingCalculatedState(
+            Map(
+              signerAddress ->
+                StakingCalculatedStateInfo(
+                  StakingReference.empty,
+                  Set(
+                    StakingCalculatedStateValue(
+                      EpochProgress.MaxValue,
+                      StakingCalculatedStateAddress(
+                        Hash("allowSpendA"),
+                        Hash("allowSpendB"),
+                        primaryToken,
+                        pairToken,
+                        StakingReference.empty
+                      )
+                    )
+                  )
+                )
+            )
+          ),
+          Set.empty,
+          Set.empty
+        )
+      )
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
-    val stakingUpdate = SwapUpdate(
-      CurrencyId(ownerAddress),
+
+    val stakingUpdate = StakingUpdate(
+      ammMetagraphIdAsCurrencyId,
       sourceAddress,
+      Hash("allowSpendA"),
+      Hash("allowSpendB"),
       primaryToken.identifier,
+      100L.toPosLongUnsafe,
       pairToken.identifier,
-      Hash.empty,
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      SwapAmount(100000L.toTokenAmountFormat.toPosLongUnsafe),
-      none,
-      EpochProgress.MinValue,
-      SwapReference.empty
+      StakingReference.empty,
+      EpochProgress.MaxValue
     )
+
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
     val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
@@ -382,14 +367,62 @@ object SwapValidationTest extends MutableIOSuite {
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield {
       val expectedError = response match {
-        case Invalid(errors) if errors.exists {
-              case Errors.SwapLiquidityPoolNotEnoughTokens => true
-              case _                                       => false
-            } =>
+        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.StakingTransactionAlreadyExists.type]) =>
           true
-        case _ => false
+        case _ =>
+          false
       }
       expect(expectedError)
     }
   }
+
+  test("Validate update fail - different AMM metagraph ID provided") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
+    val stakingUpdate = StakingUpdate(
+      primaryToken.identifier.get,
+      sourceAddress,
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      100L.toPosLongUnsafe,
+      pairToken.identifier,
+      StakingReference.empty,
+      EpochProgress.MaxValue
+    )
+
+    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+    val stakingValidations = StakingValidations.make[IO](config)
+    val swapValidations = SwapValidations.make[IO](config)
+    val withdrawalValidations = WithdrawalValidations.make[IO](config)
+    val governanceValidations = GovernanceValidations.make[IO]
+
+    val validationService = ValidationService.make[IO](
+      config,
+      liquidityPoolValidations,
+      stakingValidations,
+      swapValidations,
+      withdrawalValidations,
+      governanceValidations
+    )
+    for {
+      response <- validationService.validateUpdate(stakingUpdate)(context)
+    } yield {
+      val expectedError = response match {
+        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.InvalidAMMMetagraphId.type]) =>
+          true
+        case _ =>
+          false
+      }
+      expect(expectedError)
+    }
+  }
+
 }
