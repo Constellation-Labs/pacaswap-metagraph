@@ -92,6 +92,7 @@ object RewardsDistributionService {
 
             distributionAsRewardInfo = RewardInfo.fromRewardDistribution(multipliedRewards)
             mergedRewards <- mergeRewards(calculatedState.rewards.availableRewards, distributionAsRewardInfo)
+            _ <- EitherT.liftF(logger.info(show"Reward distribution for ${currentEpoch.value.value} is $mergedRewards"))
           } yield
             state
               .focus(_.calculated.rewards.availableRewards)

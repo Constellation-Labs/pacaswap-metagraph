@@ -45,12 +45,7 @@ object CalculatedStateService {
             (
               CalculatedState(
                 snapshotOrdinal,
-                AmmCalculatedState(
-                  updatedOperations,
-                  state.votingWeights,
-                  state.allocations,
-                  state.lastSyncGlobalSnapshotOrdinal
-                )
+                state.copy(operations = updatedOperations)
               ),
               true
             )

@@ -10,7 +10,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 
-import derevo.cats.{eqv, order}
+import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
@@ -103,7 +103,7 @@ object DataUpdates {
     val ordinal: RewardAllocationVoteOrdinal = parent.ordinal.next
   }
 
-  @derive(decoder, encoder)
+  @derive(decoder, encoder, show)
   case class RewardWithdrawUpdate(
     metagraphId: CurrencyId,
     source: Address,

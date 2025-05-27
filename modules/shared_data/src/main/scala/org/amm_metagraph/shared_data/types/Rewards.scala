@@ -37,7 +37,7 @@ object Rewards {
     implicit val keyDecode: KeyDecoder[RewardType] = KeyDecoder.instance(RewardType.withNameOption)
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, show)
   case class AddressAndRewardType(address: Address, rewardType: RewardType)
   object AddressAndRewardType {
     implicit val keyEncode: KeyEncoder[AddressAndRewardType] =
@@ -46,7 +46,7 @@ object Rewards {
       tupleKeyDecoder[Address, RewardType].map[AddressAndRewardType](t => AddressAndRewardType(t._1, t._2))
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, show)
   case class RewardInfo(info: Map[AddressAndRewardType, Amount]) {
     def addReward(
       address: Address,

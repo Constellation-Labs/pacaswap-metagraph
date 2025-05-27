@@ -1,6 +1,6 @@
 import { dag4 } from "@stardust-collective/dag4";
 import axios from "axios";
-import { delay, getPublicKey, log, retry, getSnapshotRewardForAddress, getSnapshotBalanceForAddress, getGlobalSnapshotCombined, getBalanceForAddress, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate } from "../../shared";
+import { delay, getPublicKey, log, retry, getSnapshotRewardForAddress, getSnapshotBalanceForAddress, getGlobalSnapshotCombined, getBalanceForAddress, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate, getAvaialbleRewardsForAddress } from "../../shared";
 import { z } from 'zod';
 
 const voteAllocations = [{
@@ -35,6 +35,43 @@ const createConfig = (argsObject: object) => {
 
     return CliArgsSchema.parse(argsObj);
 };
+
+const getSignedRewardWithdraw = async (config, { privateKey, publicKey, address }, rewardType, amount) => {
+    log("Generating reward withdraw request...");
+    const { ammMl0Url } = config;
+
+    log(`Fetching last reference for wallet: ${address} ${`${ammMl0Url}/v1/rewards/${address}/withdrawals/last-reference`}`);
+    const { data: lastRef } = await axios.get(`${ammMl0Url}/v1/rewards/${address}/withdrawals/last-reference`);
+    const { hash, ordinal } = lastRef.data;
+
+    const body = {
+        RewardWithdrawUpdate: {
+            metagraphId: config.metagraphId,
+            source: address,
+            parent: {
+                hash,
+                ordinal
+            },
+            rewardType: rewardType,
+            amount: amount
+        }
+    };
+
+    const encodedMessage = await serializeBase64(body)
+    const signature = await dag4.keyStore.dataSign(
+        privateKey,
+        encodedMessage
+    );
+
+    const dataUpdate = {
+        value: body,
+        proofs: [{ id: publicKey, signature }],
+    };
+
+    log(`Signed reward withdraw had been generated for: ${address}: ${JSON.stringify(dataUpdate)}`);
+
+    return dataUpdate;
+}
 
 const getSignedVoteAllocation = async (config, { privateKey, publicKey, address, allocations }) => {
     log("Generating signed vote allocations...");
@@ -116,6 +153,29 @@ const validateAllocationsRewards = async (
         throw new Error(`Rewards not filled yet`);
 };
 
+const getExpectedAvaialbleRewardForAddress = async (
+  address: string,
+  rewardType: string,
+  url: string,
+  isInvalid: (balance: number) => boolean
+) => {
+  const balance = await getAvaialbleRewardsForAddress(address, rewardType, url, "");
+  
+  if (isInvalid(balance)) {
+    throw new Error(`Not expected balance condition yet for ${balance}`);
+  }
+
+  return balance;
+};
+
+const getExpectedBalance = async (address: string, url: string, metagraphId: string, expectedBalance) => {
+    const balance = await getSnapshotBalanceForAddress(address, url, "", metagraphId);
+    log(`Got balance ${balance}, expecting ${expectedBalance}`)
+    if (balance !== expectedBalance) {
+        throw new Error(`Avaialble rewards not filled yet`);
+    }
+};
+
 const voteAllocationTests = async (argsObject: object) => {
     const config = createConfig(argsObject)
 
@@ -167,27 +227,47 @@ const voteAllocationTests = async (argsObject: object) => {
 
     for (const voteAllocationInfo of voteAllocationsInfo) {
         const { address } = voteAllocationInfo;
+        const govRewardType = "GovernanceVoting"
       
-        let previousBalance = 0;
+        const initialBalance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId);
+        const initialAvailableRewards = await getAvaialbleRewardsForAddress(address, govRewardType, config.ammMl0Url, "");
+        log(`Initial available rewards for ${address} is ${initialAvailableRewards}`) 
       
-        for (let i = 0; i < 10; i++) {
-          const balance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId);
-      
-          if (balance < previousBalance) {
-            throw new Error(`Balance decreased for address ${address}: ${balance} < ${previousBalance}`);
-          }
-      
-          previousBalance = balance;
-      
-          const rewards = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId);
-      
-          const expectedRewards = [];
-      
-          if (rewards.length !== 0) {
+        const rewards = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId);
+        if (rewards.length !== 0) {
             throw new Error(`Unexpected rewards for address ${address}: got ${JSON.stringify(rewards)}`);
-          }
-      
-          await delay(10000);
+        }
+
+        
+        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 10, delayMs: 10000 })(async (logger) => {
+            await getExpectedAvaialbleRewardForAddress(address, govRewardType, config.ammMl0Url, (balance) => balance === 0)
+        })
+
+        const avaiableGovReward = await getAvaialbleRewardsForAddress(address, govRewardType, config.ammMl0Url, "")
+        log(`Available rewards for ${address} is ${avaiableGovReward}`) 
+        const rewardWithdrawRequest = await getSignedRewardWithdraw(config, voteAllocationInfo, govRewardType, avaiableGovReward)
+        await sendDataUpdate(config.ammDl1Url, rewardWithdrawRequest);
+        await retry(`Waiting withdraw rewards for ${address}`, { maxAttempts: 10, delayMs: 10000 })(async (logger) => {
+            await getExpectedAvaialbleRewardForAddress(address, govRewardType, config.ammMl0Url, (balance) => balance >= avaiableGovReward)
+        })
+        const avaiableGovRewardAfter = await getAvaialbleRewardsForAddress(address, govRewardType, config.ammMl0Url, "")
+        log(`Available rewards for ${address} after withdraw is ${avaiableGovRewardAfter}`) 
+
+        const expectedBalance = Number(initialBalance) + Number(avaiableGovReward)
+
+        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 15, delayMs: 20000 })(async (logger) => {
+            await getExpectedBalance(address, config.gl0Url, config.metagraphId, expectedBalance)
+        })
+        const reward = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId)
+        if (Number(reward) !== Number(avaiableGovReward)) {
+            throw new Error(`Unexpected rewards for address ${address}: got ${reward} expect ${avaiableGovReward}`);
+        }
+
+        log(`Balance for ${address} shall not change overtime now`) 
+        await delay(60000)
+        const finalBalance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId)
+        if (finalBalance !== expectedBalance) {
+            throw new Error(`Unexpected balance for address ${address}}`);
         }
       }
 
