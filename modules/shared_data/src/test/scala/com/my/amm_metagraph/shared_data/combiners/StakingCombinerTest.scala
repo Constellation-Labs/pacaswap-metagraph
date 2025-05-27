@@ -16,8 +16,8 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
 import io.constellationnetwork.security.hash.Hash
-import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.key.ops.PublicKeyOps
+import io.constellationnetwork.security.signature.Signed
 
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._

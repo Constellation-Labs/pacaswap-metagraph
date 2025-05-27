@@ -4,11 +4,12 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.ext.http4s.AddressVar
-import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
 import io.constellationnetwork.schema.swap.CurrencyId
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
+import eu.timepit.refined.refineV
 import io.circe.generic.auto._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -69,14 +70,20 @@ case class LiquidityPoolRoutes[F[_]: Async](
   import Pagination._
   import Responses._
 
-  private def getLiquidityPools(
-    pagination: PaginationParams
+  def getLiquidityPools(
+    pagination: PaginationParams,
+    maybeAddress: Option[Address]
   ): F[(List[LiquidityPoolResponse], PaginationResponse)] = for {
     calculatedState <- calculatedStateService.get
     liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state)
     allLiquidityPools = liquidityPoolCalculatedState.confirmed.value.values
 
-    filteredLPs <- allLiquidityPools
+    allLiquidityPoolFiltered = maybeAddress match {
+      case None          => allLiquidityPools
+      case Some(address) => allLiquidityPools.filter(_.poolShares.addressShares.contains(address))
+    }
+
+    filteredLPs <- allLiquidityPoolFiltered
       .slice(pagination.offset, pagination.offset + pagination.limit)
       .toList
       .traverse { lp =>
@@ -107,11 +114,21 @@ case class LiquidityPoolRoutes[F[_]: Async](
 
   private def handleGetLiquidityPools(
     maybeLimit: Option[String],
-    maybeOffset: Option[String]
+    maybeOffset: Option[String],
+    addressString: Option[String]
   ): F[Response[F]] = {
     val pagination = PaginationParams.fromStrings(maybeLimit, maybeOffset)
 
-    getLiquidityPools(pagination).flatMap {
+    val maybeAddress = addressString match {
+      case Some(addressStr) =>
+        refineV[DAGAddressRefined](addressStr) match {
+          case Right(validAddress) => Some(Address(validAddress))
+          case Left(_)             => return BadRequest("Invalid address format")
+        }
+      case None => None
+    }
+
+    getLiquidityPools(pagination, maybeAddress).flatMap {
       case (data, meta) =>
         Ok(PaginatedResponse(data, meta))
     }
@@ -152,7 +169,8 @@ case class LiquidityPoolRoutes[F[_]: Async](
     case req @ GET -> Root / "liquidity-pools" =>
       handleGetLiquidityPools(
         req.params.get("limit"),
-        req.params.get("offset")
+        req.params.get("offset"),
+        req.params.get("address")
       )
     case GET -> Root / "liquidity-pools" / poolId =>
       handleGetLiquidityPoolByPoolId(

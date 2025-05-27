@@ -4,6 +4,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
@@ -13,9 +14,10 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.key.ops.PublicKeyOps
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
-import io.constellationnetwork.security.key.ops.PublicKeyOps
+
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
@@ -2238,6 +2240,5 @@ object SwapCombinerTest extends MutableIOSuite {
         swapCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(swapUpdate)
       )
   }
-
 
 }
