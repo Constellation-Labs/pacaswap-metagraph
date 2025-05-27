@@ -14,9 +14,9 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.key.ops.PublicKeyOps
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
-import io.constellationnetwork.security.key.ops.PublicKeyOps
 
 import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import com.my.amm_metagraph.shared_data.Shared._
@@ -966,7 +966,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState(Map.empty)
     val state = DataState(ammOnChainState, ammCalculatedState)
     val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
-    
+
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpendTokenA = AllowSpend(
@@ -1046,7 +1046,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         CurrencyId(destinationAddress)
       )
 
-      liquidityPoolPendingSpendActionResponse2 <-  liquidityPoolCombinerService.combineNew(
+      liquidityPoolPendingSpendActionResponse2 <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
         liquidityPoolPendingSpendActionResponse,
         futureEpoch,
@@ -1054,7 +1054,9 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         CurrencyId(destinationAddress)
       )
 
-      lpCalculatedState = liquidityPoolPendingSpendActionResponse2.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+      lpCalculatedState = liquidityPoolPendingSpendActionResponse2.calculated
+        .operations(LiquidityPool)
+        .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
         lpCalculatedState.failed.toList.length === 1,
@@ -1064,6 +1066,5 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         lpCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(liquidityPoolUpdate)
       )
   }
-
 
 }
