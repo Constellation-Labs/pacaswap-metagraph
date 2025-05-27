@@ -22,8 +22,6 @@ const getSnapshotBalanceForAddress = async (address: string, l0Url: string, cont
         const [, snapshotInfo] = data;
 
         const snapshotBalances = snapshotInfo.lastCurrencySnapshots[currencyId].Right[1].balances;
-        console.warn(JSON.stringify(snapshotBalances, null, 2))
-
         const balance = snapshotBalances[address];
 
         if (balance === undefined) {
@@ -89,6 +87,30 @@ const getBalanceForAddress = async (address: string, l0Url: string, isCurrency: 
     }
 }
 
+const getAvaialbleRewardsForAddress = async (address: string, rewardType: string, ammMl0Url: string, context: string) => {
+    log(`Getting available reward balance for account: ${address} `, "INFO", context);
+
+    try {
+        const url = `${ammMl0Url}/v1/rewards/${address}`;
+
+        const { data } = await axios.get(url);
+        console.log(`${JSON.stringify(data)}`)
+        
+
+        const balance = data.data.find((item: any) => item.rewardType === rewardType)?.amount;
+
+        if (balance === undefined) {
+            throwInContext(context)(`Reward balance for account: ${address} with type ${rewardType} is undefined`);
+        }
+        log(`Balance for account: ${address} for type ${rewardType} is ${balance}`, "INFO", context);
+        return balance;
+    } catch (error) {
+        console.log(error)
+        log(`Error getting reward balance for account: ${address} ${rewardType}: ${error}`, "ERROR", context);
+        throw error;
+    }
+}
+
 const validateIfBalanceChanged = async (
     initialBalance: number,
     expectedBalance: number,
@@ -102,4 +124,4 @@ const validateIfBalanceChanged = async (
     }
 }
 
-export { getBalance, getBalanceForAddress, validateIfBalanceChanged, getSnapshotBalanceForAddress, getSnapshotRewardForAddress };
+export { getBalance, getBalanceForAddress, validateIfBalanceChanged, getSnapshotBalanceForAddress, getSnapshotRewardForAddress, getAvaialbleRewardsForAddress };

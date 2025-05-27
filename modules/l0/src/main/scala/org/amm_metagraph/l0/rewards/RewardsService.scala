@@ -20,9 +20,19 @@ import io.constellationnetwork.syntax.sortedCollection._
 import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
+/**
+ * Rewards created by RewardWithdrawUpdate by moving from
+ * calculatedState.rewards.availableRewards to calculatedState.rewards.withdraws.pending
+ * RewardsService create rewards based on "pending" data for current epoch.
+ * Clearance of pending state is done in RewardWithdrawService
+ */
 object RewardsService {
-  def make[F[_]: Async: SecurityProvider]: Rewards[F, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotEvent] =
+  def make[F[_]: Async: SecurityProvider]: Rewards[F, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotEvent] = {
+    def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
+
     (
       lastArtifact: Signed[CurrencyIncrementalSnapshot],
       _: SortedMap[Address, Balance],
@@ -47,8 +57,10 @@ object RewardsService {
               PosLong.from(amount.value.value).map(pos => RewardTransaction(address, TransactionAmount(pos))).toList
           }
 
-          rewardTransactions.toSortedSet.pure[F]
+          logger.info(show"Distribute rewards for epoch $currentEpoch: $rewardTransactions") >>
+            rewardTransactions.toSortedSet.pure[F]
 
         case None => SortedSet.empty[RewardTransaction].pure[F]
       }
+  }
 }

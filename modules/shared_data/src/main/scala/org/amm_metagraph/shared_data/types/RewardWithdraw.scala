@@ -10,7 +10,7 @@ import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
-import derevo.cats.order
+import derevo.cats.{order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
@@ -21,7 +21,7 @@ import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardWithdrawUpdate
 
 object RewardWithdraw {
-  @derive(decoder, encoder, order, ordering)
+  @derive(decoder, encoder, order, ordering, show)
   case class RewardWithdrawReference(ordinal: RewardWithdrawOrdinal, hash: Hash)
 
   object RewardWithdrawReference {
@@ -34,7 +34,7 @@ object RewardWithdraw {
     val empty: RewardWithdrawReference = RewardWithdrawReference(RewardWithdrawOrdinal(0L), Hash.empty)
   }
 
-  @derive(decoder, encoder, order, ordering)
+  @derive(decoder, encoder, order, ordering, show)
   @newtype
   case class RewardWithdrawOrdinal(value: NonNegLong) {
     def next: RewardWithdrawOrdinal = RewardWithdrawOrdinal(value |+| 1L)

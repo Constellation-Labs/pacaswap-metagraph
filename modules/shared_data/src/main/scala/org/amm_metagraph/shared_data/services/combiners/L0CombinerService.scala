@@ -405,7 +405,6 @@ object L0CombinerService {
             stateUpdatedByLastGlobalSync,
             currentSnapshotEpochProgress
           )
-
         } yield stateUpdatedRewardDistribution
 
         combined.handleErrorWith { e =>
