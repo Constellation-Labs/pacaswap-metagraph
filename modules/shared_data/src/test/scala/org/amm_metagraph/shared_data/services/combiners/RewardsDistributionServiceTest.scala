@@ -23,16 +23,16 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.Shared
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import monocle.Monocle._
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.rewards._
 import org.amm_metagraph.shared_data.types.Governance.VotingWeight
-import org.amm_metagraph.shared_data.types.Rewards.AddressAndRewardType
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
+import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
+import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import weaver.MutableIOSuite
 
@@ -122,9 +122,14 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       )
 
       expectedMap = Map.empty[AddressAndRewardType, Amount]
+      expectedRewards = RewardsState(
+        withdraws = RewardWithdrawCalculatedState.empty,
+        availableRewards = RewardInfo(expectedMap),
+        lastProcessedEpoch = currentEpoch
+      )
     } yield
       expect.all(
-        newState.calculated.rewards.availableRewards.info == expectedMap,
+        newState.calculated.rewards == expectedRewards,
         newState.onChain.rewardsUpdate.isEmpty
       )
 
@@ -180,9 +185,14 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
         AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(votingReward),
         AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
       )
+      expectedRewards = RewardsState(
+        withdraws = RewardWithdrawCalculatedState.empty,
+        availableRewards = RewardInfo(expectedMap),
+        lastProcessedEpoch = currentEpoch
+      )
     } yield
       expect.all(
-        newState.calculated.rewards.availableRewards.info == expectedMap,
+        newState.calculated.rewards == expectedRewards,
         newState.onChain.rewardsUpdate.get.info == expectedMap
       )
 
@@ -246,10 +256,94 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
         AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
       )
       expectedMap = expectedOnChainMap.map { case (k, v) => k -> Amount(NonNegLong.unsafeFrom(v.value.value * 2)) }
+
+      expectedRewards = RewardsState(
+        withdraws = RewardWithdrawCalculatedState.empty,
+        availableRewards = RewardInfo(expectedMap),
+        lastProcessedEpoch = currentEpoch2
+      )
     } yield
       expect.all(
-        newState2.calculated.rewards.availableRewards.info == expectedMap,
+        newState2.calculated.rewards == expectedRewards,
         newState2.onChain.rewardsUpdate.get.info == expectedOnChainMap
+      )
+
+  }
+
+  test("Successfully update reward distribution only once because of the same epoch in calculated state and on chain") { implicit res =>
+    implicit val (h, hs, sp, keys) = res
+    val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
+    val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammCalculatedState = AmmCalculatedState()
+    val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
+    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+
+      voters = NonEmptySet.of(
+        SignatureProof(a1Id, dummySignature),
+        SignatureProof(a2Id, dummySignature),
+        SignatureProof(a3Id, dummySignature)
+      )
+      currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
+      snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
+
+      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), List.empty)).toMap
+      stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
+
+      rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
+      newState1 <- rewardService.updateRewardsDistribution(
+        snapShotWithVoters,
+        stateWithVotingPowers,
+        currentEpoch1
+      )
+
+      newState2 <- rewardService.updateRewardsDistribution(
+        snapShotWithVoters,
+        newState1,
+        currentEpoch2
+      )
+
+      newState3 <- rewardService.updateRewardsDistribution(
+        snapShotWithVoters,
+        newState2,
+        currentEpoch2
+      )
+
+      expectedOnChainMap: Map[AddressAndRewardType, Amount] = Map(
+        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(validatorReward),
+        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(validatorReward),
+        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(validatorReward),
+        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(votingReward),
+        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(votingReward),
+        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+      )
+      expectedMap = expectedOnChainMap.map { case (k, v) => k -> Amount(NonNegLong.unsafeFrom(v.value.value * 2)) }
+
+      expectedRewards = RewardsState(
+        withdraws = RewardWithdrawCalculatedState.empty,
+        availableRewards = RewardInfo(expectedMap),
+        lastProcessedEpoch = currentEpoch2
+      )
+    } yield
+      expect.all(
+        newState3.calculated.rewards == expectedRewards,
+        newState3.onChain.rewardsUpdate.isEmpty
       )
 
   }

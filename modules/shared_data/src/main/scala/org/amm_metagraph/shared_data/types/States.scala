@@ -233,7 +233,8 @@ object States {
   @derive(encoder, decoder)
   case class RewardsState(
     withdraws: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState.empty,
-    availableRewards: RewardInfo = RewardInfo.empty
+    availableRewards: RewardInfo = RewardInfo.empty,
+    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue
   )
 
   @derive(encoder, decoder)
