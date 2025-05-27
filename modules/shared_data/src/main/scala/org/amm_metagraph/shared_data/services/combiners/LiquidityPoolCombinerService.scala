@@ -55,6 +55,11 @@ trait LiquidityPoolCombinerService[F[_]] {
     currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
+
+  def cleanupExpiredOperations(
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    globalEpochProgress: EpochProgress
+  ): DataState[AmmOnChainState, AmmCalculatedState]
 }
 
 object LiquidityPoolCombinerService {
@@ -352,6 +357,21 @@ object LiquidityPoolCombinerService {
         combinedState.valueOr { failedCalculatedState =>
           handleFailedUpdate(signedLiquidityPoolUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
         }
+      }
+
+      def cleanupExpiredOperations(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        globalEpochProgress: EpochProgress
+      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+        val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
+        val unexpiredFailed = liquidityPoolCalculatedState.failed.filter(_.expiringEpochProgress > globalEpochProgress)
+
+        val updatedStakingCalculatedState = liquidityPoolCalculatedState
+          .focus(_.failed)
+          .replace(unexpiredFailed)
+        oldState
+          .focus(_.calculated.operations)
+          .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
       }
     }
 }

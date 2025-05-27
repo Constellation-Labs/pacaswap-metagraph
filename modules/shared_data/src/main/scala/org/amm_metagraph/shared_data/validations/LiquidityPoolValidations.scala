@@ -159,7 +159,9 @@ object LiquidityPoolValidations {
       val update = signedUpdate.value
       val allowSpendDelay = applicationConfig.allowSpendEpochBufferDelay.value.value
 
-      if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
+      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
+      } else if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
         failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
       } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
         failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)

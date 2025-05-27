@@ -90,7 +90,7 @@ case class LiquidityPoolRoutes[F[_]: Async](
         pricingService
           .getLiquidityPoolPrices(lp.poolId)
           .map {
-            case Right((tokenAPrice, tokenBPrice)) if tokenAPrice > 0 && tokenBPrice > 0 =>
+            case Right((tokenAPrice, tokenBPrice)) =>
               Some(LiquidityPoolResponse.from(lp, tokenAPrice, tokenBPrice))
             case _ => None
           }

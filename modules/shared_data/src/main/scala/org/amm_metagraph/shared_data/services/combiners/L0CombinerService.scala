@@ -265,8 +265,13 @@ object L0CombinerService {
         stateCombinedByPendingSpendTransactions: DataState[AmmOnChainState, AmmCalculatedState],
         lastSyncGlobalEpochProgress: EpochProgress
       ) = {
-        val stakesCleanupState = stakingCombinerService.cleanupExpiredOperations(
+        val liquidityPoolCleanupState = liquidityPoolCombinerService.cleanupExpiredOperations(
           stateCombinedByPendingSpendTransactions,
+          lastSyncGlobalEpochProgress
+        )
+
+        val stakesCleanupState = stakingCombinerService.cleanupExpiredOperations(
+          liquidityPoolCleanupState,
           lastSyncGlobalEpochProgress
         )
 
@@ -298,6 +303,7 @@ object L0CombinerService {
             logger.error(message) >> new Exception(message).raiseError[F, (EpochProgress, SnapshotOrdinal, GlobalSnapshotInfo)]
           }
 
+          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: ${lastSyncGlobalEpochProgress}")
           currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
           currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
 
