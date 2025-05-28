@@ -3,6 +3,8 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
@@ -201,7 +203,7 @@ object LiquidityPoolValidations {
     private def validateIfPoolAlreadyExists(
       liquidityPoolUpdate: LiquidityPoolUpdate,
       currentConfirmedLiquidityPools: Map[String, LiquidityPool],
-      currentPendingUpdates: Set[Signed[LiquidityPoolUpdate]]
+      currentPendingUpdates: SortedSet[Signed[LiquidityPoolUpdate]]
     ): F[DataApplicationValidationErrorOr[Unit]] =
       for {
         poolId <- buildLiquidityPoolUniqueIdentifier(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)

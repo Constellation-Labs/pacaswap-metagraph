@@ -1,5 +1,9 @@
 package org.amm_metagraph.shared_data.types
 
+import cats.Order
+
+import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
@@ -14,7 +18,7 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, ShareAmount, TokenInformation}
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
@@ -23,7 +27,7 @@ import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateRea
 object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
-    updates: Set[AmmUpdate]
+    updates: SortedSet[AmmUpdate]
   ) extends DataOnChainState
 
   @derive(encoder, decoder)
@@ -36,61 +40,71 @@ object States {
     update: Signed[AmmUpdate]
   )
 
+  object FailedCalculatedState {
+    implicit val order: Order[FailedCalculatedState] = Order.by(_.expiringEpochProgress)
+    implicit val ordering: Ordering[FailedCalculatedState] = order.toOrdering
+  }
+
   @derive(encoder, decoder)
   case class ConfirmedLiquidityPoolCalculatedState(
-    value: Map[String, LiquidityPool]
+    value: SortedMap[String, LiquidityPool]
   ) extends ConfirmedCalculatedState
 
   object ConfirmedLiquidityPoolCalculatedState {
-    def empty: ConfirmedLiquidityPoolCalculatedState = ConfirmedLiquidityPoolCalculatedState(Map.empty)
+    def empty: ConfirmedLiquidityPoolCalculatedState = ConfirmedLiquidityPoolCalculatedState(SortedMap.empty)
   }
 
   @derive(encoder, decoder)
   case class ConfirmedStakingCalculatedState(
-    value: Map[Address, StakingCalculatedStateInfo]
+    value: SortedMap[Address, StakingCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   object ConfirmedStakingCalculatedState {
-    def empty: ConfirmedStakingCalculatedState = ConfirmedStakingCalculatedState(Map.empty)
+    def empty: ConfirmedStakingCalculatedState = ConfirmedStakingCalculatedState(SortedMap.empty)
   }
 
   @derive(encoder, decoder)
   case class ConfirmedWithdrawalCalculatedState(
-    value: Map[Address, WithdrawalCalculatedStateInfo]
+    value: SortedMap[Address, WithdrawalCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   private object ConfirmedWithdrawalCalculatedState {
-    def empty: ConfirmedWithdrawalCalculatedState = ConfirmedWithdrawalCalculatedState(Map.empty)
+    def empty: ConfirmedWithdrawalCalculatedState = ConfirmedWithdrawalCalculatedState(SortedMap.empty)
   }
 
   @derive(encoder, decoder)
   case class ConfirmedSwapCalculatedState(
-    value: Map[Address, SwapCalculatedStateInfo]
+    value: SortedMap[Address, SwapCalculatedStateInfo]
   ) extends ConfirmedCalculatedState
 
   private object ConfirmedSwapCalculatedState {
-    def empty: ConfirmedSwapCalculatedState = ConfirmedSwapCalculatedState(Map.empty)
+    def empty: ConfirmedSwapCalculatedState = ConfirmedSwapCalculatedState(SortedMap.empty)
   }
 
   @derive(encoder, decoder)
   sealed trait AmmOffChainState {
     type UpdateType <: AmmUpdate
     val confirmed: ConfirmedCalculatedState
-    val pending: Set[PendingAction[UpdateType]]
-    val failed: Set[FailedCalculatedState]
+    val pending: SortedSet[PendingAction[UpdateType]]
+    val failed: SortedSet[FailedCalculatedState]
 
-    def getPendingUpdates: Set[Signed[UpdateType]] =
+    def getPendingUpdates: SortedSet[Signed[UpdateType]] =
       pending.collect {
         case PendingAllowSpend(update, _, _)     => update
         case PendingSpendAction(update, _, _, _) => update
       }
   }
 
+  object AmmOffChainState {
+    implicit def signedOrdering[A <: AmmUpdate]: Ordering[Signed[A]] =
+      Ordering.by(_.value.source)
+  }
+
   @derive(encoder, decoder)
   case class LiquidityPoolCalculatedState(
     confirmed: ConfirmedLiquidityPoolCalculatedState,
-    pending: Set[PendingAction[LiquidityPoolUpdate]],
-    failed: Set[FailedCalculatedState]
+    pending: SortedSet[PendingAction[LiquidityPoolUpdate]],
+    failed: SortedSet[FailedCalculatedState]
   ) extends AmmOffChainState {
     type UpdateType = LiquidityPoolUpdate
   }
@@ -98,16 +112,16 @@ object States {
   object LiquidityPoolCalculatedState {
     def empty: LiquidityPoolCalculatedState = LiquidityPoolCalculatedState(
       ConfirmedLiquidityPoolCalculatedState.empty,
-      Set.empty,
-      Set.empty
+      SortedSet.empty[PendingAction[LiquidityPoolUpdate]],
+      SortedSet.empty[FailedCalculatedState]
     )
   }
 
   @derive(encoder, decoder)
   case class StakingCalculatedState(
     confirmed: ConfirmedStakingCalculatedState,
-    pending: Set[PendingAction[StakingUpdate]],
-    failed: Set[FailedCalculatedState]
+    pending: SortedSet[PendingAction[StakingUpdate]],
+    failed: SortedSet[FailedCalculatedState]
   ) extends AmmOffChainState {
     type UpdateType = StakingUpdate
   }
@@ -115,16 +129,16 @@ object States {
   object StakingCalculatedState {
     def empty: StakingCalculatedState = StakingCalculatedState(
       ConfirmedStakingCalculatedState.empty,
-      Set.empty,
-      Set.empty
+      SortedSet.empty,
+      SortedSet.empty
     )
   }
 
   @derive(encoder, decoder)
   case class WithdrawalCalculatedState(
     confirmed: ConfirmedWithdrawalCalculatedState,
-    pending: Set[PendingAction[WithdrawalUpdate]],
-    failed: Set[FailedCalculatedState]
+    pending: SortedSet[PendingAction[WithdrawalUpdate]],
+    failed: SortedSet[FailedCalculatedState]
   ) extends AmmOffChainState {
     type UpdateType = WithdrawalUpdate
   }
@@ -132,16 +146,16 @@ object States {
   object WithdrawalCalculatedState {
     def empty: WithdrawalCalculatedState = WithdrawalCalculatedState(
       ConfirmedWithdrawalCalculatedState.empty,
-      Set.empty,
-      Set.empty
+      SortedSet.empty,
+      SortedSet.empty
     )
   }
 
   @derive(encoder, decoder)
   case class SwapCalculatedState(
     confirmed: ConfirmedSwapCalculatedState,
-    pending: Set[PendingAction[SwapUpdate]],
-    failed: Set[FailedCalculatedState]
+    pending: SortedSet[PendingAction[SwapUpdate]],
+    failed: SortedSet[FailedCalculatedState]
   ) extends AmmOffChainState {
     type UpdateType = SwapUpdate
   }
@@ -149,8 +163,8 @@ object States {
   object SwapCalculatedState {
     def empty: SwapCalculatedState = SwapCalculatedState(
       ConfirmedSwapCalculatedState.empty,
-      Set.empty,
-      Set.empty
+      SortedSet.empty,
+      SortedSet.empty
     )
   }
 
@@ -181,12 +195,28 @@ object States {
     val pricingTokenInfo: Option[PricingTokenInfo] = None
   }
 
+  object PendingAction {
+    implicit def orderInstance[A <: AmmUpdate]: Order[PendingAction[A]] =
+      Order.by(_.updateHash)
+
+    implicit def orderingInstance[A <: AmmUpdate]: Ordering[PendingAction[A]] =
+      orderInstance[A].toOrdering
+  }
+
   @derive(encoder, decoder)
   case class PendingAllowSpend[A <: AmmUpdate](
     update: Signed[A],
     updateHash: Hash,
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
+
+  object PendingAllowSpend {
+    implicit def orderInstance[A <: AmmUpdate]: Order[PendingAllowSpend[A]] =
+      Order.by(_.updateHash)
+
+    implicit def orderingInstance[A <: AmmUpdate]: Ordering[PendingAllowSpend[A]] =
+      orderInstance[A].toOrdering
+  }
 
   @derive(encoder, decoder)
   case class PendingSpendAction[A <: AmmUpdate](
@@ -196,6 +226,13 @@ object States {
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
 
+  object PendingSpendAction {
+    implicit def orderInstance[A <: AmmUpdate]: Order[PendingSpendAction[A]] =
+      Order.by(_.updateHash)
+
+    implicit def orderingInstance[A <: AmmUpdate]: Ordering[PendingSpendAction[A]] =
+      orderInstance[A].toOrdering
+  }
   @derive(encoder, decoder)
   sealed abstract class OperationType(val value: String) extends StringEnumEntry
 
@@ -209,12 +246,15 @@ object States {
     case object Swap extends OperationType("Swap")
 
     case object Withdrawal extends OperationType("Withdrawal")
+
+    implicit val order: Order[OperationType] = Order.by(_.value)
+    implicit val ordering: Ordering[OperationType] = order.toOrdering
   }
 
   @derive(encoder, decoder)
   case class AmmCalculatedState(
-    operations: Map[OperationType, AmmOffChainState] = Map.empty,
-    votingWeights: Map[Address, VotingWeight] = Map.empty,
+    operations: SortedMap[OperationType, AmmOffChainState] = SortedMap.empty[OperationType, AmmOffChainState],
+    votingWeights: SortedMap[Address, VotingWeight] = SortedMap.empty[Address, VotingWeight],
     allocations: Allocations = Allocations.empty,
     lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue
   ) extends DataCalculatedState

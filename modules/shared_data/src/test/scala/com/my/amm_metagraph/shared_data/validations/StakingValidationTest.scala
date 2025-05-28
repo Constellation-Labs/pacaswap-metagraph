@@ -132,9 +132,9 @@ object StakingValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -226,8 +226,8 @@ object StakingValidationTest extends MutableIOSuite {
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
 
-    val ammOnChainState = AmmOnChainState(Set.empty) // No pools initialized
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty) // No pools initialized
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val stakingUpdate = StakingUpdate(
@@ -290,17 +290,17 @@ object StakingValidationTest extends MutableIOSuite {
     val signerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
     val ammCalculatedState = AmmCalculatedState(
-      Map(
+      SortedMap(
         OperationType.LiquidityPool -> liquidityPoolCalculatedState,
         OperationType.Staking -> StakingCalculatedState(
           ConfirmedStakingCalculatedState(
-            Map(
+            SortedMap(
               signerAddress ->
                 StakingCalculatedStateInfo(
                   StakingReference.empty,
-                  Set(
+                  SortedSet(
                     StakingCalculatedStateValue(
                       EpochProgress.MaxValue,
                       StakingCalculatedStateAddress(
@@ -315,8 +315,8 @@ object StakingValidationTest extends MutableIOSuite {
                 )
             )
           ),
-          Set.empty,
-          Set.empty
+          SortedSet.empty,
+          SortedSet.empty
         )
       )
     )

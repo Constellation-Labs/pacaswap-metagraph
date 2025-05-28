@@ -83,9 +83,9 @@ object WithdrawalCombinerService {
       }
 
       private def removePendingSpendAction(
-        pendingActions: Set[PendingAction[WithdrawalUpdate]],
+        pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
-      ): Set[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
+      ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
         case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
@@ -307,7 +307,7 @@ object WithdrawalCombinerService {
                         Some(
                           WithdrawalCalculatedStateInfo(
                             withdrawalReference,
-                            Set(withdrawalCalculatedStateValue)
+                            SortedSet(withdrawalCalculatedStateValue)
                           )
                         )
                     }

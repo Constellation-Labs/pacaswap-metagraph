@@ -5,6 +5,7 @@ import cats.data.EitherT
 import cats.effect.IO
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
@@ -73,8 +74,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     )
 
   def createVotingPowers(currentProgress: EpochProgress): List[VotingPower] = List(
-    VotingPower(voterA, VotingWeight(NonNegLong(4000L), List(createVotingWeightInfo(currentProgress)))),
-    VotingPower(voterB, VotingWeight(NonNegLong(1000L), List(createVotingWeightInfo(currentProgress))))
+    VotingPower(voterA, VotingWeight(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress)))),
+    VotingPower(voterB, VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress))))
   )
 
   def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): RewardCalculator =
@@ -152,8 +153,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     val lastMonthProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgressOneDay * 15))
 
     val mixedVotingPowers = List(
-      VotingPower(voterA, VotingWeight(NonNegLong(4000L), List(createVotingWeightInfo(currentProgress)))),
-      VotingPower(voterB, VotingWeight(NonNegLong(1000L), List(createVotingWeightInfo(lastMonthProgress))))
+      VotingPower(voterA, VotingWeight(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress)))),
+      VotingPower(voterB, VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(lastMonthProgress))))
     )
 
     val result = EitherT {
@@ -295,9 +296,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     val lastEpochInYear = EpochProgress(NonNegLong.unsafeFrom(1000000L + epochData.epochProgress1Year - 1))
 
     val votingPowers = List(
-      VotingPower(voterA, VotingWeight(NonNegLong(4000L), List.empty)),
-      VotingPower(voterB, VotingWeight(NonNegLong(2000L), List.empty)),
-      VotingPower(voterC, VotingWeight(NonNegLong(2000L), List.empty))
+      VotingPower(voterA, VotingWeight(NonNegLong(4000L), SortedSet.empty)),
+      VotingPower(voterB, VotingWeight(NonNegLong(2000L), SortedSet.empty)),
+      VotingPower(voterC, VotingWeight(NonNegLong(2000L), SortedSet.empty))
     )
 
     val result = for {
@@ -323,9 +324,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("governance rewards remainder should go the random voter (seed based on epoch progress) in case of tie event") {
 
     val votingPowers = List(
-      VotingPower(voterA, VotingWeight(NonNegLong(2000L), List.empty)),
-      VotingPower(voterB, VotingWeight(NonNegLong(2000L), List.empty)),
-      VotingPower(voterC, VotingWeight(NonNegLong(2000L), List.empty))
+      VotingPower(voterA, VotingWeight(NonNegLong(2000L), SortedSet.empty)),
+      VotingPower(voterB, VotingWeight(NonNegLong(2000L), SortedSet.empty)),
+      VotingPower(voterC, VotingWeight(NonNegLong(2000L), SortedSet.empty))
     )
 
     val result = for {

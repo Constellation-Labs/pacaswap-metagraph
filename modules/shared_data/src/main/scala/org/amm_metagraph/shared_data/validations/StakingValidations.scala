@@ -3,6 +3,8 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -34,8 +36,8 @@ trait StakingValidations[F[_]] {
     oldState: AmmCalculatedState,
     signedUpdate: Signed[StakingUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedStakings: Set[StakingCalculatedStateValue],
-    pendingStakings: Set[Signed[StakingUpdate]]
+    confirmedStakings: SortedSet[StakingCalculatedStateValue],
+    pendingStakings: SortedSet[Signed[StakingUpdate]]
   ): Either[FailedCalculatedState, Signed[StakingUpdate]]
 
   def pendingAllowSpendsValidations(
@@ -82,7 +84,7 @@ object StakingValidations {
           stakingCalculatedState.confirmed.value
             .get(sourceAddress)
             .map(_.values)
-            .getOrElse(Set.empty),
+            .getOrElse(SortedSet.empty),
           stakingCalculatedState.getPendingUpdates
         )
 
@@ -118,8 +120,8 @@ object StakingValidations {
       oldState: AmmCalculatedState,
       signedUpdate: Signed[StakingUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedStakings: Set[StakingCalculatedStateValue],
-      pendingStakings: Set[Signed[StakingUpdate]]
+      confirmedStakings: SortedSet[StakingCalculatedStateValue],
+      pendingStakings: SortedSet[Signed[StakingUpdate]]
     ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
@@ -204,8 +206,8 @@ object StakingValidations {
 
     private def validateIfTransactionAlreadyExists(
       stakingUpdate: StakingUpdate,
-      confirmedStakings: Set[StakingCalculatedStateValue],
-      pendingStakings: Set[Signed[StakingUpdate]]
+      confirmedStakings: SortedSet[StakingCalculatedStateValue],
+      pendingStakings: SortedSet[Signed[StakingUpdate]]
     ): DataApplicationValidationErrorOr[Unit] =
       StakingTransactionAlreadyExists.whenA(
         confirmedStakings.exists(staking =>

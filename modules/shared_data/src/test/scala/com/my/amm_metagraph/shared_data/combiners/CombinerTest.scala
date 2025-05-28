@@ -53,8 +53,8 @@ object CombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     for {
@@ -202,8 +202,8 @@ object CombinerTest extends MutableIOSuite {
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-    val ammOnChainState = AmmOnChainState(Set.empty)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     for {
@@ -345,8 +345,8 @@ object CombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     for {

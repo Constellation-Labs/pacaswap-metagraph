@@ -134,7 +134,7 @@ object StakingCombinerService {
         val confirmedStakings = stakingCalculatedState.confirmed.value
           .get(signedUpdate.source)
           .map(_.values)
-          .getOrElse(Set.empty)
+          .getOrElse(SortedSet.empty[StakingCalculatedStateValue])
 
         val pendingStakings = stakingCalculatedState.getPendingUpdates
         val pendingAllowSpendsCalculatedState = stakingCalculatedState.pending
@@ -361,7 +361,7 @@ object StakingCombinerService {
                       Some(
                         StakingCalculatedStateInfo(
                           stakingReference,
-                          Set(stakingCalculatedStateValue)
+                          SortedSet(stakingCalculatedStateValue)
                         )
                       )
                   })

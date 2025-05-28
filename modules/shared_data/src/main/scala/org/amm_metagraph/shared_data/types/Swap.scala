@@ -6,6 +6,8 @@ import cats.kernel.Next
 import cats.syntax.all._
 import cats.{Order, PartialOrder}
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.SnapshotOrdinal
@@ -16,6 +18,7 @@ import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
+import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import derevo.cats.order
 import derevo.circe.magnolia.{decoder, encoder}
@@ -31,7 +34,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 
 object Swap {
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order)
   case class SwapCalculatedStateAddress(
     swapHash: Hash,
     sourceAddress: Address,
@@ -49,7 +52,7 @@ object Swap {
     parent: SwapReference
   )
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class SwapCalculatedStateValue(
     expiringEpochProgress: EpochProgress,
     value: SwapCalculatedStateAddress
@@ -58,7 +61,7 @@ object Swap {
   @derive(encoder, decoder)
   case class SwapCalculatedStateInfo(
     lastReference: SwapReference,
-    values: Set[SwapCalculatedStateValue]
+    values: SortedSet[SwapCalculatedStateValue]
   )
 
   @derive(encoder, decoder)
@@ -108,7 +111,7 @@ object Swap {
 
   def getPendingAllowSpendsSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingAllowSpend[AmmUpdate]] = {
+  ): SortedSet[PendingAllowSpend[AmmUpdate]] = {
     val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
       case pending: PendingAllowSpend[SwapUpdate] => pending
     }
@@ -119,12 +122,12 @@ object Swap {
         pendingAllow.updateHash,
         pendingAllow.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 
   def getPendingSpendActionSwapUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] = {
+  ): SortedSet[PendingSpendAction[AmmUpdate]] = {
     val onlyPendingSwap = getSwapCalculatedState(state).pending.collect {
       case pending: PendingSpendAction[SwapUpdate] => pending
     }
@@ -135,6 +138,6 @@ object Swap {
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 }

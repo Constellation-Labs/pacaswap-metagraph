@@ -1,5 +1,6 @@
 package org.amm_metagraph.l0
 
+import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.schema.address.Address
@@ -84,7 +85,7 @@ object Shared {
     (
       poolId.value,
       LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = SortedMap(poolId.value -> liquidityPool))
       )
     )
   }

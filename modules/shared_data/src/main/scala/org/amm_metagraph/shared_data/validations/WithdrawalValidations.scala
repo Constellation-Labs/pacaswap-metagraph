@@ -3,6 +3,8 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -199,7 +201,7 @@ object WithdrawalValidations {
 
     private def validateIfWithdrawalNotPending(
       signedWithdrawal: Signed[WithdrawalUpdate],
-      pendingUpdates: Set[Signed[WithdrawalUpdate]]
+      pendingUpdates: SortedSet[Signed[WithdrawalUpdate]]
     ): DataApplicationValidationErrorOr[Unit] =
       pendingUpdates.toList.collectFirst {
         case pending if pending === signedWithdrawal => pending

@@ -109,7 +109,7 @@ object SwapValidationTest extends MutableIOSuite {
     (
       poolId.value,
       LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = SortedMap(poolId.value -> liquidityPool))
       )
     )
   }
@@ -188,9 +188,9 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -266,8 +266,8 @@ object SwapValidationTest extends MutableIOSuite {
       TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 2000000L.toTokenAmountFormat.toPosLongUnsafe)
     val ownerAddress = Address("DAG88yethVdWM44eq5riNB65XF3rfE3rGFJN15Gs")
 
-    val ammOnChainState = AmmOnChainState(Set.empty)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(
       CurrencyId(ownerAddress),
@@ -332,9 +332,9 @@ object SwapValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
     val stakingUpdate = SwapUpdate(

@@ -185,7 +185,7 @@ object SwapCombinerService {
         val confirmedSwaps = swapCalculatedState.confirmed.value
           .get(signedUpdate.source)
           .map(_.values)
-          .getOrElse(Set.empty)
+          .getOrElse(SortedSet.empty[SwapCalculatedStateValue])
         val pendingSwaps = swapCalculatedState.getPendingUpdates
         val swapCalculatedStatePendingAllowSpend = swapCalculatedState.pending
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
@@ -446,7 +446,7 @@ object SwapCombinerService {
                   Some(
                     SwapCalculatedStateInfo(
                       swapReference,
-                      Set(swapCalculatedStateValue)
+                      SortedSet(swapCalculatedStateValue)
                     )
                   )
               }
