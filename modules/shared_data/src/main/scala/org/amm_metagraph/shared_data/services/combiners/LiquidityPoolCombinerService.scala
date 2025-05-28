@@ -366,12 +366,13 @@ object LiquidityPoolCombinerService {
         val liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val unexpiredFailed = liquidityPoolCalculatedState.failed.filter(_.expiringEpochProgress > globalEpochProgress)
 
-        val updatedStakingCalculatedState = liquidityPoolCalculatedState
+        val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
           .focus(_.failed)
           .replace(unexpiredFailed)
+
         oldState
           .focus(_.calculated.operations)
-          .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+          .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
       }
     }
 }

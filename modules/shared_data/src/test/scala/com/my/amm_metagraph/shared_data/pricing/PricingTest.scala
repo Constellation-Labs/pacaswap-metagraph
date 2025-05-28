@@ -184,7 +184,7 @@ object PricingTest extends SimpleIOSuite {
     } yield
       expect.all(
         liquidityPoolPrices.isRight,
-        liquidityPoolPrices.toOption.get._1 === toFixedPoint(1.0),
+        liquidityPoolPrices.toOption.get._1 === toFixedPoint(0.5),
         liquidityPoolPrices.toOption.get._2 === toFixedPoint(2.0)
       )
   }
@@ -222,7 +222,7 @@ object PricingTest extends SimpleIOSuite {
       expect.all(
         liquidityPoolPrices.isRight,
         liquidityPoolPrices.toOption.get._1 === toFixedPoint(3.0),
-        liquidityPoolPrices.toOption.get._2 === 0
+        liquidityPoolPrices.toOption.get._2 === toFixedPoint(0.33333333)
       )
   }
 

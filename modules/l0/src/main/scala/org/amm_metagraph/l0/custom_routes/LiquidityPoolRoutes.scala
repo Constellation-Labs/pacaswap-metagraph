@@ -107,10 +107,17 @@ case class LiquidityPoolRoutes[F[_]: Async](
 
   private def getLiquidityPoolByPoolId(
     poolId: String
-  ): F[Option[LiquidityPool]] =
-    calculatedStateService.get.map { calculatedState =>
-      getLiquidityPoolCalculatedState(calculatedState.state).confirmed.value.get(poolId)
-    }
+  ): F[Option[LiquidityPool]] = for {
+    calculatedState <- calculatedStateService.get
+    poolIdFormatted = poolId
+      .split("-")
+      .filter(_ != null)
+      .sorted
+      .mkString("-")
+
+    confirmedLpCalculatedState = getLiquidityPoolCalculatedState(calculatedState.state).confirmed
+    result = confirmedLpCalculatedState.value.get(poolIdFormatted)
+  } yield result
 
   private def handleGetLiquidityPools(
     maybeLimit: Option[String],
