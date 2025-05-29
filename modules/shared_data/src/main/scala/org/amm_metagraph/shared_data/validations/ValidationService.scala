@@ -13,7 +13,6 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
-import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations.{rewardWithdrawValidationL0, rewardWithdrawValidationL1}
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateAmmMetagraphId
 
 trait ValidationService[F[_]] {
@@ -34,7 +33,8 @@ object ValidationService {
     stakingValidations: StakingValidations[F],
     swapValidations: SwapValidations[F],
     withdrawalValidations: WithdrawalValidations[F],
-    governanceValidations: GovernanceValidations[F]
+    governanceValidations: GovernanceValidations[F],
+    rewardWithdrawValidations: RewardWithdrawValidations[F]
   ): ValidationService[F] =
     new ValidationService[F] {
       private def validateL1(
@@ -51,7 +51,7 @@ object ValidationService {
           case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
             governanceValidations.l1Validations(rewardAllocationVoteUpdate)
           case rewardWithdrawUpdate: RewardWithdrawUpdate =>
-            rewardWithdrawValidationL1(rewardWithdrawUpdate)
+            rewardWithdrawValidations.rewardWithdrawValidationL1(rewardWithdrawUpdate)
         }
       } yield
         result
@@ -83,7 +83,7 @@ object ValidationService {
                 lastSyncGlobalSnapshot.epochProgress
               )
             case rewardWithdrawUpdate: RewardWithdrawUpdate =>
-              rewardWithdrawValidationL0(Signed(rewardWithdrawUpdate, signedUpdate.proofs), state)
+              rewardWithdrawValidations.rewardWithdrawValidationL0(Signed(rewardWithdrawUpdate, signedUpdate.proofs), state)
           }
         } yield
           result
