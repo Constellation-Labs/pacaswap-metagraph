@@ -3,6 +3,8 @@ package org.amm_metagraph.l0.custom_routes
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.ext.http4s.AddressVar
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.security.hash.Hash
@@ -26,7 +28,7 @@ case class VoteRoutes[F[_]: Async](
     credits: Double,
     parent: RewardAllocationVoteReference,
     monthlyReference: MonthlyReference,
-    allocations: List[Allocation]
+    allocations: SortedSet[Allocation]
   )
 
   private def getAddressVoteInfo(address: Address): F[Response[F]] =

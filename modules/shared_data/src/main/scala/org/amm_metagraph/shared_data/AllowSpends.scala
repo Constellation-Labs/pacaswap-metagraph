@@ -1,5 +1,7 @@
 package org.amm_metagraph.shared_data
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.security.hash.Hash
 
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
@@ -11,7 +13,7 @@ object AllowSpends {
 
   def getAllAllowSpendsInUseFromState(
     ammCalculatedState: AmmCalculatedState
-  ): Set[Hash] = {
+  ): SortedSet[Hash] = {
     val lpAllowSpends = getLiquidityPoolCalculatedState(ammCalculatedState).getPendingUpdates
       .flatMap(u => List(u.tokenAAllowSpend, u.tokenBAllowSpend))
 

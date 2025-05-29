@@ -2,6 +2,7 @@ package org.amm_metagraph.shared_data
 
 import cats.data.NonEmptySet
 
+import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.schema.ID.Id
@@ -93,7 +94,7 @@ object Shared {
     (
       poolId.value,
       LiquidityPoolCalculatedState.empty.copy(confirmed =
-        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = Map(poolId.value -> liquidityPool))
+        ConfirmedLiquidityPoolCalculatedState.empty.copy(value = SortedMap(poolId.value -> liquidityPool))
       )
     )
   }

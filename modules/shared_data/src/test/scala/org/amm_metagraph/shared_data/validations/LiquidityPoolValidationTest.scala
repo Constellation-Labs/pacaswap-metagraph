@@ -6,7 +6,7 @@ import cats.data.Validated.{Invalid, Valid}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
@@ -184,8 +184,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
@@ -241,8 +241,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(none, 50L)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
@@ -298,8 +298,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(none, 100L)
     val pairToken = TokenInformation(none, 50L)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
@@ -365,9 +365,9 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -467,8 +467,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 

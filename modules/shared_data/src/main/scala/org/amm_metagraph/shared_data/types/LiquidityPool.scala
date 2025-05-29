@@ -6,12 +6,14 @@ import cats.syntax.all._
 
 import scala.collection.immutable.SortedSet
 
+import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
-import derevo.cats.eqv
+import derevo.cats.{eqv, order}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
@@ -23,7 +25,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 
 object LiquidityPool {
-  @derive(encoder, decoder, eqv)
+  @derive(encoder, decoder, eqv, order, ordering)
   @newtype
   case class PoolId(value: String)
 
@@ -33,7 +35,7 @@ object LiquidityPool {
     amount: PosLong
   )
 
-  @derive(eqv, encoder, decoder)
+  @derive(eqv, encoder, decoder, order)
   @newtype
   case class ShareAmount(value: Amount)
 
@@ -107,7 +109,7 @@ object LiquidityPool {
 
   def getPendingAllowSpendsLiquidityPoolUpdates(
     state: AmmCalculatedState
-  ): Set[PendingAllowSpend[AmmUpdate]] = {
+  ): SortedSet[PendingAllowSpend[AmmUpdate]] = {
     val onlyPendingLiquidity = getLiquidityPoolCalculatedState(state).pending.collect {
       case pending: PendingAllowSpend[LiquidityPoolUpdate] => pending
     }
@@ -118,12 +120,12 @@ object LiquidityPool {
         pendingAllowSpend.updateHash,
         pendingAllowSpend.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 
   def getPendingSpendActionLiquidityPoolUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] = {
+  ): SortedSet[PendingSpendAction[AmmUpdate]] = {
     val onlyPendingLiquidity = getLiquidityPoolCalculatedState(state).pending.collect {
       case pending: PendingSpendAction[LiquidityPoolUpdate] => pending
     }
@@ -135,6 +137,6 @@ object LiquidityPool {
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 }

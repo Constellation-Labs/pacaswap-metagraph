@@ -52,14 +52,14 @@ object L0CombinerService {
 
       def getPendingAllowSpendsUpdates(
         state: AmmCalculatedState
-      ): Set[PendingAllowSpend[AmmUpdate]] =
+      ): SortedSet[PendingAllowSpend[AmmUpdate]] =
         getPendingAllowSpendsLiquidityPoolUpdates(state) ++
           getPendingAllowSpendsStakingUpdates(state) ++
           getPendingAllowSpendsSwapUpdates(state)
 
       def getPendingSpendActionsUpdates(
         state: AmmCalculatedState
-      ): Set[PendingSpendAction[AmmUpdate]] =
+      ): SortedSet[PendingSpendAction[AmmUpdate]] =
         getPendingSpendActionLiquidityPoolUpdates(state) ++
           getPendingSpendActionStakingUpdates(state) ++
           getPendingSpendActionSwapUpdates(state) ++
@@ -144,7 +144,7 @@ object L0CombinerService {
       private def combinePendingAllowSpendsUpdates(
         lastSyncGlobalEpochProgress: EpochProgress,
         globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
-        pendingAllowSpends: Set[PendingAllowSpend[AmmUpdate]],
+        pendingAllowSpends: SortedSet[PendingAllowSpend[AmmUpdate]],
         stateCombinedByNewUpdates: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
@@ -201,7 +201,7 @@ object L0CombinerService {
         lastSyncGlobalEpochProgress: EpochProgress,
         globalSnapshotSyncSpendActions: List[SpendAction],
         currencySnapshotOrdinal: SnapshotOrdinal,
-        pendingSpendActions: Set[PendingSpendAction[AmmUpdate]],
+        pendingSpendActions: SortedSet[PendingSpendAction[AmmUpdate]],
         stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
@@ -329,7 +329,7 @@ object L0CombinerService {
            */
           newState = oldState
             .focus(_.onChain.updates)
-            .replace(Set.empty)
+            .replace(SortedSet.empty)
             .focus(_.onChain.rewardsUpdate)
             .replace(None)
             .focus(_.sharedArtifacts)

@@ -3,6 +3,8 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.ext.cats.syntax.next._
 import io.constellationnetwork.schema.address.Address
@@ -36,8 +38,8 @@ trait SwapValidations[F[_]] {
     oldState: AmmCalculatedState,
     signedUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
-    confirmedSwaps: Set[SwapCalculatedStateValue],
-    pendingSwaps: Set[Signed[SwapUpdate]]
+    confirmedSwaps: SortedSet[SwapCalculatedStateValue],
+    pendingSwaps: SortedSet[Signed[SwapUpdate]]
   ): Either[FailedCalculatedState, Signed[SwapUpdate]]
 
   def pendingAllowSpendsValidations(
@@ -94,7 +96,7 @@ object SwapValidations {
           swapCalculatedState.confirmed.value
             .get(sourceAddress)
             .map(_.values)
-            .getOrElse(Set.empty),
+            .getOrElse(SortedSet.empty),
           swapCalculatedState.getPendingUpdates
         )
         lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
@@ -112,8 +114,8 @@ object SwapValidations {
       oldState: AmmCalculatedState,
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
-      confirmedSwaps: Set[SwapCalculatedStateValue],
-      pendingSwaps: Set[Signed[SwapUpdate]]
+      confirmedSwaps: SortedSet[SwapCalculatedStateValue],
+      pendingSwaps: SortedSet[Signed[SwapUpdate]]
     ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
@@ -236,8 +238,8 @@ object SwapValidations {
 
     private def validateIfTransactionAlreadyExists(
       swapUpdate: SwapUpdate,
-      confirmedSwaps: Set[SwapCalculatedStateValue],
-      pendingSwaps: Set[Signed[SwapUpdate]]
+      confirmedSwaps: SortedSet[SwapCalculatedStateValue],
+      pendingSwaps: SortedSet[Signed[SwapUpdate]]
     ): DataApplicationValidationErrorOr[Unit] =
       SwapTransactionAlreadyExists.whenA(
         confirmedSwaps.exists(swap => swap.value.allowSpendReference === swapUpdate.allowSpendReference) ||

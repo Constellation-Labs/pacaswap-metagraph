@@ -4,6 +4,8 @@ import cats.Order._
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
@@ -11,6 +13,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
+import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import derevo.cats.order
 import derevo.circe.magnolia.{decoder, encoder}
@@ -35,7 +38,7 @@ object Staking {
     parent: StakingReference
   )
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class StakingCalculatedStateValue(
     expiringEpochProgress: EpochProgress,
     value: StakingCalculatedStateAddress
@@ -44,7 +47,7 @@ object Staking {
   @derive(encoder, decoder)
   case class StakingCalculatedStateInfo(
     lastReference: StakingReference,
-    values: Set[StakingCalculatedStateValue]
+    values: SortedSet[StakingCalculatedStateValue]
   )
 
   case class StakingTokenInformation(
@@ -92,7 +95,7 @@ object Staking {
 
   def getPendingAllowSpendsStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingAllowSpend[AmmUpdate]] = {
+  ): SortedSet[PendingAllowSpend[AmmUpdate]] = {
     val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
       case pending: PendingAllowSpend[StakingUpdate] => pending
     }
@@ -103,12 +106,12 @@ object Staking {
         pendingAllow.updateHash,
         pendingAllow.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 
   def getPendingSpendActionStakingUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] = {
+  ): SortedSet[PendingSpendAction[AmmUpdate]] = {
     val onlyPendingStaking = getStakingCalculatedState(state).pending.collect {
       case pending: PendingSpendAction[StakingUpdate] => pending
     }
@@ -120,6 +123,6 @@ object Staking {
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 }

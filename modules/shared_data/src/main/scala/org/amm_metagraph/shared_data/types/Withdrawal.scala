@@ -4,6 +4,8 @@ import cats.Order._
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -11,6 +13,7 @@ import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
+import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import derevo.cats.order
 import derevo.circe.magnolia.{decoder, encoder}
@@ -26,7 +29,7 @@ import org.amm_metagraph.shared_data.types.States._
 
 object Withdrawal {
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class WithdrawalCalculatedStateAddress(
     tokenAId: Option[CurrencyId],
     tokenAAmount: SwapAmount,
@@ -40,7 +43,7 @@ object Withdrawal {
     parent: WithdrawalReference
   )
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class WithdrawalCalculatedStateValue(
     expiringEpochProgress: EpochProgress,
     value: WithdrawalCalculatedStateAddress
@@ -49,7 +52,7 @@ object Withdrawal {
   @derive(encoder, decoder)
   case class WithdrawalCalculatedStateInfo(
     lastReference: WithdrawalReference,
-    values: Set[WithdrawalCalculatedStateValue]
+    values: SortedSet[WithdrawalCalculatedStateValue]
   )
 
   @derive(decoder, encoder, order, ordering)
@@ -85,7 +88,7 @@ object Withdrawal {
 
   def getPendingSpendActionWithdrawalUpdates(
     state: AmmCalculatedState
-  ): Set[PendingSpendAction[AmmUpdate]] = {
+  ): SortedSet[PendingSpendAction[AmmUpdate]] = {
     val onlyPendingWithdrawal = getWithdrawalCalculatedState(state).pending.collect {
       case pending: PendingSpendAction[WithdrawalUpdate] => pending
     }
@@ -96,6 +99,6 @@ object Withdrawal {
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo
       )
-    }.toSet
+    }.toSortedSet
   }
 }

@@ -3,7 +3,7 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -47,7 +47,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Fail to withdraw from empty / non-existing balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(NonNegLong(1L))
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -83,7 +83,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Fail to withdraw from empty / non-existing balance because of reward type") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val actualRewardType = LpBoost
     val requestedRewardType = GovernanceVoting
     val requestAmount = Amount(NonNegLong(100L))
@@ -117,7 +117,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Successfully withdraw from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val requestedRewardType = GovernanceVoting
     val requestAmount = Amount(NonNegLong(100L))
     val existReward = AddressAndRewardType(a1, requestedRewardType) -> requestAmount
@@ -154,15 +154,15 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         .focus(_.calculated.rewards.availableRewards)
         .replace(RewardInfo.empty)
         .focus(_.calculated.rewards.withdraws.confirmed)
-        .replace(Map(a1 -> expectedReference))
+        .replace(SortedMap(a1 -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
-        .replace(Map(expectedWithdrawEpoch -> expectedRewardInfo))
+        .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
     } yield expect.all(newState == expectedState)
   }
 
   test("Successfully withdraw twice from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val requestedRewardType = GovernanceVoting
     val firstRequest = Amount(NonNegLong(20L))
     val secondRequest = Amount(NonNegLong(80L))
@@ -208,9 +208,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         .focus(_.calculated.rewards.availableRewards)
         .replace(RewardInfo.empty)
         .focus(_.calculated.rewards.withdraws.confirmed)
-        .replace(Map(a1 -> expectedReference))
+        .replace(SortedMap(a1 -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
-        .replace(Map(expectedWithdrawEpoch -> expectedRewardInfo))
+        .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
     } yield expect.all(newState2 == expectedState)
   }
 }

@@ -5,6 +5,8 @@ import cats.data.NonEmptyList
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.{SortedMap, SortedSet}
+
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
 import io.constellationnetwork.json.JsonSerializer
@@ -61,7 +63,7 @@ object MetagraphL0Service {
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
-        DataState(AmmOnChainState(Set.empty, None), AmmCalculatedState(Map.empty))
+        DataState(AmmOnChainState(SortedSet.empty, None), AmmCalculatedState())
 
       override def validateData(
         state: DataState[AmmOnChainState, AmmCalculatedState],

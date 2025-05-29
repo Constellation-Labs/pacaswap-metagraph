@@ -13,6 +13,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.schema.tokenLock.TokenLock
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegInt
@@ -42,7 +43,7 @@ trait GovernanceCombinerService[F[_]] {
     currentCalculatedState: AmmCalculatedState,
     lastCurrencySnapshotInfo: CurrencySnapshotInfo,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
-  ): Map[Address, VotingWeight]
+  ): SortedMap[Address, VotingWeight]
 
   def handleMonthlyGovernanceRewards(
     state: DataState[AmmOnChainState, AmmCalculatedState],
@@ -85,7 +86,7 @@ object GovernanceCombinerService {
           AllocationsRewards(
             monthlyReference.monthReference,
             currentMetagraphEpochProgress,
-            Map.empty
+            SortedMap.empty
           )
         ) { (allocationsRewards, userAllocation) =>
           userAllocation match {
@@ -105,11 +106,11 @@ object GovernanceCombinerService {
       }
 
       private def updateVotingWeightInfo(
-        currentVotingWeightInfo: List[VotingWeightInfo],
-        addedTokenLocks: Set[TokenLock],
-        removedTokenLocks: Set[TokenLock],
+        currentVotingWeightInfo: SortedSet[VotingWeightInfo],
+        addedTokenLocks: SortedSet[TokenLock],
+        removedTokenLocks: SortedSet[TokenLock],
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
-      ): List[VotingWeightInfo] = {
+      ): SortedSet[VotingWeightInfo] = {
         val filteredInfo = currentVotingWeightInfo.filterNot(info => removedTokenLocks.contains(info.tokenLock))
 
         val newInfo = addedTokenLocks.toList.map { lock =>
@@ -145,7 +146,7 @@ object GovernanceCombinerService {
               }
 
               Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
-          }.toList
+          }.toSortedSet
 
           oldState.calculated.allocations.usersAllocations
             .get(signedUpdate.source)
@@ -192,7 +193,7 @@ object GovernanceCombinerService {
         currentCalculatedState: AmmCalculatedState,
         lastCurrencySnapshotInfo: CurrencySnapshotInfo,
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
-      ): Map[Address, VotingWeight] = {
+      ): SortedMap[Address, VotingWeight] = {
         val currentVotingWeights = currentCalculatedState.votingWeights
 
         lastCurrencySnapshotInfo.activeTokenLocks.map { activeTokenLocks =>
@@ -200,7 +201,7 @@ object GovernanceCombinerService {
             val (address, tokenLocks) = tokenLocksInfo
             val currentAddressVotingWeight = acc.getOrElse(address, VotingWeight.empty)
 
-            val currentTokenLocks = currentAddressVotingWeight.info.map(_.tokenLock).toSet
+            val currentTokenLocks = currentAddressVotingWeight.info.map(_.tokenLock)
             val fetchedTokenLocks = tokenLocks.map(_.value)
 
             val removedTokenLocks = currentTokenLocks.diff(fetchedTokenLocks)
@@ -241,7 +242,7 @@ object GovernanceCombinerService {
           stateParsed
         } else {
           val filteredAllocations = stateParsed.calculated.allocations.usersAllocations.map {
-            case (address, allocations) => address -> allocations.copy(allocations = List.empty)
+            case (address, allocations) => address -> allocations.copy(allocations = SortedSet.empty)
           }
 
           val allocationsRewards = calculateAllocationRewards(
@@ -251,10 +252,11 @@ object GovernanceCombinerService {
           )
 
           val currentAllocationsRewards = (
-            stateParsed.calculated.allocations.allocationsRewards :+ allocationsRewards
-          )
+            stateParsed.calculated.allocations.allocationsRewards + allocationsRewards
+          ).toList
             .sortBy(-_.epochProgressToReward.value.value)
             .take(3)
+            .toSortedSet
 
           val updatedMonthlyReference =
             getMonthlyReference(applicationConfig.environment, globalEpochProgress, applicationConfig.epochInfo.oneEpochProgressInSeconds)

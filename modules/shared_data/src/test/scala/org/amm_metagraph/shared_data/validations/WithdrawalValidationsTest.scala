@@ -3,7 +3,7 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.ext.cats.effect.ResourceIO
@@ -69,7 +69,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       }
 
       ammCalculatedState = AmmCalculatedState(
-        Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+        SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
       )
 
       withdrawalUpdate = getFakeSignedUpdate(
@@ -111,7 +111,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
   test("Validation fails when liquidity pool does not exist") { implicit res =>
     implicit val (h, hs, sp) = res
 
-    val ammCalculatedState = AmmCalculatedState(Map.empty)
+    val ammCalculatedState = AmmCalculatedState()
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     for {
@@ -168,7 +168,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
 
     for {
@@ -225,7 +225,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
 
     for {
@@ -308,9 +308,11 @@ object WithdrawalValidationsTest extends MutableIOSuite {
       (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, signerAddress)
 
       ammCalculatedState = AmmCalculatedState(
-        Map(
+        SortedMap(
           OperationType.LiquidityPool -> liquidityPoolCalculatedState,
-          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending = Set(PendingAllowSpend(withdrawalUpdate, Hash.empty)))
+          OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending =
+            SortedSet(PendingAllowSpend(withdrawalUpdate, Hash.empty))
+          )
         )
       )
 

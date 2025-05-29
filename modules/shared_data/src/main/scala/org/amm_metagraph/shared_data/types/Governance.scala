@@ -2,10 +2,12 @@ package org.amm_metagraph.shared_data.types
 
 import java.time._
 
+import cats.Order
 import cats.Order._
 import cats.effect.kernel.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.concurrent.duration.FiniteDuration
 
 import io.constellationnetwork.ext.crypto._
@@ -31,6 +33,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
+import org.amm_metagraph.shared_data.types.States.OperationType
 
 object Governance {
   val maxCredits = 50.0
@@ -65,14 +68,22 @@ object Governance {
     votedAtEpochProgress: EpochProgress
   )
 
+  object VotingWeightInfo {
+    implicit val order: Order[VotingWeightInfo] = Order.by(_.votedAtEpochProgress)
+    implicit val ordering: Ordering[VotingWeightInfo] = order.toOrdering
+  }
+
   @derive(encoder, decoder)
   case class VotingWeight(
     total: NonNegLong,
-    info: List[VotingWeightInfo]
+    info: SortedSet[VotingWeightInfo]
   )
 
   object VotingWeight {
-    def empty: VotingWeight = VotingWeight(NonNegLong.MinValue, List.empty)
+    def empty: VotingWeight = VotingWeight(NonNegLong.MinValue, SortedSet.empty)
+
+    implicit val order: Order[VotingWeight] = Order.by(_.total)
+    implicit val ordering: Ordering[VotingWeight] = order.toOrdering
   }
 
   sealed abstract class AllocationCategory(val value: String) extends StringEnumEntry
@@ -88,14 +99,14 @@ object Governance {
     }
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class Allocation(
     id: String,
     category: AllocationCategory,
     percentage: NonNegDouble
   )
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class MonthlyReference(
     expireGlobalEpochProgress: EpochProgress,
     monthReference: NonNegInt
@@ -140,38 +151,38 @@ object Governance {
       }
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class AllocationsRewards(
     monthReference: NonNegInt,
     epochProgressToReward: EpochProgress,
-    rewardsInfo: Map[String, Double]
+    rewardsInfo: SortedMap[String, Double]
   )
 
   object AllocationsRewards {
-    def empty: AllocationsRewards = AllocationsRewards(0, EpochProgress.MinValue, Map.empty)
+    def empty: AllocationsRewards = AllocationsRewards(0, EpochProgress.MinValue, SortedMap.empty)
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class Allocations(
     monthlyReference: MonthlyReference,
-    usersAllocations: Map[Address, UserAllocations],
-    allocationsRewards: List[AllocationsRewards]
+    usersAllocations: SortedMap[Address, UserAllocations],
+    allocationsRewards: SortedSet[AllocationsRewards]
   )
 
   object Allocations {
-    def empty: Allocations = Allocations(MonthlyReference.empty, Map.empty, List.empty)
+    def empty: Allocations = Allocations(MonthlyReference.empty, SortedMap.empty, SortedSet.empty)
   }
 
-  @derive(encoder, decoder)
+  @derive(encoder, decoder, order, ordering)
   case class UserAllocations(
     credits: Double,
     reference: RewardAllocationVoteReference,
     allocationGlobalEpochProgress: EpochProgress,
-    allocations: List[Allocation]
+    allocations: SortedSet[Allocation]
   )
 
   object UserAllocations {
     def empty: UserAllocations =
-      UserAllocations(maxCredits, RewardAllocationVoteReference.empty, EpochProgress.MinValue, List.empty)
+      UserAllocations(maxCredits, RewardAllocationVoteReference.empty, EpochProgress.MinValue, SortedSet.empty)
   }
 }

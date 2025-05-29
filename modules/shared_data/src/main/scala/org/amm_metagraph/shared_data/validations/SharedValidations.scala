@@ -3,6 +3,8 @@ package org.amm_metagraph.shared_data.validations
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -52,7 +54,7 @@ object SharedValidations {
 
   def validateIfAllowSpendsAreDuplicated(
     allowSpendRef: Hash,
-    allAllowSpendsInUse: Set[Hash]
+    allAllowSpendsInUse: SortedSet[Hash]
   ): DataApplicationValidationErrorOr[Unit] =
     DuplicatedOperation.whenA(allAllowSpendsInUse.contains(allowSpendRef))
 

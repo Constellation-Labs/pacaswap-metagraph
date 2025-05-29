@@ -4,6 +4,8 @@ import cats.Eq
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedMap
+
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
@@ -43,7 +45,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
 
     for {
@@ -67,7 +69,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
 
     for {
@@ -93,7 +95,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
     val ammCalculatedState = AmmCalculatedState(
-      Map(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
 
     for {
