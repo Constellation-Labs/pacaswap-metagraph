@@ -167,6 +167,7 @@ object SwapValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -174,7 +175,8 @@ object SwapValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       response <- validationService.validateUpdate(stakingUpdate)(context)
@@ -247,6 +249,7 @@ object SwapValidationTest extends MutableIOSuite {
       swapValidations = SwapValidations.make[IO](config)
       withdrawalValidations = WithdrawalValidations.make[IO](config)
       governanceValidations = GovernanceValidations.make[IO]
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
       validationService = ValidationService.make[IO](
         config,
@@ -254,7 +257,8 @@ object SwapValidationTest extends MutableIOSuite {
         stakingValidations,
         swapValidations,
         withdrawalValidations,
-        governanceValidations
+        governanceValidations,
+        rewardWithdrawValidations
       )
       response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
     } yield expect.eql(Valid(()), response)
@@ -290,6 +294,7 @@ object SwapValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -297,7 +302,8 @@ object SwapValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -358,6 +364,7 @@ object SwapValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -365,7 +372,8 @@ object SwapValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
