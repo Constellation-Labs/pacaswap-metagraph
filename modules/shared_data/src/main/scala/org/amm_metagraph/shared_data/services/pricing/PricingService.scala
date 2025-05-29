@@ -184,7 +184,7 @@ object PricingService {
           )
 
           estimatedReceivedDecimal = reservesAndReceived.estimatedReceivedAfterFee.toBigDecimal
-          minimumReceived = (estimatedReceivedDecimal * slippagePercent.toFactor).floorToLong
+          minimumReceived = (estimatedReceivedDecimal * slippagePercent.toFactor).floor.toLong
 
           amountValue = BigDecimal(amount.value.value)
           rate = if (amountValue > 0) estimatedReceivedDecimal / amountValue else BigDecimal(0)
@@ -236,11 +236,11 @@ object PricingService {
             val tokenBAmount = BigDecimal(liquidityPool.tokenB.amount.value)
 
             val priceTokenA = if (tokenAAmount > 0) {
-              (tokenBAmount / tokenAAmount).halfUpToLong.toTokenAmountFormat
+              (tokenBAmount / tokenAAmount).halfUp.toTokenAmountFormat
             } else 0L
 
             val priceTokenB = if (tokenBAmount > 0) {
-              (tokenAAmount / tokenBAmount).halfUpToLong.toTokenAmountFormat
+              (tokenAAmount / tokenBAmount).halfUp.toTokenAmountFormat
             } else 0L
 
             Right((priceTokenA, priceTokenB))

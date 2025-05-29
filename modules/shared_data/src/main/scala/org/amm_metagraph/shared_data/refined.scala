@@ -51,8 +51,11 @@ object refined {
 
   implicit class BigDecimalOps(val bd: BigDecimal) extends AnyVal {
     def toPercentage: BigDecimal = bd * BigDecimal(100)
-    def floorToLong: Long = bd.setScale(0, RoundingMode.FLOOR).toLong
-    def halfUpToLong: Long = bd.setScale(0, RoundingMode.HALF_UP).toLong
+    def toTokenAmountFormat: Long =
+      (bd * 10e7).toLong
+
+    def floor: BigDecimal = bd.setScale(8, RoundingMode.FLOOR)
+    def halfUp: BigDecimal = bd.setScale(8, RoundingMode.HALF_UP)
   }
 
   implicit class BigIntOps(val bi: BigInt) extends AnyVal {
