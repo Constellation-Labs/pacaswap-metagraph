@@ -1,4 +1,4 @@
-package com.my.amm_metagraph.shared_data.combiners
+package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
@@ -18,10 +18,10 @@ import io.constellationnetwork.security.key.ops.PublicKeyOps
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.services.combiners.LiquidityPoolCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -58,7 +58,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -181,7 +181,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -308,7 +308,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
 
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -419,7 +419,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(Set.empty, None)
     val ammCalculatedState = AmmCalculatedState()
 
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -530,7 +530,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -638,7 +638,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -748,7 +748,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -851,7 +851,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -962,7 +962,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))

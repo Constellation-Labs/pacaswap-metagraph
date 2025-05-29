@@ -5,19 +5,28 @@ import cats.Order
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
-import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
+import io.constellationnetwork.schema.{SnapshotOrdinal, nonNegLongKeyDecoder, nonNegLongKeyEncoder}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
+import derevo.cats.show
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
+import io.circe.{KeyDecoder, KeyEncoder}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
+import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, ShareAmount, TokenInformation}
+import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
+import org.amm_metagraph.shared_data.types.Rewards.{RewardInfo, RewardType}
+import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingCalculatedStateInfo}
+import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, SwapCalculatedStateInfo}
+import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalCalculatedStateInfo}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
@@ -27,7 +36,8 @@ import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateRea
 object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
-    updates: SortedSet[AmmUpdate]
+    updates: SortedSet[AmmUpdate],
+    rewardsUpdate: Option[RewardInfo]
   ) extends DataOnChainState
 
   @derive(encoder, decoder)
@@ -169,6 +179,19 @@ object States {
   }
 
   @derive(encoder, decoder)
+  case class RewardWithdrawCalculatedState(
+    confirmed: Map[Address, RewardWithdrawReference],
+    pending: Map[EpochProgress, RewardInfo]
+  )
+
+  object RewardWithdrawCalculatedState {
+    def empty: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState(
+      Map.empty,
+      Map.empty
+    )
+  }
+
+  @derive(encoder, decoder)
   sealed trait PricingTokenInfo
 
   @derive(encoder, decoder)
@@ -252,10 +275,21 @@ object States {
   }
 
   @derive(encoder, decoder)
+  case class RewardsState(
+    withdraws: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState.empty,
+    availableRewards: RewardInfo = RewardInfo.empty,
+    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue
+  )
+
+  @derive(encoder, decoder)
   case class AmmCalculatedState(
     operations: SortedMap[OperationType, AmmOffChainState] = SortedMap.empty[OperationType, AmmOffChainState],
     votingWeights: SortedMap[Address, VotingWeight] = SortedMap.empty[Address, VotingWeight],
     allocations: Allocations = Allocations.empty,
-    lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue
+    lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue,
+    rewards: RewardsState = RewardsState()
   ) extends DataCalculatedState
+
+  implicit val keyEncode: KeyEncoder[EpochProgress] = nonNegLongKeyEncoder.contramap(_.value)
+  implicit val keyDecode: KeyDecoder[EpochProgress] = nonNegLongKeyDecoder.map(EpochProgress(_))
 }

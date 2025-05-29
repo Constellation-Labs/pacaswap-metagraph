@@ -1,9 +1,15 @@
 package org.amm_metagraph.shared_data
 
+import cats.implicits.{catsSyntaxEitherId, catsSyntaxSemigroup, toBifunctorOps}
 import cats.{Eq, Order}
 
 import scala.math.BigDecimal.RoundingMode
+import scala.util.control.NoStackTrace
 
+import io.constellationnetwork.schema.epoch.EpochProgress
+
+import derevo.circe.magnolia.{decoder, encoder}
+import derevo.derive
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}
@@ -51,8 +57,11 @@ object refined {
 
   implicit class BigDecimalOps(val bd: BigDecimal) extends AnyVal {
     def toPercentage: BigDecimal = bd * BigDecimal(100)
-    def floorToLong: Long = bd.setScale(0, RoundingMode.FLOOR).toLong
-    def halfUpToLong: Long = bd.setScale(0, RoundingMode.HALF_UP).toLong
+    def toTokenAmountFormat: Long =
+      (bd * 10e7).toLong
+
+    def floor: BigDecimal = bd.setScale(8, RoundingMode.FLOOR)
+    def halfUp: BigDecimal = bd.setScale(8, RoundingMode.HALF_UP)
   }
 
   implicit class BigIntOps(val bi: BigInt) extends AnyVal {

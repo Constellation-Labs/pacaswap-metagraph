@@ -1,4 +1,4 @@
-package com.my.amm_metagraph.shared_data.validations
+package org.amm_metagraph.shared_data.validations
 
 import cats.Eq
 import cats.data.NonEmptyList
@@ -21,13 +21,13 @@ import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
-import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import eu.timepit.refined.types.numeric.PosDouble
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
 import org.amm_metagraph.shared_data.FeeDistributor
+import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -61,7 +61,9 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       NonNegLong.MinValue,
       NonNegLong.MinValue,
       EpochProgress.MinValue,
-      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+      rewardCalculationInterval = NonNegLong(100),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),
@@ -108,6 +110,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -115,7 +118,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
 
     for {
@@ -150,6 +154,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -157,7 +162,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
 
     for {
@@ -178,7 +184,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -203,6 +209,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -210,7 +217,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -233,7 +241,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(none, 50L)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -258,6 +266,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -265,7 +274,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -288,7 +298,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(none, 100L)
     val pairToken = TokenInformation(none, 50L)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -313,6 +323,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -320,7 +331,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
@@ -353,7 +365,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -379,6 +391,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config,
@@ -386,7 +399,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
 
     for {
@@ -432,6 +446,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config.copy(environment = Mainnet),
@@ -439,7 +454,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
@@ -451,7 +467,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -476,6 +492,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val swapValidations = SwapValidations.make[IO](config)
     val withdrawalValidations = WithdrawalValidations.make[IO](config)
     val governanceValidations = GovernanceValidations.make[IO]
+    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     val validationService = ValidationService.make[IO](
       config.copy(environment = Mainnet),
@@ -483,7 +500,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]

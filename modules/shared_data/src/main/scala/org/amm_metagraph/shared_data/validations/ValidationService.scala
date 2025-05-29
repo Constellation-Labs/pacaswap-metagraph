@@ -27,13 +27,14 @@ trait ValidationService[F[_]] {
 }
 
 object ValidationService {
-  def make[F[_]: Async: SecurityProvider: HasherSelector](
+  def make[F[_]: Async: SecurityProvider](
     applicationConfig: ApplicationConfig,
     liquidityPoolValidations: LiquidityPoolValidations[F],
     stakingValidations: StakingValidations[F],
     swapValidations: SwapValidations[F],
     withdrawalValidations: WithdrawalValidations[F],
-    governanceValidations: GovernanceValidations[F]
+    governanceValidations: GovernanceValidations[F],
+    rewardWithdrawValidations: RewardWithdrawValidations[F]
   ): ValidationService[F] =
     new ValidationService[F] {
       private def validateL1(
@@ -49,6 +50,8 @@ object ValidationService {
           case swapUpdate: SwapUpdate => swapValidations.l1Validations(swapUpdate)
           case rewardAllocationVoteUpdate: RewardAllocationVoteUpdate =>
             governanceValidations.l1Validations(rewardAllocationVoteUpdate)
+          case rewardWithdrawUpdate: RewardWithdrawUpdate =>
+            rewardWithdrawValidations.rewardWithdrawValidationL1(rewardWithdrawUpdate)
         }
       } yield
         result
@@ -79,6 +82,8 @@ object ValidationService {
                 state,
                 lastSyncGlobalSnapshot.epochProgress
               )
+            case rewardWithdrawUpdate: RewardWithdrawUpdate =>
+              rewardWithdrawValidations.rewardWithdrawValidationL0(Signed(rewardWithdrawUpdate, signedUpdate.proofs), state)
           }
         } yield
           result

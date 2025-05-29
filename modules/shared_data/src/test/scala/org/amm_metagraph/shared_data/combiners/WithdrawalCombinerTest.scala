@@ -1,4 +1,4 @@
-package com.my.amm_metagraph.shared_data.combiners
+package org.amm_metagraph.shared_data.combiners
 
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
@@ -17,10 +17,10 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
 import io.constellationnetwork.security._
 
-import com.my.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import com.my.amm_metagraph.shared_data.Shared._
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
+import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
@@ -60,7 +60,9 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       NonNegLong.MinValue,
       NonNegLong.MinValue,
       EpochProgress.MinValue,
-      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")
+      Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
+      rewardCalculationInterval = NonNegLong(100),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((1 * 1e8).toLong),
@@ -93,7 +95,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -211,7 +213,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       Some(secondProviderAddress -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     )
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -302,7 +304,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
   test("Test withdrawal fails when liquidity pool does not exist") { implicit res =>
     implicit val (h, sp, hs) = res
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -379,7 +381,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -470,7 +472,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -546,7 +548,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -653,7 +655,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (poolId, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -759,7 +761,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -840,7 +842,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -921,7 +923,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )
@@ -1002,7 +1004,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
     val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState(
       SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
     )

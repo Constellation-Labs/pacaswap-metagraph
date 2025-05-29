@@ -1,4 +1,4 @@
-package org.amm_metagraph.l0.rewards
+package shared_data.rewards
 
 import cats.Functor
 import cats.data.EitherT
@@ -17,7 +17,9 @@ import eu.timepit.refined.refineV
 import eu.timepit.refined.types.all.NonNegLong
 import eu.timepit.refined.types.numeric.PosLong
 import fs2.Stream
+import org.amm_metagraph.shared_data
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.rewards.{NegativeValueError, RewardCalculator, VotingPower}
 import org.amm_metagraph.shared_data.types.Governance.{VotingWeight, VotingWeightInfo}
 import weaver._
 
@@ -44,7 +46,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       daoWeight = NonNegLong(20L),
       votingWeight = NonNegLong(75L),
       initialEpoch = EpochProgress.MinValue,
-      daoAddress = address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU")
+      daoAddress = address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU"),
+      rewardCalculationInterval = NonNegLong(100L),
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     )
 
   val epochData: ApplicationConfig.EpochMetadata = ApplicationConfig.EpochMetadata(43.seconds)
@@ -78,7 +82,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     VotingPower(voterB, VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress))))
   )
 
-  def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): RewardCalculator =
+  def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): RewardCalculator[IO] =
     RewardCalculator.make(config, epochData)
 
   test("total rewards per epoch should match configuration") {

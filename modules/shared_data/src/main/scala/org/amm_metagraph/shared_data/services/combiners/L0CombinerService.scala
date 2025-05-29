@@ -43,7 +43,9 @@ object L0CombinerService {
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
     stakingCombinerService: StakingCombinerService[F],
     swapCombinerService: SwapCombinerService[F],
-    withdrawalCombinerService: WithdrawalCombinerService[F]
+    withdrawalCombinerService: WithdrawalCombinerService[F],
+    rewardsCombinerService: RewardsDistributionService[F],
+    rewardsWithdrawService: RewardsWithdrawService[F]
   ): L0CombinerService[F] =
     new L0CombinerService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
@@ -66,6 +68,7 @@ object L0CombinerService {
       private def combineIncomingUpdates(
         incomingUpdates: List[Signed[AmmUpdate]],
         lastSyncGlobalEpochProgress: EpochProgress,
+        currentSnapshotEpochProgress: EpochProgress,
         globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
         stateCombinedByVotingWeight: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
@@ -125,6 +128,13 @@ object L0CombinerService {
                         lastSyncGlobalEpochProgress,
                         globalSnapshotSyncAllowSpends,
                         currencyId
+                      )
+                  case rewardWithdrawUpdate: RewardWithdrawUpdate =>
+                    logger.info(s"Received reward withdraw update: $rewardWithdrawUpdate") >>
+                      rewardsWithdrawService.combineNew(
+                        Signed(rewardWithdrawUpdate, signedUpdate.proofs),
+                        acc,
+                        currentSnapshotEpochProgress
                       )
                 }
               } yield combinedState
@@ -289,8 +299,8 @@ object L0CombinerService {
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
-      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] =
-        (for {
+      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+        val combined = for {
           (lastCurrencySnapshot, lastCurrencySnapshotInfo) <- OptionT(context.getLastCurrencySnapshotCombined).getOrRaise(
             new IllegalStateException("lastCurrencySnapshot unavailable")
           )
@@ -320,6 +330,8 @@ object L0CombinerService {
           newState = oldState
             .focus(_.onChain.updates)
             .replace(SortedSet.empty)
+            .focus(_.onChain.rewardsUpdate)
+            .replace(None)
             .focus(_.sharedArtifacts)
             .replace(SortedSet.empty)
 
@@ -346,6 +358,7 @@ object L0CombinerService {
             combineIncomingUpdates(
               incomingUpdates,
               lastSyncGlobalEpochProgress,
+              currentSnapshotEpochProgress,
               globalSnapshotSyncAllowSpends,
               stateCombinedByVotingWeight,
               currencyId
@@ -386,8 +399,18 @@ object L0CombinerService {
             .replace(lastSyncGlobalOrdinal)
 
           _ <- logger.info(s"SpendTxnProduced: ${stateUpdatedByLastGlobalSync.sharedArtifacts}")
-        } yield stateUpdatedByLastGlobalSync).handleErrorWith { e =>
+
+          stateUpdatedRewardDistribution <- rewardsCombinerService.updateRewardsDistribution(
+            lastCurrencySnapshot.signed,
+            stateUpdatedByLastGlobalSync,
+            currentSnapshotEpochProgress
+          )
+
+        } yield stateUpdatedRewardDistribution
+
+        combined.handleErrorWith { e =>
           logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
         }
+      }
     }
 }

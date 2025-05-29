@@ -1,4 +1,4 @@
-package com.my.amm_metagraph.shared_data
+package org.amm_metagraph.shared_data
 
 import cats.effect.Async
 import cats.syntax.all._

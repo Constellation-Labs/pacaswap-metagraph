@@ -49,6 +49,7 @@ object Main
     swapValidations = SwapValidations.make[IO](config)
     withdrawalValidations = WithdrawalValidations.make[IO](config)
     governanceValidations = GovernanceValidations.make[IO]
+    rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
 
     validationService = ValidationService.make[IO](
       config,
@@ -56,7 +57,8 @@ object Main
       stakingValidations,
       swapValidations,
       withdrawalValidations,
-      governanceValidations
+      governanceValidations,
+      rewardWithdrawValidations
     )
 
     l1Service = DataL1Service.make[IO](validationService, jsonBase64BinaryCodec, jsonBinaryCodec)

@@ -3,12 +3,16 @@ import sbt.*
 object Dependencies {
 
   object V {
-    val tessellation: String = sys.env.getOrElse("TESSELLATION_VERSION", "3.0.0-rc.8")
+    val tessellation: String = sys.env.getOrElse("TESSELLATION_VERSION", "3.0.2")
     val decline = "2.4.1"
     val organizeImports = "0.5.0"
   }
 
-  def tessellation(artifact: String): ModuleID = "io.constellationnetwork" %% s"tessellation-$artifact" % V.tessellation
+    def tessellation(artifact: String): ModuleID = {
+      val version = V.tessellation
+      println(s"Using tessellation version: $version") // Debug logging
+      "io.constellationnetwork" %% s"tessellation-$artifact" % version
+    }
 
   def decline(artifact: String = ""): ModuleID =
     "com.monovore" %% {
