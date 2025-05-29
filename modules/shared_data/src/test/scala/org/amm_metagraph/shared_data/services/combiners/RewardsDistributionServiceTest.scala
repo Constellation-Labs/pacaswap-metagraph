@@ -6,7 +6,7 @@ import cats.data.NonEmptySet
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency
@@ -22,6 +22,7 @@ import io.constellationnetwork.security.key.ops.PublicKeyOps
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
+import io.constellationnetwork.syntax.sortedCollection.sortedMapSyntax
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
@@ -84,7 +85,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval).next
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -111,7 +112,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), List.empty)).toMap
+      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
@@ -139,7 +140,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -166,7 +167,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), List.empty)).toMap
+      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
@@ -202,7 +203,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
     val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
@@ -230,7 +231,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), List.empty)).toMap
+      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
@@ -274,7 +275,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(Set.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
     val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
@@ -302,7 +303,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), List.empty)).toMap
+      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]

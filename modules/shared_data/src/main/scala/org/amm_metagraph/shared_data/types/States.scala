@@ -27,10 +27,6 @@ import org.amm_metagraph.shared_data.types.Rewards.{RewardInfo, RewardType}
 import org.amm_metagraph.shared_data.types.Staking.{StakingCalculatedStateAddress, StakingCalculatedStateInfo}
 import org.amm_metagraph.shared_data.types.Swap.{SwapCalculatedStateAddress, SwapCalculatedStateInfo}
 import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalCalculatedStateAddress, WithdrawalCalculatedStateInfo}
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
-import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
-import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
 import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateReason
 
 object States {
@@ -180,14 +176,14 @@ object States {
 
   @derive(encoder, decoder)
   case class RewardWithdrawCalculatedState(
-    confirmed: Map[Address, RewardWithdrawReference],
-    pending: Map[EpochProgress, RewardInfo]
+    confirmed: SortedMap[Address, RewardWithdrawReference],
+    pending: SortedMap[EpochProgress, RewardInfo]
   )
 
   object RewardWithdrawCalculatedState {
     def empty: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState(
-      Map.empty,
-      Map.empty
+      SortedMap.empty,
+      SortedMap.empty
     )
   }
 

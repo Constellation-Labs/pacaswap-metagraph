@@ -146,7 +146,7 @@ object GovernanceCombinerService {
               }
 
               Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
-          }.toList.toSortedSet
+          }.toSortedSet
 
           oldState.calculated.allocations.usersAllocations
             .get(signedUpdate.source)
