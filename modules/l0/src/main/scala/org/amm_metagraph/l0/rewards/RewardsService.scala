@@ -23,12 +23,10 @@ import org.amm_metagraph.shared_data.types.States.AmmCalculatedState
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-/**
- * Rewards created by RewardWithdrawUpdate by moving from
- * calculatedState.rewards.availableRewards to calculatedState.rewards.withdraws.pending
- * RewardsService create rewards based on "pending" data for current epoch.
- * Clearance of pending state is done in RewardWithdrawService
- */
+/** Rewards created by RewardWithdrawUpdate by moving from calculatedState.rewards.availableRewards to
+  * calculatedState.rewards.withdraws.pending RewardsService create rewards based on "pending" data for current epoch. Clearance of pending
+  * state is done in RewardWithdrawService
+  */
 object RewardsService {
   def make[F[_]: Async: SecurityProvider]: Rewards[F, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotEvent] = {
     def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
