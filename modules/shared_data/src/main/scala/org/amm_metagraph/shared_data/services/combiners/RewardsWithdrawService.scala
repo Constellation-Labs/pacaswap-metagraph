@@ -3,10 +3,12 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
-import eu.timepit.refined.types.numeric.NonNegLong
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.signature.Signed
+
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined._
@@ -31,10 +33,10 @@ object RewardsWithdrawService {
   def make[F[_]: Async: HasherSelector](rewardsConfig: ApplicationConfig.Rewards): RewardsWithdrawService[F] =
     new RewardsWithdrawService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
-      //Actual reward distribution done in Rewards Service.
-      //Reward Service can't remove already distributed rewards because it can't change state directly.
-      //Thus, we shall clear it here by assuming that rewards had been distributed already and we no longer
-      //need information in Rewards Pending Calculated state about rewards "pendingClearDelay" epochs ago
+      // Actual reward distribution done in Rewards Service.
+      // Reward Service can't remove already distributed rewards because it can't change state directly.
+      // Thus, we shall clear it here by assuming that rewards had been distributed already and we no longer
+      // need information in Rewards Pending Calculated state about rewards "pendingClearDelay" epochs ago
       private val pendingClearDelay = EpochProgress(NonNegLong(10L))
 
       override def combineNew(
