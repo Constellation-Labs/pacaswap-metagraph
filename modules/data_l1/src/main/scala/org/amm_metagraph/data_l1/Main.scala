@@ -44,12 +44,12 @@ object Main
 
     config <- ApplicationConfigOps.readDefault[IO].asResource
 
-    liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    stakingValidations = StakingValidations.make[IO](config)
-    swapValidations = SwapValidations.make[IO](config)
-    withdrawalValidations = WithdrawalValidations.make[IO](config)
-    governanceValidations = GovernanceValidations.make[IO]
-    rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
+    liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
+    stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+    swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+    withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+    governanceValidations = GovernanceValidations.make[IO](config)
+    rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
 
     validationService = ValidationService.make[IO](
       config,

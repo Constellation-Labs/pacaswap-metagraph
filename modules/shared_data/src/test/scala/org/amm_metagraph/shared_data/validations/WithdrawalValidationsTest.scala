@@ -22,12 +22,14 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared._
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import org.amm_metagraph.shared_data.types.codecs
+import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.SwapValidationTest.expect
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
 import weaver.MutableIOSuite
 
@@ -99,13 +101,19 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
       result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
-        ammCalculatedState
+        ammCalculatedState,
+        EpochProgress.MaxValue
       )
 
-    } yield expect(result.isValid)
+    } yield
+      result match {
+        case Left(_)  => expect(false)
+        case Right(_) => expect(true)
+      }
   }
 
   test("Validation fails when liquidity pool does not exist") { implicit res =>
@@ -144,13 +152,23 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
       result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
-        ammCalculatedState
+        ammCalculatedState,
+        EpochProgress.MaxValue
       )
 
-    } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == LiquidityPoolDoesNotExists))
+    } yield
+      result match {
+        case Left(value) =>
+          value.reason match {
+            case InvalidLiquidityPool() => expect(true)
+            case _                      => expect(false)
+          }
+        case Right(_) => expect(false)
+      }
   }
 
   test("Validation fails when trying to withdraw more shares than owned") { implicit res =>
@@ -201,13 +219,23 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
       result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
-        ammCalculatedState
+        ammCalculatedState,
+        EpochProgress.MaxValue
       )
 
-    } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == WithdrawalInsufficientShares))
+    } yield
+      result match {
+        case Left(value) =>
+          value.reason match {
+            case NotEnoughShares() => expect(true)
+            case _                 => expect(false)
+          }
+        case Right(_) => expect(false)
+      }
   }
 
   test("Validation fails when withdrawal is for all LP shares") { implicit res =>
@@ -258,13 +286,23 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
       result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
-        ammCalculatedState
+        ammCalculatedState,
+        EpochProgress.MaxValue
       )
 
-    } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == WithdrawalAllLPShares))
+    } yield
+      result match {
+        case Left(value) =>
+          value.reason match {
+            case WithdrawalAllLPSharesError() => expect(true)
+            case _                            => expect(false)
+          }
+        case Right(_) => expect(false)
+      }
   }
 
   test("Validation fails when withdrawal is already pending") { implicit res =>
@@ -327,13 +365,23 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         ownerAddress
       )
 
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
       result <- withdrawalValidations.l0Validations(
         withdrawalUpdate,
-        ammCalculatedState
+        ammCalculatedState,
+        EpochProgress.MaxValue
       )
 
-    } yield expect(result.isInvalid) && expect(result.swap.exists(_.head == WithdrawalAlreadyPending))
+    } yield
+      result match {
+        case Left(value) =>
+          value.reason match {
+            case WithdrawalNotPendingError() => expect(true)
+            case _                           => expect(false)
+          }
+        case Right(_) => expect(false)
+      }
   }
 
 }

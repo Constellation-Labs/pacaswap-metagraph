@@ -18,7 +18,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.generateSpendAction
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
-import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendGlobalSnapshotsState, logger}
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -125,23 +125,28 @@ object SwapCombinerService {
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
         swapCalculatedState: SwapCalculatedState
-      ) = {
-        val updatedSwapCalculatedState = swapCalculatedState
-          .focus(_.failed)
-          .modify(_ + failedCalculatedState)
-          .focus(_.pending)
-          .modify(_.filter(_.update =!= swapUpdate))
+      ) =
+        failedCalculatedState.reason match {
+          case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
+          case _ =>
+            val updatedSwapCalculatedState = swapCalculatedState
+              .focus(_.failed)
+              .modify(_ + failedCalculatedState)
+              .focus(_.pending)
+              .modify(_.filter(_.update =!= swapUpdate))
 
-        val updatedCalculatedState = acc.calculated
-          .focus(_.operations)
-          .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
+            val updatedCalculatedState = acc.calculated
+              .focus(_.operations)
+              .modify(_.updated(OperationType.Swap, updatedSwapCalculatedState))
 
-        acc
-          .focus(_.onChain.updates)
-          .modify(current => current + swapUpdate)
-          .focus(_.calculated)
-          .replace(updatedCalculatedState)
-      }
+            Async[F].pure(
+              acc
+                .focus(_.onChain.updates)
+                .modify(current => current + swapUpdate)
+                .focus(_.calculated)
+                .replace(updatedCalculatedState)
+            )
+        }
 
       private def getUpdateAllowSpend(
         swapUpdate: SwapUpdate,
@@ -191,6 +196,13 @@ object SwapCombinerService {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
 
         val combinedState = for {
+          _ <- EitherT(
+            swapValidations.l0Validations(
+              signedUpdate,
+              oldState.calculated,
+              globalEpochProgress
+            )
+          )
           _ <- EitherT.fromEither(
             swapValidations.newUpdateValidations(
               oldState.calculated,
@@ -263,9 +275,10 @@ object SwapCombinerService {
           }
         } yield response
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, swapCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(signedUpdate, oldState, failed, swapCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def combinePendingAllowSpend(
@@ -353,22 +366,25 @@ object SwapCombinerService {
           }
         } yield result
 
-        combinedState.valueOrF { failedCalculatedState =>
-          rollbackAmountInLPs(
-            pendingAllowSpend,
-            globalEpochProgress,
-            pendingAllowSpend.pricingTokenInfo,
-            oldState,
-            currencyId
-          ).map { rolledBackState =>
-            handleFailedUpdate(
-              pendingAllowSpend.update,
-              rolledBackState,
-              failedCalculatedState,
-              swapCalculatedState
-            )
-          }
-        }
+        combinedState.foldF(
+          failed =>
+            rollbackAmountInLPs(
+              pendingAllowSpend,
+              globalEpochProgress,
+              pendingAllowSpend.pricingTokenInfo,
+              oldState,
+              currencyId
+            ).flatMap { rolledBackState =>
+              handleFailedUpdate(
+                pendingAllowSpend.update,
+                rolledBackState,
+                failed,
+                swapCalculatedState
+              )
+            },
+          success => success.pure[F]
+        )
+
       }
 
       def combinePendingSpendAction(
@@ -480,22 +496,24 @@ object SwapCombinerService {
             .focus(_.calculated)
             .replace(updatedCalculatedState)
 
-        combinedState.valueOrF { failedCalculatedState =>
-          rollbackAmountInLPs(
-            pendingSpendAction,
-            globalEpochProgress,
-            pendingSpendAction.pricingTokenInfo,
-            oldState,
-            currencyId
-          ).map { rolledBackState =>
-            handleFailedUpdate(
-              pendingSpendAction.update,
-              rolledBackState,
-              failedCalculatedState,
-              swapCalculatedState
-            )
-          }
-        }
+        combinedState.foldF(
+          failed =>
+            rollbackAmountInLPs(
+              pendingSpendAction,
+              globalEpochProgress,
+              pendingSpendAction.pricingTokenInfo,
+              oldState,
+              currencyId
+            ).flatMap { rolledBackState =>
+              handleFailedUpdate(
+                pendingSpendAction.update,
+                rolledBackState,
+                failed,
+                swapCalculatedState
+              )
+            },
+          success => success.pure[F]
+        )
       }
 
       def cleanupExpiredOperations(

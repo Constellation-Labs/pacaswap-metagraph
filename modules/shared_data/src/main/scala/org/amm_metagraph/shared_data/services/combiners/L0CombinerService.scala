@@ -134,7 +134,8 @@ object L0CombinerService {
                       rewardsWithdrawService.combineNew(
                         Signed(rewardWithdrawUpdate, signedUpdate.proofs),
                         acc,
-                        currentSnapshotEpochProgress
+                        currentSnapshotEpochProgress,
+                        lastSyncGlobalEpochProgress
                       )
                 }
               } yield combinedState

@@ -27,6 +27,7 @@ import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations
 import weaver.MutableIOSuite
 
 object RewardsWithdrawServiceTest extends MutableIOSuite {
@@ -65,7 +66,8 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards).pure[IO]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
         RewardWithdrawUpdate(
@@ -77,7 +79,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         )
       )
 
-      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch)
+      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch, EpochProgress.MaxValue)
     } yield expect(newState == state)
   }
 
@@ -105,13 +107,14 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards).pure[IO]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
         RewardWithdrawUpdate(CurrencyId(ownerAddress), a1, RewardWithdrawReference.empty, requestedRewardType, requestAmount)
       )
 
-      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch)
+      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch, EpochProgress.MaxValue)
     } yield expect(newState == state)
   }
 
@@ -120,7 +123,8 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
     val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
     val requestedRewardType = GovernanceVoting
     val requestAmount = Amount(NonNegLong(100L))
-    val existReward = AddressAndRewardType(a1, requestedRewardType) -> requestAmount
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+    val existReward = AddressAndRewardType(ownerAddress, requestedRewardType) -> requestAmount
     val ammCalculatedState = AmmCalculatedState().focus(_.rewards.availableRewards.info).modify(_ + existReward)
     val currentEpoch = EpochProgress(NonNegLong(1L))
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -138,23 +142,24 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards).pure[IO]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
       reference = RewardWithdrawReference.empty
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
-        RewardWithdrawUpdate(CurrencyId(ownerAddress), a1, reference, requestedRewardType, requestAmount)
+        RewardWithdrawUpdate(CurrencyId(ownerAddress), ownerAddress, reference, requestedRewardType, requestAmount)
       )
 
-      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch)
+      newState <- rewardWithdrawService.combineNew(rewardWithdrawUpdate, state, currentEpoch, EpochProgress.MaxValue)
 
       expectedReference <- RewardWithdrawReference.of[IO](rewardWithdrawUpdate)
       expectedWithdrawEpoch = currentEpoch.plus(config.rewards.rewardWithdrawDelay).toOption.get
-      expectedRewardInfo = RewardInfo.empty.addReward(a1, requestedRewardType, requestAmount).toOption.get
+      expectedRewardInfo = RewardInfo.empty.addReward(ownerAddress, requestedRewardType, requestAmount).toOption.get
       expectedState = state
         .focus(_.calculated.rewards.availableRewards)
         .replace(RewardInfo.empty)
         .focus(_.calculated.rewards.withdraws.confirmed)
-        .replace(SortedMap(a1 -> expectedReference))
+        .replace(SortedMap(ownerAddress -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
         .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
     } yield expect.all(newState == expectedState)
@@ -167,8 +172,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
     val firstRequest = Amount(NonNegLong(20L))
     val secondRequest = Amount(NonNegLong(80L))
     val fullAmount = Amount(NonNegLong.unsafeFrom(firstRequest.value + secondRequest.value))
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
 
-    val existReward = AddressAndRewardType(a1, requestedRewardType) -> fullAmount
+    val existReward = AddressAndRewardType(ownerAddress, requestedRewardType) -> fullAmount
     val ammCalculatedState = AmmCalculatedState().focus(_.rewards.availableRewards.info).modify(_ + existReward)
     val currentEpoch = EpochProgress(NonNegLong(1L))
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -186,29 +192,30 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards).pure[IO]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
       reference1 = RewardWithdrawReference.empty
 
       rewardWithdrawUpdate1 = getFakeSignedUpdate(
-        RewardWithdrawUpdate(CurrencyId(ownerAddress), a1, reference1, requestedRewardType, firstRequest)
+        RewardWithdrawUpdate(CurrencyId(ownerAddress), ownerAddress, reference1, requestedRewardType, firstRequest)
       )
-      newState1 <- rewardWithdrawService.combineNew(rewardWithdrawUpdate1, state, currentEpoch)
+      newState1 <- rewardWithdrawService.combineNew(rewardWithdrawUpdate1, state, currentEpoch, EpochProgress.MaxValue)
       reference2 <- RewardWithdrawReference.of[IO](rewardWithdrawUpdate1)
 
       rewardWithdrawUpdate2 = getFakeSignedUpdate(
-        RewardWithdrawUpdate(CurrencyId(ownerAddress), a1, reference2, requestedRewardType, secondRequest)
+        RewardWithdrawUpdate(CurrencyId(ownerAddress), ownerAddress, reference2, requestedRewardType, secondRequest)
       )
 
-      newState2 <- rewardWithdrawService.combineNew(rewardWithdrawUpdate2, newState1, currentEpoch)
+      newState2 <- rewardWithdrawService.combineNew(rewardWithdrawUpdate2, newState1, currentEpoch, EpochProgress.MaxValue)
 
       expectedReference <- RewardWithdrawReference.of[IO](rewardWithdrawUpdate2)
       expectedWithdrawEpoch = currentEpoch.plus(config.rewards.rewardWithdrawDelay).toOption.get
-      expectedRewardInfo = RewardInfo.empty.addReward(a1, requestedRewardType, fullAmount).toOption.get
+      expectedRewardInfo = RewardInfo.empty.addReward(ownerAddress, requestedRewardType, fullAmount).toOption.get
       expectedState = state
         .focus(_.calculated.rewards.availableRewards)
         .replace(RewardInfo.empty)
         .focus(_.calculated.rewards.withdraws.confirmed)
-        .replace(SortedMap(a1 -> expectedReference))
+        .replace(SortedMap(ownerAddress -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
         .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
     } yield expect.all(newState2 == expectedState)

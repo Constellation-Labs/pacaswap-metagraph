@@ -8,17 +8,22 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
-import org.amm_metagraph.shared_data.types.DataUpdates.WithdrawalUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Withdrawal.{WithdrawalReference, getWithdrawalCalculatedState}
+import org.amm_metagraph.shared_data.types.Withdrawal.{
+  WithdrawalReference,
+  getPendingSpendActionWithdrawalUpdates,
+  getWithdrawalCalculatedState
+}
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
@@ -29,8 +34,9 @@ trait WithdrawalValidations[F[_]] {
 
   def l0Validations(
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
-    state: AmmCalculatedState
-  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]]
+    state: AmmCalculatedState,
+    lastSyncGlobalEpochProgress: EpochProgress
+  )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 
   def newUpdateValidations(
     signedUpdate: Signed[WithdrawalUpdate],
@@ -47,7 +53,8 @@ trait WithdrawalValidations[F[_]] {
 
 object WithdrawalValidations {
   def make[F[_]: Async](
-    applicationConfig: ApplicationConfig
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): WithdrawalValidations[F] = new WithdrawalValidations[F] {
     def l1Validations(
       withdrawalUpdate: WithdrawalUpdate
@@ -57,47 +64,63 @@ object WithdrawalValidations {
 
     def l0Validations(
       signedWithdrawalUpdate: Signed[WithdrawalUpdate],
-      state: AmmCalculatedState
-    )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = for {
-      l1Validation <- l1Validations(signedWithdrawalUpdate.value)
-      signatures <- signatureValidations(signedWithdrawalUpdate, signedWithdrawalUpdate.source)
-      sourceAddress = signedWithdrawalUpdate.source
-      withdrawalUpdate = signedWithdrawalUpdate.value
-      withdrawalCalculatedState = getWithdrawalCalculatedState(state)
+      state: AmmCalculatedState,
+      lastSyncGlobalEpochProgress: EpochProgress
+    )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] =
+      for {
+        signatures <- signatureValidations(signedWithdrawalUpdate, signedWithdrawalUpdate.source)
+        sourceAddress = signedWithdrawalUpdate.source
+        withdrawalUpdate = signedWithdrawalUpdate.value
+        withdrawalCalculatedState = getWithdrawalCalculatedState(state)
 
-      liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
+        liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
 
-      liquidityPoolExists <- validateIfLiquidityPoolExists(
-        withdrawalUpdate,
-        liquidityPoolsCalculatedState
-      )
+        liquidityPoolExists <- validateIfLiquidityPoolExists(
+          withdrawalUpdate,
+          liquidityPoolsCalculatedState
+        )
 
-      hasEnoughShares <- validateIfHasEnoughShares(
-        withdrawalUpdate,
-        liquidityPoolsCalculatedState,
-        sourceAddress
-      )
+        hasEnoughShares <- validateIfHasEnoughShares(
+          withdrawalUpdate,
+          liquidityPoolsCalculatedState,
+          sourceAddress
+        )
 
-      withdrawsAllLPShares <- validateIfWithdrawsAllLPShares(
-        withdrawalUpdate,
-        liquidityPoolsCalculatedState
-      )
+        withdrawsAllLPShares <- validateIfWithdrawsAllLPShares(
+          withdrawalUpdate,
+          liquidityPoolsCalculatedState
+        )
 
-      withdrawalNotPending = validateIfWithdrawalNotPending(
-        signedWithdrawalUpdate,
-        withdrawalCalculatedState.getPendingUpdates
-      )
+        withdrawalNotPending = validateIfWithdrawalNotPending(
+          signedWithdrawalUpdate,
+          withdrawalCalculatedState.getPendingUpdates
+        )
 
-      lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, sourceAddress)
+        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedWithdrawalUpdate.toHashed(dataUpdateCodec.serialize))
+        duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
-    } yield
-      signatures
-        .productR(l1Validation)
-        .productR(liquidityPoolExists)
-        .productR(hasEnoughShares)
-        .productR(withdrawsAllLPShares)
-        .productR(withdrawalNotPending)
-        .productR(lastRef)
+        lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, sourceAddress)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
+
+        result =
+          if (duplicatedUpdate.isInvalid) {
+            failWith(DuplicatedUpdate(signedWithdrawalUpdate.value), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (liquidityPoolExists.isInvalid) {
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (signatures.isInvalid) {
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (hasEnoughShares.isInvalid) {
+            failWith(NotEnoughShares(), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (withdrawsAllLPShares.isInvalid) {
+            failWith(WithdrawalAllLPSharesError(), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (withdrawalNotPending.isInvalid) {
+            failWith(WithdrawalNotPendingError(), expireEpochProgress, signedWithdrawalUpdate)
+          } else if (lastRef.isInvalid) {
+            failWith(InvalidLastReference(), expireEpochProgress, signedWithdrawalUpdate)
+          } else {
+            signedWithdrawalUpdate.asRight
+          }
+      } yield result
 
     def newUpdateValidations(
       signedUpdate: Signed[WithdrawalUpdate],
@@ -206,5 +229,18 @@ object WithdrawalValidations {
       pendingUpdates.toList.collectFirst {
         case pending if pending === signedWithdrawal => pending
       }.fold(valid)(_ => WithdrawalAlreadyPending.invalid)
+
+    private def validateDuplicatedUpdate(
+      calculatedState: AmmCalculatedState,
+      hashedUpdate: Hashed[WithdrawalUpdate]
+    ): DataApplicationValidationErrorOr[Unit] = {
+      val updateHash = hashedUpdate.hash
+      val pendingSpendActions = getPendingSpendActionWithdrawalUpdates(calculatedState)
+      if (pendingSpendActions.exists(_.updateHash === updateHash)) {
+        DuplicatedOperation.invalidNec
+      } else {
+        valid
+      }
+    }
   }
 }

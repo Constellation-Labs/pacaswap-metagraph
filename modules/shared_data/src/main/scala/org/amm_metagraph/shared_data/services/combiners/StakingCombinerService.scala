@@ -12,20 +12,21 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
-import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
+import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getConfirmedExpireEpochProgress
-import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.validations.Errors.DuplicatedUpdate
 import org.amm_metagraph.shared_data.validations.StakingValidations
 
 trait StakingCombinerService[F[_]] {
@@ -61,7 +62,7 @@ trait StakingCombinerService[F[_]] {
 }
 
 object StakingCombinerService {
-  def make[F[_]: Async: HasherSelector](
+  def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig,
     pricingService: PricingService[F],
     stakingValidations: StakingValidations[F],
@@ -87,23 +88,28 @@ object StakingCombinerService {
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
         stakingCalculatedState: StakingCalculatedState
-      ) = {
-        val updatedStakingCalculatedState = stakingCalculatedState
-          .focus(_.failed)
-          .modify(_ + failedCalculatedState)
-          .focus(_.pending)
-          .modify(_.filter(_.update =!= stakingUpdate))
+      ) =
+        failedCalculatedState.reason match {
+          case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
+          case _ =>
+            val updatedStakingCalculatedState = stakingCalculatedState
+              .focus(_.failed)
+              .modify(_ + failedCalculatedState)
+              .focus(_.pending)
+              .modify(_.filter(_.update =!= stakingUpdate))
 
-        val updatedCalculatedState = acc.calculated
-          .focus(_.operations)
-          .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
+            val updatedCalculatedState = acc.calculated
+              .focus(_.operations)
+              .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
 
-        acc
-          .focus(_.onChain.updates)
-          .modify(current => current + stakingUpdate.value)
-          .focus(_.calculated)
-          .replace(updatedCalculatedState)
-      }
+            Async[F].pure(
+              acc
+                .focus(_.onChain.updates)
+                .modify(current => current + stakingUpdate.value)
+                .focus(_.calculated)
+                .replace(updatedCalculatedState)
+            )
+        }
 
       private def removePendingAllowSpend(
         stakingCalculatedState: StakingCalculatedState,
@@ -141,6 +147,13 @@ object StakingCombinerService {
 
         val stakingUpdate = signedUpdate.value
         val combinedState = for {
+          _ <- EitherT(
+            stakingValidations.l0Validations(
+              signedUpdate,
+              oldState.calculated,
+              globalEpochProgress
+            )
+          )
           _ <- EitherT.fromEither(
             stakingValidations.newUpdateValidations(
               oldState.calculated,
@@ -187,9 +200,10 @@ object StakingCombinerService {
           }
         } yield response
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, stakingCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(signedUpdate, oldState, failed, stakingCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def combinePendingAllowSpend(
@@ -277,9 +291,10 @@ object StakingCombinerService {
           }
         } yield result
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failedCalculatedState, stakingCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failed, stakingCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def combinePendingSpendAction(
@@ -387,9 +402,10 @@ object StakingCombinerService {
             }
         } yield result
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(signedStakingUpdate, oldState, failedCalculatedState, stakingCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(pendingSpendAction.update, oldState, failed, stakingCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def cleanupExpiredOperations(

@@ -11,6 +11,7 @@ import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
 import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWeight, maxCredits}
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
@@ -24,33 +25,31 @@ trait GovernanceValidations[F[_]] {
   ): F[DataApplicationValidationErrorOr[Unit]]
 
   def l0Validations(
-    applicationConfig: ApplicationConfig,
     rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
     state: AmmCalculatedState,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
-  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]]
+  )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]]
 }
 
 object GovernanceValidations {
-  def make[F[_]: Async]: GovernanceValidations[F] = new GovernanceValidations[F] {
+  def make[F[_]: Async](
+    applicationConfig: ApplicationConfig
+  ): GovernanceValidations[F] = new GovernanceValidations[F] {
     def l1Validations(
       rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
     ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
       exceedingAllocationPercentage(rewardAllocationVoteUpdate)
     }
-
     def l0Validations(
-      applicationConfig: ApplicationConfig,
       rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
       state: AmmCalculatedState,
       lastSyncGlobalSnapshotEpochProgress: EpochProgress
-    )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = {
+    )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]] = {
       val lastAllocations = state.allocations
       val lastVotingWeights = state.votingWeights
       val liquidityPools = getLiquidityPoolCalculatedState(state)
 
       for {
-        l1Validations <- l1Validations(rewardAllocationVoteUpdate.value)
         signatures <- signatureValidations(rewardAllocationVoteUpdate, rewardAllocationVoteUpdate.source)
         sourceAddress = rewardAllocationVoteUpdate.source
         lastUserAllocation = lastAllocations.usersAllocations.get(sourceAddress)
@@ -69,13 +68,23 @@ object GovernanceValidations {
           rewardAllocationVoteUpdate,
           liquidityPools
         )
-      } yield
-        l1Validations
-          .productR(signatures)
-          .productR(lastTransactionRef)
-          .productR(dailyLimitAllocation)
-          .productR(walletHasVotingWeight)
-          .productR(isValidId)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalSnapshotEpochProgress)
+
+        result =
+          if (lastTransactionRef.isInvalid) {
+            failWith(InvalidLastReference(), expireEpochProgress, rewardAllocationVoteUpdate)
+          } else if (signatures.isInvalid) {
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, rewardAllocationVoteUpdate)
+          } else if (dailyLimitAllocation.isInvalid) {
+            failWith(GovernanceDailyLimitAllocation(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+          } else if (walletHasVotingWeight.isInvalid) {
+            failWith(GovernanceWalletWithNoVotingWeight(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+          } else if (isValidId.isInvalid) {
+            failWith(GovernanceInvalidVoteId(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+          } else {
+            rewardAllocationVoteUpdate.asRight
+          }
+      } yield result
     }
 
     private def exceedingAllocationPercentage(

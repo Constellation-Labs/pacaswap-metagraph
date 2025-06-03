@@ -192,7 +192,19 @@ object Errors {
   case class MissingSwapTokenInfo() extends FailedCalculatedStateReason
   case class MissingWithdrawalsAmount() extends FailedCalculatedStateReason
   case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class InvalidAddressRewardType(address: Address, rewardType: RewardType) extends FailedCalculatedStateReason
   case object WrongRewardWithdrawEpoch extends FailedCalculatedStateReason
   case class RewardWithdrawAmountError(currentAmount: Amount, error: String) extends FailedCalculatedStateReason
+
+  case class InvalidSignatures(messages: String) extends FailedCalculatedStateReason
+  case class TransactionAlreadyExists(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class InvalidLastReference() extends FailedCalculatedStateReason
+  case class NotEnoughShares() extends FailedCalculatedStateReason
+  case class NotEnoughTokens() extends FailedCalculatedStateReason
+  case class WithdrawalAllLPSharesError() extends FailedCalculatedStateReason
+  case class WithdrawalNotPendingError() extends FailedCalculatedStateReason
+  case class GovernanceDailyLimitAllocation(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class GovernanceWalletWithNoVotingWeight(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class GovernanceInvalidVoteId(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class InvalidWithdrawalAmount(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class DuplicatedUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
 }
