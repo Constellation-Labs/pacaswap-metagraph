@@ -5,6 +5,7 @@ import cats.Order
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, DataOnChainState}
+import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.balance.Amount
@@ -14,7 +15,7 @@ import io.constellationnetwork.schema.{SnapshotOrdinal, nonNegLongKeyDecoder, no
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
-import derevo.cats.show
+import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
@@ -32,9 +33,33 @@ import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateRea
 object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
-    updates: SortedSet[AmmUpdate],
+    updatedStateDataUpdate: SortedSet[UpdatedStateDataUpdate],
     rewardsUpdate: Option[RewardInfo]
   ) extends DataOnChainState
+
+  @derive(encoder, decoder, order, ordering)
+  case class UpdatedStateDataUpdate(
+    previousState: StateTransitionType,
+    newState: StateTransitionType,
+    operationType: OperationType,
+    update: Signed[AmmUpdate],
+    updateHash: Hash,
+    pendingInfo: Option[PendingAction[AmmUpdate]]
+  )
+
+  @derive(encoder, decoder)
+  sealed abstract class StateTransitionType(val value: String) extends StringEnumEntry
+  object StateTransitionType extends StringEnum[StateTransitionType] with StringCirceEnum[StateTransitionType] {
+    val values: IndexedSeq[StateTransitionType] = findValues
+    case object NewUpdate extends StateTransitionType("NewUpdate")
+    case object PendingAllowSpends extends StateTransitionType("PendingAllowSpends")
+    case object PendingSpendTransactions extends StateTransitionType("PendingSpendTransactions")
+    case object Confirmed extends StateTransitionType("Confirmed")
+    case object Failed extends StateTransitionType("Failed")
+
+    implicit val order: Order[StateTransitionType] = Order.by(_.value)
+    implicit val ordering: Ordering[StateTransitionType] = order.toOrdering
+  }
 
   @derive(encoder, decoder)
   sealed trait ConfirmedCalculatedState
