@@ -54,12 +54,12 @@ object Main
     calculatedStateService <- CalculatedStateService.make[IO].asResource
     globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
 
-    liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    stakingValidations = StakingValidations.make[IO](config)
-    swapValidations = SwapValidations.make[IO](config)
-    withdrawalValidations = WithdrawalValidations.make[IO](config)
-    governanceValidations = GovernanceValidations.make[IO]
-    rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
+    liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
+    stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+    swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+    withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+    governanceValidations = GovernanceValidations.make[IO](config)
+    rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
 
     validationService = ValidationService.make[IO](
       config,
@@ -72,14 +72,14 @@ object Main
     )
 
     pricingService = PricingService.make[IO](config, calculatedStateService)
-    governanceCombinerService = GovernanceCombinerService.make[IO](config)
+    governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
     liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
     withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
     rewardsCalculator = RewardCalculator.make[IO](config.rewards, config.epochInfo)
     rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards)
-    rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards)
+    rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations)
 
     combinerService = L0CombinerService
       .make[IO](

@@ -129,8 +129,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
@@ -252,8 +252,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
@@ -381,8 +381,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
@@ -491,8 +491,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         destinationAddress
       )
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
@@ -605,8 +605,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
@@ -623,7 +623,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         liquidityPoolCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
-        liquidityPoolCalculatedState.failed.toList.head.reason == DuplicatedLiquidityPoolRequest(liquidityPoolUpdate)
+        liquidityPoolCalculatedState.failed.toList.head.reason == InvalidLiquidityPool()
       )
   }
 
@@ -711,8 +711,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
 
       futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
@@ -820,7 +820,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
       liquidityPoolResponse <- liquidityPoolCombinerService.combineNew(
         liquidityPoolUpdate,
@@ -924,8 +924,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
@@ -1011,6 +1011,20 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
           None
         )
       )
+      liquidityPoolUpdate2 = getFakeSignedUpdate(
+        LiquidityPoolUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          tokenAId,
+          tokenBId,
+          tokenAAmount,
+          tokenBAmount,
+          EpochProgress.MinValue,
+          None
+        )
+      )
 
       allowSpends = SortedMap(
         tokenAId.get.value.some ->
@@ -1034,8 +1048,8 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         destinationAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](liquidityPoolValidations, jsonBase64BinaryCodec)
 
       liquidityPoolPendingSpendActionResponse <- liquidityPoolCombinerService.combineNew(
@@ -1047,7 +1061,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       )
 
       liquidityPoolPendingSpendActionResponse2 <- liquidityPoolCombinerService.combineNew(
-        liquidityPoolUpdate,
+        liquidityPoolUpdate2,
         liquidityPoolPendingSpendActionResponse,
         futureEpoch,
         allowSpends,
@@ -1063,7 +1077,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         lpCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
-        lpCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(liquidityPoolUpdate)
+        lpCalculatedState.failed.toList.head.reason == InvalidLiquidityPool()
       )
   }
 

@@ -74,7 +74,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -91,7 +91,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -125,7 +125,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -151,7 +151,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).values.head.value
+      addressSwapResponse = swapCalculatedState.confirmed.value(ownerAddress).values.head.value
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -200,7 +200,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -217,7 +217,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -251,7 +251,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -330,7 +330,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -347,7 +347,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -381,7 +381,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
@@ -466,7 +466,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapResponse <- swapCombinerService.combineNew(
@@ -552,7 +552,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -608,7 +608,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -625,7 +625,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -659,7 +659,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -685,7 +685,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapCalculatedState = swapConfirmedResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
-      addressSwapResponse = swapCalculatedState.confirmed.value(sourceAddress).values.head.value
+      addressSwapResponse = swapCalculatedState.confirmed.value(ownerAddress).values.head.value
 
       oldLiquidityPoolCalculatedState = state.calculated
         .operations(OperationType.LiquidityPool)
@@ -781,7 +781,7 @@ object SwapCombinerTest extends MutableIOSuite {
       for {
         keyPair <- KeyPairGenerator.makeKeyPair[IO]
         allowSpend = AllowSpend(
-          sourceAddress,
+          ownerAddress,
           destinationAddress,
           primaryToken.identifier,
           SwapAmount(PosLong.MaxValue),
@@ -798,7 +798,7 @@ object SwapCombinerTest extends MutableIOSuite {
         swapUpdate = getFakeSignedUpdate(
           SwapUpdate(
             CurrencyId(destinationAddress),
-            sourceAddress,
+            ownerAddress,
             primaryToken.identifier,
             pairToken.identifier,
             signedAllowSpend.hash,
@@ -813,7 +813,7 @@ object SwapCombinerTest extends MutableIOSuite {
         allowSpends = SortedMap(
           primaryToken.identifier.get.value.some ->
             SortedMap(
-              sourceAddress -> SortedSet(signedAllowSpend.signed)
+              ownerAddress -> SortedSet(signedAllowSpend.signed)
             )
         )
 
@@ -832,7 +832,7 @@ object SwapCombinerTest extends MutableIOSuite {
         _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
         pricingService = PricingService.make[IO](config, calculatedStateService)
         jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-        swapValidations = SwapValidations.make[IO](config)
+        swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
         swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
         swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -916,7 +916,7 @@ object SwapCombinerTest extends MutableIOSuite {
       for {
         keyPair <- KeyPairGenerator.makeKeyPair[IO]
         allowSpend = AllowSpend(
-          sourceAddress,
+          ownerAddress,
           destinationAddress,
           pairToken.identifier,
           SwapAmount(PosLong.MaxValue),
@@ -933,7 +933,7 @@ object SwapCombinerTest extends MutableIOSuite {
         swapUpdate = getFakeSignedUpdate(
           SwapUpdate(
             CurrencyId(destinationAddress),
-            sourceAddress,
+            ownerAddress,
             pairToken.identifier,
             primaryToken.identifier,
             signedAllowSpend.hash,
@@ -948,7 +948,7 @@ object SwapCombinerTest extends MutableIOSuite {
         allowSpends = SortedMap(
           pairToken.identifier.get.value.some ->
             SortedMap(
-              sourceAddress -> SortedSet(signedAllowSpend.signed)
+              ownerAddress -> SortedSet(signedAllowSpend.signed)
             )
         )
 
@@ -967,7 +967,7 @@ object SwapCombinerTest extends MutableIOSuite {
         _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
         pricingService = PricingService.make[IO](config, calculatedStateService)
         jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-        swapValidations = SwapValidations.make[IO](config)
+        swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
         swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
         swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1062,7 +1062,7 @@ object SwapCombinerTest extends MutableIOSuite {
         for {
           keyPair <- KeyPairGenerator.makeKeyPair[IO]
           allowSpend = AllowSpend(
-            sourceAddress,
+            ownerAddress,
             destinationAddress,
             primaryToken.identifier,
             SwapAmount(PosLong.MaxValue),
@@ -1079,7 +1079,7 @@ object SwapCombinerTest extends MutableIOSuite {
           swapUpdate = getFakeSignedUpdate(
             SwapUpdate(
               CurrencyId(destinationAddress),
-              sourceAddress,
+              ownerAddress,
               primaryToken.identifier,
               pairToken.identifier,
               signedAllowSpend.hash,
@@ -1094,7 +1094,7 @@ object SwapCombinerTest extends MutableIOSuite {
           allowSpends = SortedMap(
             primaryToken.identifier.get.value.some ->
               SortedMap(
-                sourceAddress -> SortedSet(signedAllowSpend.signed)
+                ownerAddress -> SortedSet(signedAllowSpend.signed)
               )
           )
 
@@ -1113,7 +1113,7 @@ object SwapCombinerTest extends MutableIOSuite {
           _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
           pricingService = PricingService.make[IO](config, calculatedStateService)
           jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-          swapValidations = SwapValidations.make[IO](config)
+          swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
           swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
           swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1233,7 +1233,7 @@ object SwapCombinerTest extends MutableIOSuite {
         for {
           keyPair <- KeyPairGenerator.makeKeyPair[IO]
           allowSpend = AllowSpend(
-            sourceAddress,
+            ownerAddress,
             destinationAddress,
             tokenB.identifier,
             SwapAmount(PosLong.MaxValue),
@@ -1250,7 +1250,7 @@ object SwapCombinerTest extends MutableIOSuite {
           swapUpdate = getFakeSignedUpdate(
             SwapUpdate(
               CurrencyId(destinationAddress),
-              sourceAddress,
+              ownerAddress,
               tokenB.identifier,
               tokenA.identifier,
               signedAllowSpend.hash,
@@ -1283,7 +1283,7 @@ object SwapCombinerTest extends MutableIOSuite {
           _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
           pricingService = PricingService.make[IO](config, calculatedStateService)
           jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-          swapValidations = SwapValidations.make[IO](config)
+          swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
           swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
           swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1384,7 +1384,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -1401,7 +1401,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -1435,7 +1435,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1508,11 +1508,19 @@ object SwapCombinerTest extends MutableIOSuite {
             case (accState, accExpectations) =>
               val swapAmount = 100.0 * i
               val fixedSwapAmount = toFixedPoint(swapAmount)
+              val lastRef = accState.calculated.operations
+                .get(OperationType.Swap)
+                .map {
+                  case SwapCalculatedState(confirmed, _, _) =>
+                    confirmed.value.get(ownerAddress).map(_.lastReference).getOrElse(SwapReference.empty)
+                  case _ => SwapReference.empty
+                }
+                .getOrElse(SwapReference.empty)
 
               for {
                 keyPair <- KeyPairGenerator.makeKeyPair[IO]
                 allowSpend = AllowSpend(
-                  sourceAddress,
+                  ownerAddress,
                   destinationAddress,
                   primaryToken.identifier,
                   SwapAmount(PosLong.from(toFixedPoint(1000.0) - i).getOrElse(PosLong.MaxValue)),
@@ -1529,7 +1537,7 @@ object SwapCombinerTest extends MutableIOSuite {
                 swapUpdate = getFakeSignedUpdate(
                   SwapUpdate(
                     CurrencyId(destinationAddress),
-                    sourceAddress,
+                    ownerAddress,
                     primaryToken.identifier,
                     pairToken.identifier,
                     signedAllowSpend.hash,
@@ -1537,14 +1545,14 @@ object SwapCombinerTest extends MutableIOSuite {
                     SwapAmount(PosLong.MinValue),
                     none,
                     EpochProgress.MaxValue,
-                    SwapReference.empty
+                    lastRef
                   )
                 )
 
                 allowSpends = SortedMap(
                   primaryToken.identifier.get.value.some ->
                     SortedMap(
-                      sourceAddress -> SortedSet(signedAllowSpend.signed)
+                      ownerAddress -> SortedSet(signedAllowSpend.signed)
                     )
                 )
 
@@ -1563,7 +1571,7 @@ object SwapCombinerTest extends MutableIOSuite {
                 _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, accState.calculated)
                 pricingService = PricingService.make[IO](config, calculatedStateService)
                 jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-                swapValidations = SwapValidations.make[IO](config)
+                swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
                 swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
                 swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1575,7 +1583,7 @@ object SwapCombinerTest extends MutableIOSuite {
                 )
 
                 (updatedState, currentExpectations) <-
-                  if (i > 8) {
+                  if (i > 3) {
                     IO.pure(
                       (
                         swapPendingSpendActionResponse,
@@ -1658,7 +1666,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -1675,7 +1683,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -1711,7 +1719,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1824,7 +1832,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -1841,7 +1849,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -1875,7 +1883,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -1952,7 +1960,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -1969,7 +1977,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -2003,7 +2011,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       futureEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
@@ -2075,7 +2083,7 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
@@ -2109,7 +2117,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -2160,7 +2168,7 @@ object SwapCombinerTest extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        sourceAddress,
+        ownerAddress,
         destinationAddress,
         primaryToken.identifier,
         SwapAmount(PosLong.MaxValue),
@@ -2177,11 +2185,25 @@ object SwapCombinerTest extends MutableIOSuite {
       swapUpdate = getFakeSignedUpdate(
         SwapUpdate(
           CurrencyId(destinationAddress),
-          sourceAddress,
+          ownerAddress,
           primaryToken.identifier,
           pairToken.identifier,
           signedAllowSpend.hash,
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(100.0))),
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
+          none,
+          EpochProgress.MaxValue,
+          SwapReference.empty
+        )
+      )
+      swapUpdate2 = getFakeSignedUpdate(
+        SwapUpdate(
+          CurrencyId(destinationAddress),
+          ownerAddress,
+          primaryToken.identifier,
+          pairToken.identifier,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(toFixedPoint(10.0))),
           SwapAmount(PosLong.unsafeFrom(toFixedPoint(40.0))),
           none,
           EpochProgress.MaxValue,
@@ -2211,7 +2233,7 @@ object SwapCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      swapValidations = SwapValidations.make[IO](config)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
 
       swapPendingSpendActionResponse <- swapCombinerService.combineNew(
@@ -2223,7 +2245,7 @@ object SwapCombinerTest extends MutableIOSuite {
       )
 
       swapPendingSpendActionResponse2 <- swapCombinerService.combineNew(
-        swapUpdate,
+        swapUpdate2,
         swapPendingSpendActionResponse,
         futureEpoch,
         allowSpends,
@@ -2237,7 +2259,7 @@ object SwapCombinerTest extends MutableIOSuite {
         swapCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
-        swapCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(swapUpdate)
+        swapCalculatedState.failed.toList.head.reason == TransactionAlreadyExists(swapUpdate2)
       )
   }
 

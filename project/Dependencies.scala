@@ -8,11 +8,11 @@ object Dependencies {
     val organizeImports = "0.5.0"
   }
 
-    def tessellation(artifact: String): ModuleID = {
-      val version = V.tessellation
-      println(s"Using tessellation version: $version") // Debug logging
-      "io.constellationnetwork" %% s"tessellation-$artifact" % version
-    }
+  def tessellation(artifact: String): ModuleID = {
+    val version = V.tessellation
+    println(s"Using tessellation version: $version") // Debug logging
+    "io.constellationnetwork" %% s"tessellation-$artifact" % version
+  }
 
   def decline(artifact: String = ""): ModuleID =
     "com.monovore" %% {

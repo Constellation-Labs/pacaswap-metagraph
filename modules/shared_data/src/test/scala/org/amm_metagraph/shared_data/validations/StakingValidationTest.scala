@@ -8,6 +8,7 @@ import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.concurrent.duration.DurationInt
+import scala.tools.nsc.tasty.SafeEq
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext, L1NodeContext}
@@ -31,11 +32,14 @@ import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
+import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
+import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.LiquidityPoolValidationTest.config
 import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
@@ -107,23 +111,24 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
-    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    val stakingValidations = StakingValidations.make[IO](config)
-    val swapValidations = SwapValidations.make[IO](config)
-    val withdrawalValidations = WithdrawalValidations.make[IO](config)
-    val governanceValidations = GovernanceValidations.make[IO]
-    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
-
-    val validationService = ValidationService.make[IO](
-      config,
-      liquidityPoolValidations,
-      stakingValidations,
-      swapValidations,
-      withdrawalValidations,
-      governanceValidations,
-      rewardWithdrawValidations
-    )
     for {
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+      governanceValidations = GovernanceValidations.make[IO](config)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+
+      validationService = ValidationService.make[IO](
+        config,
+        liquidityPoolValidations,
+        stakingValidations,
+        swapValidations,
+        withdrawalValidations,
+        governanceValidations,
+        rewardWithdrawValidations
+      )
       response <- validationService.validateUpdate(stakingUpdate)(context)
     } yield expect.eql(Valid(()), response)
   }
@@ -205,25 +210,15 @@ object StakingValidationTest extends MutableIOSuite {
         ownerAddress
       )
 
-      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-      stakingValidations = StakingValidations.make[IO](config)
-      swapValidations = SwapValidations.make[IO](config)
-      withdrawalValidations = WithdrawalValidations.make[IO](config)
-      governanceValidations = GovernanceValidations.make[IO]
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
 
-      validationService = ValidationService.make[IO](
-        config,
-        liquidityPoolValidations,
-        stakingValidations,
-        swapValidations,
-        withdrawalValidations,
-        governanceValidations,
-        rewardWithdrawValidations
-      )
-
-      response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
-    } yield expect.eql(Valid(()), response)
+      response <- stakingValidations.l0Validations(fakeSignedUpdate, state.calculated, EpochProgress.MaxValue)
+    } yield
+      response match {
+        case Left(_)      => expect(false)
+        case Right(value) => expect(true)
+      }
   }
 
   test("Validate data fails - Liquidity pool does not exist") { implicit res =>
@@ -250,22 +245,6 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
-    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    val stakingValidations = StakingValidations.make[IO](config)
-    val swapValidations = SwapValidations.make[IO](config)
-    val withdrawalValidations = WithdrawalValidations.make[IO](config)
-    val governanceValidations = GovernanceValidations.make[IO]
-    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
-
-    val validationService = ValidationService.make[IO](
-      config,
-      liquidityPoolValidations,
-      stakingValidations,
-      swapValidations,
-      withdrawalValidations,
-      governanceValidations,
-      rewardWithdrawValidations
-    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -278,16 +257,18 @@ object StakingValidationTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
-      response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
-    } yield {
-      val expectedError = response match {
-        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.StakingLiquidityPoolDoesNotExists.type]) =>
-          true
-        case _ =>
-          false
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      response <- stakingValidations.l0Validations(fakeSignedUpdate, state.calculated, EpochProgress.MaxValue)
+    } yield
+      response match {
+        case Left(value) =>
+          value.reason match {
+            case InvalidLiquidityPool() => expect(true)
+            case _                      => expect(false)
+          }
+        case Right(_) => expect(false)
       }
-      expect(expectedError)
-    }
   }
 
   test("Validate data fails - Txn already exists") { implicit res =>
@@ -344,22 +325,6 @@ object StakingValidationTest extends MutableIOSuite {
 
     val fakeSignedUpdate = getFakeSignedUpdate(stakingUpdate)
 
-    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    val stakingValidations = StakingValidations.make[IO](config)
-    val swapValidations = SwapValidations.make[IO](config)
-    val withdrawalValidations = WithdrawalValidations.make[IO](config)
-    val governanceValidations = GovernanceValidations.make[IO]
-    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
-
-    val validationService = ValidationService.make[IO](
-      config,
-      liquidityPoolValidations,
-      stakingValidations,
-      swapValidations,
-      withdrawalValidations,
-      governanceValidations,
-      rewardWithdrawValidations
-    )
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
@@ -372,16 +337,18 @@ object StakingValidationTest extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         ownerAddress
       )
-      response <- validationService.validateData(NonEmptyList.one(fakeSignedUpdate), state)
-    } yield {
-      val expectedError = response match {
-        case Invalid(errors) if errors.exists(_.isInstanceOf[Errors.StakingTransactionAlreadyExists.type]) =>
-          true
-        case _ =>
-          false
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      response <- stakingValidations.l0Validations(fakeSignedUpdate, state.calculated, EpochProgress.MaxValue)
+    } yield
+      response match {
+        case Left(value) =>
+          value.reason match {
+            case TransactionAlreadyExists(_) => expect(true)
+            case _                           => expect(false)
+          }
+        case Right(_) => expect(false)
       }
-      expect(expectedError)
-    }
   }
 
   test("Validate update fail - different AMM metagraph ID provided") { implicit res =>
@@ -406,23 +373,24 @@ object StakingValidationTest extends MutableIOSuite {
       EpochProgress.MaxValue
     )
 
-    val liquidityPoolValidations = LiquidityPoolValidations.make[IO](config)
-    val stakingValidations = StakingValidations.make[IO](config)
-    val swapValidations = SwapValidations.make[IO](config)
-    val withdrawalValidations = WithdrawalValidations.make[IO](config)
-    val governanceValidations = GovernanceValidations.make[IO]
-    val rewardWithdrawValidations = RewardWithdrawValidations.make[IO]()
-
-    val validationService = ValidationService.make[IO](
-      config,
-      liquidityPoolValidations,
-      stakingValidations,
-      swapValidations,
-      withdrawalValidations,
-      governanceValidations,
-      rewardWithdrawValidations
-    )
     for {
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+      governanceValidations = GovernanceValidations.make[IO](config)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+
+      validationService = ValidationService.make[IO](
+        config,
+        liquidityPoolValidations,
+        stakingValidations,
+        swapValidations,
+        withdrawalValidations,
+        governanceValidations,
+        rewardWithdrawValidations
+      )
       response <- validationService.validateUpdate(stakingUpdate)(context)
     } yield {
       val expectedError = response match {

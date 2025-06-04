@@ -18,6 +18,7 @@ import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.Errors._
+import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -25,12 +26,16 @@ trait RewardsWithdrawService[F[_]] {
   def combineNew(
     signedUpdate: Signed[RewardWithdrawUpdate],
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    currentMetagraphEpochProgress: EpochProgress,
     globalEpochProgress: EpochProgress
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
 object RewardsWithdrawService {
-  def make[F[_]: Async: HasherSelector](rewardsConfig: ApplicationConfig.Rewards): RewardsWithdrawService[F] =
+  def make[F[_]: Async: HasherSelector](
+    rewardsConfig: ApplicationConfig.Rewards,
+    rewardWithdrawValidation: RewardWithdrawValidations[F]
+  ): RewardsWithdrawService[F] =
     new RewardsWithdrawService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
       // Actual reward distribution done in Rewards Service.
@@ -42,7 +47,8 @@ object RewardsWithdrawService {
       override def combineNew(
         withdrawRequest: Signed[RewardWithdrawUpdate],
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
-        currentEpoch: EpochProgress
+        currentMetagraphEpochProgress: EpochProgress,
+        globalEpochProgress: EpochProgress
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val rewardsState = oldState.calculated.rewards
         val calculatedState: RewardWithdrawCalculatedState = rewardsState.withdraws
@@ -51,14 +57,21 @@ object RewardsWithdrawService {
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] =
           for {
+            _ <- EitherT(
+              rewardWithdrawValidation.rewardWithdrawValidationL0(
+                withdrawRequest,
+                oldState.calculated,
+                globalEpochProgress
+              )
+            )
             _ <- EitherT.liftF(logger.info(show"Received reward withdrawn request: ${withdrawRequest.value}"))
-            withdrawEpoch <- calculateWithdrawEpoch(currentEpoch, withdrawRequest)
+            withdrawEpoch <- calculateWithdrawEpoch(currentMetagraphEpochProgress, withdrawRequest)
 
-            removeFromPending = currentEpoch.minus(pendingClearDelay).getOrElse(EpochProgress.MinValue)
+            removeFromPending = currentMetagraphEpochProgress.minus(pendingClearDelay).getOrElse(EpochProgress.MinValue)
             clearedPending = calculatedState.pending.removed(removeFromPending) // clear already distributed rewards
             pendingWithdraws = clearedPending.getOrElse(withdrawEpoch, RewardInfo.empty)
             (newAvailableRewards, newPendingRewards) <-
-              moveAvailableToPending(currentEpoch, availableRewards, pendingWithdraws, withdrawRequest)
+              moveAvailableToPending(currentMetagraphEpochProgress, availableRewards, pendingWithdraws, withdrawRequest)
             newPending = clearedPending + (withdrawEpoch -> newPendingRewards)
 
             reference <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => RewardWithdrawReference.of(withdrawRequest)))

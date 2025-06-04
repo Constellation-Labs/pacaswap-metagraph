@@ -11,30 +11,29 @@ import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
-import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.AllowSpends._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
-import org.amm_metagraph.shared_data.types.DataUpdates.LiquidityPoolUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
 trait LiquidityPoolValidations[F[_]] {
   def l1Validations(
-    applicationConfig: ApplicationConfig,
     liquidityPoolUpdate: LiquidityPoolUpdate
   ): F[DataApplicationValidationErrorOr[Unit]]
 
   def l0Validations(
-    applicationConfig: ApplicationConfig,
     signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate],
-    state: AmmCalculatedState
-  ): F[DataApplicationValidationErrorOr[Unit]]
+    state: AmmCalculatedState,
+    lastSyncGlobalEpochProgress: EpochProgress
+  )(implicit hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]]
 
   def newUpdateValidations(
     oldState: AmmCalculatedState,
@@ -61,10 +60,10 @@ trait LiquidityPoolValidations[F[_]] {
 }
 object LiquidityPoolValidations {
   def make[F[_]: Async: SecurityProvider](
-    applicationConfig: ApplicationConfig
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): LiquidityPoolValidations[F] = new LiquidityPoolValidations[F] {
     def l1Validations(
-      applicationConfig: ApplicationConfig,
       liquidityPoolUpdate: LiquidityPoolUpdate
     ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
       val tokensArePresent = validateIfTokensArePresent(liquidityPoolUpdate)
@@ -79,42 +78,38 @@ object LiquidityPoolValidations {
     }
 
     def l0Validations(
-      applicationConfig: ApplicationConfig,
       signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate],
-      state: AmmCalculatedState
-    ): F[DataApplicationValidationErrorOr[Unit]] = {
+      state: AmmCalculatedState,
+      lastSyncGlobalEpochProgress: EpochProgress
+    )(implicit hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]] = {
       val liquidityPoolUpdate = signedLiquidityPoolUpdate.value
       for {
-        l1Validations <- l1Validations(applicationConfig, liquidityPoolUpdate)
         signatures <- signatureValidations(signedLiquidityPoolUpdate, signedLiquidityPoolUpdate.source)
 
         liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(state)
         confirmedLiquidityPools = getConfirmedLiquidityPools(state)
-
-        tokenIdsAreTheSame = validateIfTokenIdsAreTheSame(liquidityPoolUpdate.tokenAId, liquidityPoolUpdate.tokenBId)
         poolAlreadyExists <- validateIfPoolAlreadyExists(
           liquidityPoolUpdate,
           confirmedLiquidityPools,
           liquidityPoolCalculatedState.getPendingUpdates
         ).handleErrorWith(_ => LiquidityPoolNotEnoughInformation.whenA(true).pure)
 
-        allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
+        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedLiquidityPoolUpdate.toHashed(dataUpdateCodec.serialize))
+        duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
-        tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-          liquidityPoolUpdate.tokenAAllowSpend,
-          allAllowSpendsInUse
-        )
-        tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-          liquidityPoolUpdate.tokenBAllowSpend,
-          allAllowSpendsInUse
-        )
-      } yield
-        l1Validations
-          .productR(signatures)
-          .productR(tokenIdsAreTheSame)
-          .productR(poolAlreadyExists)
-          .productR(tokenAAllowSpendIsDuplicated)
-          .productR(tokenBAllowSpendIsDuplicated)
+        result =
+          if (duplicatedUpdate.isInvalid) {
+            failWith(DuplicatedUpdate(liquidityPoolUpdate), expireEpochProgress, signedLiquidityPoolUpdate)
+          } else if (signatures.isInvalid) {
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedLiquidityPoolUpdate)
+          } else if (poolAlreadyExists.isInvalid) {
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedLiquidityPoolUpdate)
+          } else {
+            signedLiquidityPoolUpdate.asRight
+          }
+
+      } yield result
     }
 
     def newUpdateValidations(
@@ -245,5 +240,23 @@ object LiquidityPoolValidations {
           valid
 
       }
+
+    private def validateDuplicatedUpdate(
+      calculatedState: AmmCalculatedState,
+      hashedUpdate: Hashed[LiquidityPoolUpdate]
+    ): DataApplicationValidationErrorOr[Unit] = {
+      val updateHash = hashedUpdate.hash
+      val pendingAllowSpends = getPendingAllowSpendsLiquidityPoolUpdates(calculatedState)
+      val pendingSpendActions = getPendingSpendActionLiquidityPoolUpdates(calculatedState)
+
+      if (
+        pendingAllowSpends.exists(_.updateHash === updateHash) ||
+        pendingSpendActions.exists(_.updateHash === updateHash)
+      ) {
+        DuplicatedOperation.invalidNec
+      } else {
+        valid
+      }
+    }
   }
 }

@@ -15,10 +15,11 @@ import io.constellationnetwork.security.{Hashed, SecurityProvider}
 import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
-import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, buildLiquidityPoolUniqueIdentifier, getConfirmedLiquidityPools}
 import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
@@ -29,8 +30,9 @@ trait StakingValidations[F[_]] {
 
   def l0Validations(
     signedStakingUpdate: Signed[StakingUpdate],
-    state: AmmCalculatedState
-  )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]]
+    state: AmmCalculatedState,
+    lastSyncGlobalEpochProgress: EpochProgress
+  )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 
   def newUpdateValidations(
     oldState: AmmCalculatedState,
@@ -57,7 +59,8 @@ trait StakingValidations[F[_]] {
 
 object StakingValidations {
   def make[F[_]: Async](
-    applicationConfig: ApplicationConfig
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): StakingValidations[F] = new StakingValidations[F] {
     def l1Validations(
       stakingUpdate: StakingUpdate
@@ -67,15 +70,15 @@ object StakingValidations {
 
     def l0Validations(
       signedStakingUpdate: Signed[StakingUpdate],
-      state: AmmCalculatedState
-    )(implicit sp: SecurityProvider[F]): F[DataApplicationValidationErrorOr[Unit]] = {
+      state: AmmCalculatedState,
+      lastSyncGlobalEpochProgress: EpochProgress
+    )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val stakingUpdate = signedStakingUpdate.value
 
       val stakingCalculatedState = getStakingCalculatedState(state)
       val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
 
       for {
-        l1Validations <- l1Validations(stakingUpdate)
         signatures <- signatureValidations(signedStakingUpdate, signedStakingUpdate.source)
         sourceAddress = signedStakingUpdate.source
 
@@ -93,27 +96,27 @@ object StakingValidations {
           liquidityPoolsCalculatedState
         )
 
-        allAllowSpendsInUse = getAllAllowSpendsInUseFromState(state)
-
-        tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-          stakingUpdate.tokenAAllowSpend,
-          allAllowSpendsInUse
-        )
-        tokenBAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
-          stakingUpdate.tokenBAllowSpend,
-          allAllowSpendsInUse
-        )
+        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedStakingUpdate.toHashed(dataUpdateCodec.serialize))
+        duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
         lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)
+        expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
-      } yield
-        l1Validations
-          .productR(signatures)
-          .productR(transactionAlreadyExists)
-          .productR(liquidityPoolExists)
-          .productR(tokenAAllowSpendIsDuplicated)
-          .productR(tokenBAllowSpendIsDuplicated)
-          .productR(lastRef)
+        result =
+          if (duplicatedUpdate.isInvalid) {
+            failWith(DuplicatedUpdate(stakingUpdate), expireEpochProgress, signedStakingUpdate)
+          } else if (liquidityPoolExists.isInvalid) {
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedStakingUpdate)
+          } else if (signatures.isInvalid) {
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedStakingUpdate)
+          } else if (transactionAlreadyExists.isInvalid) {
+            failWith(TransactionAlreadyExists(stakingUpdate), expireEpochProgress, signedStakingUpdate)
+          } else if (lastRef.isInvalid) {
+            failWith(InvalidLastReference(), expireEpochProgress, signedStakingUpdate)
+          } else {
+            signedStakingUpdate.asRight
+          }
+      } yield result
     }
 
     def newUpdateValidations(
@@ -239,6 +242,23 @@ object StakingValidations {
         case Some(last) if signedStaking.ordinal =!= last.ordinal.next || signedStaking.parent =!= last =>
           InvalidStakingParent.invalid
         case _ => valid
+      }
+    }
+    private def validateDuplicatedUpdate(
+      calculatedState: AmmCalculatedState,
+      hashedUpdate: Hashed[StakingUpdate]
+    ): DataApplicationValidationErrorOr[Unit] = {
+      val updateHash = hashedUpdate.hash
+      val pendingAllowSpends = getPendingAllowSpendsStakingUpdates(calculatedState)
+      val pendingSpendActions = getPendingSpendActionStakingUpdates(calculatedState)
+
+      if (
+        pendingAllowSpends.exists(_.updateHash === updateHash) ||
+        pendingSpendActions.exists(_.updateHash === updateHash)
+      ) {
+        DuplicatedOperation.invalidNec
+      } else {
+        valid
       }
     }
   }

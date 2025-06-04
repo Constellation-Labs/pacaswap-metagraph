@@ -144,8 +144,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -290,8 +290,8 @@ object StakingCombinerTest extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -426,8 +426,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
@@ -543,8 +543,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponse <- stakingCombinerService.combineNew(
@@ -634,6 +634,19 @@ object StakingCombinerTest extends MutableIOSuite {
         )
       )
 
+      stakingUpdate2 = getFakeSignedUpdate(
+        StakingUpdate(
+          CurrencyId(destinationAddress),
+          sourceAddress,
+          signedAllowSpendA.hash,
+          signedAllowSpendB.hash,
+          primaryToken.identifier,
+          PosLong.unsafeFrom(toFixedPoint(10.0)),
+          pairToken.identifier,
+          StakingReference.empty,
+          futureEpoch
+        )
+      )
       allowSpends = SortedMap(
         primaryToken.identifier.get.value.some ->
           SortedMap(
@@ -659,8 +672,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -672,7 +685,7 @@ object StakingCombinerTest extends MutableIOSuite {
       )
 
       stakeResponsePendingSpendActionResponse2 <- stakingCombinerService.combineNew(
-        stakingUpdate,
+        stakingUpdate2,
         stakeResponsePendingSpendActionResponse,
         futureEpoch,
         allowSpends,
@@ -686,7 +699,7 @@ object StakingCombinerTest extends MutableIOSuite {
         stakingCalculatedState.failed.toList.head.expiringEpochProgress === EpochProgress(
           NonNegLong.unsafeFrom(futureEpoch.value.value + config.expirationEpochProgresses.failedOperations.value.value)
         ),
-        stakingCalculatedState.failed.toList.head.reason == DuplicatedAllowSpend(stakingUpdate)
+        stakingCalculatedState.failed.toList.head.reason == TransactionAlreadyExists(stakingUpdate2)
       )
   }
 
@@ -788,7 +801,7 @@ object StakingCombinerTest extends MutableIOSuite {
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
-      stakingValidations = StakingValidations.make[IO](config.copy(allowSpendEpochBufferDelay = bufferDelay))
+      stakingValidations = StakingValidations.make[IO](config.copy(allowSpendEpochBufferDelay = bufferDelay), jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       stakeResponse <- stakingCombinerService.combineNew(
         stakingUpdate,
@@ -902,8 +915,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(
@@ -1049,8 +1062,8 @@ object StakingCombinerTest extends MutableIOSuite {
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       pricingService = PricingService.make[IO](config, calculatedStateService)
 
-      stakingValidations = StakingValidations.make[IO](config)
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
 
       stakeResponsePendingSpendActionResponse <- stakingCombinerService.combineNew(

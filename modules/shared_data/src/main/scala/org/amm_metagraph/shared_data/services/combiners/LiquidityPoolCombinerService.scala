@@ -22,13 +22,14 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
-import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
+import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
+import org.amm_metagraph.shared_data.validations.Errors.DuplicatedUpdate
+import org.amm_metagraph.shared_data.validations.{Errors, LiquidityPoolValidations}
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
@@ -73,23 +74,28 @@ object LiquidityPoolCombinerService {
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
         liquidityPoolCalculatedState: LiquidityPoolCalculatedState
-      ) = {
-        val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
-          .focus(_.failed)
-          .modify(_ + failedCalculatedState)
-          .focus(_.pending)
-          .modify(_.filter(_.update =!= liquidityPoolUpdate))
+      ) =
+        failedCalculatedState.reason match {
+          case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
+          case _ =>
+            val updatedLiquidityPoolCalculatedState = liquidityPoolCalculatedState
+              .focus(_.failed)
+              .modify(_ + failedCalculatedState)
+              .focus(_.pending)
+              .modify(_.filter(_.update =!= liquidityPoolUpdate))
 
-        val updatedCalculatedState = acc.calculated
-          .focus(_.operations)
-          .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
+            val updatedCalculatedState = acc.calculated
+              .focus(_.operations)
+              .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPoolCalculatedState))
 
-        acc
-          .focus(_.onChain.updates)
-          .modify(current => current + liquidityPoolUpdate.value)
-          .focus(_.calculated)
-          .replace(updatedCalculatedState)
-      }
+            Async[F].pure(
+              acc
+                .focus(_.onChain.updates)
+                .modify(current => current + liquidityPoolUpdate.value)
+                .focus(_.calculated)
+                .replace(updatedCalculatedState)
+            )
+        }
 
       private def getUpdateAllowSpends(
         liquidityPoolUpdate: LiquidityPoolUpdate,
@@ -138,6 +144,14 @@ object LiquidityPoolCombinerService {
         val pendingLps = liquidityPoolsCalculatedState.getPendingUpdates
 
         val combinedState = for {
+          _ <- EitherT(
+            liquidityPoolValidations.l0Validations(
+              signedUpdate,
+              oldState.calculated,
+              globalEpochProgress
+            )
+          )
+
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(signedUpdate.tokenAId, signedUpdate.tokenBId))
           pendingLpsPoolsIds <- EitherT.liftF(
             pendingLps.toList.traverse(pendingLp => buildLiquidityPoolUniqueIdentifier(pendingLp.tokenAId, pendingLp.tokenBId))
@@ -155,6 +169,7 @@ object LiquidityPoolCombinerService {
               pendingLpsPoolsIds
             )
           )
+
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(liquidityPoolUpdate, lastGlobalSnapshotsAllowSpends))
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -191,9 +206,10 @@ object LiquidityPoolCombinerService {
           }
         } yield response
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(signedUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(signedUpdate, oldState, failed, liquidityPoolsCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def combinePendingAllowSpend(
@@ -265,9 +281,10 @@ object LiquidityPoolCombinerService {
           }
         } yield result
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failed, liquidityPoolsCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def combinePendingSpendAction(
@@ -354,9 +371,10 @@ object LiquidityPoolCombinerService {
             }
         } yield result
 
-        combinedState.valueOr { failedCalculatedState =>
-          handleFailedUpdate(signedLiquidityPoolUpdate, oldState, failedCalculatedState, liquidityPoolsCalculatedState)
-        }
+        combinedState.foldF(
+          failed => handleFailedUpdate(pendingSpendAction.update, oldState, failed, liquidityPoolsCalculatedState),
+          success => success.pure[F]
+        )
       }
 
       def cleanupExpiredOperations(
