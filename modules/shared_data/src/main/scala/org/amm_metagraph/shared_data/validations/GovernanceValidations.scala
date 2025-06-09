@@ -140,7 +140,7 @@ object GovernanceValidations {
     ): DataApplicationValidationErrorOr[Unit] =
       lastUserAllocation.fold(valid) { allocation =>
         getUpdatedCredits(
-          allocation.allocationGlobalEpochProgress.value.value,
+          allocation.allocationEpochProgress.value.value,
           allocation.credits,
           lastCurrencySnapshotEpochProgress.value.value,
           maxCredits,

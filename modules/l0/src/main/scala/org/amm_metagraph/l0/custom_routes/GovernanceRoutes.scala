@@ -15,7 +15,7 @@ case class GovernanceRoutes[F[_]: Async](
 ) extends Http4sDsl[F] {
   private def getAllocationsRewards: F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      Ok(SingleResponse(calculatedState.state.allocations.allocationsRewards))
+      Ok(SingleResponse(calculatedState.state.allocations.frozenUsedUserVotes))
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {

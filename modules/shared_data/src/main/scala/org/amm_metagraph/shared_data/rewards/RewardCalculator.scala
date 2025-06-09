@@ -55,7 +55,8 @@ trait RewardCalculator[F[_]] {
   def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: List[Address],
-    votingPowers: List[VotingPower]
+    votingPowers: List[VotingPower],
+    governanceUserVotes: Map[Address, VotingWeight]
   ): F[Either[RewardError, RewardDistribution]]
 }
 
@@ -182,7 +183,8 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
   def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: List[Address],
-    votingPowers: List[VotingPower]
+    votingPowers: List[VotingPower],
+    governanceUserVotes: Map[Address, VotingWeight]
   ): F[Either[RewardError, RewardDistribution]] =
     (for {
       currentMonth <- EitherT.fromEither[F](epochProgressToMonth(currentProgress))
@@ -208,7 +210,8 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
         validatorRemainder.value.value + votingRemainder.value.value
 
       daoReward <- EitherT.fromEither[F](toAmount(daoPerEpoch.value.value + allRemainders))
-      governanceDistribution <- EitherT(calculateGovernanceRewards(votingPowers, currentProgress))
+      governanceVotingPowers = governanceUserVotes.map { case (address, vote) => VotingPower(address, vote) }.toList
+      governanceDistribution <- EitherT(calculateGovernanceRewards(governanceVotingPowers, currentProgress))
 
     } yield
       RewardDistribution(

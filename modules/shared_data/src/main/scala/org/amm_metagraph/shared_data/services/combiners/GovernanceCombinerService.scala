@@ -18,7 +18,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.numeric.NonNegInt
+import eu.timepit.refined.types.numeric.{NonNegInt, NonNegLong}
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
@@ -38,6 +38,7 @@ trait GovernanceCombinerService[F[_]] {
     signedUpdate: Signed[RewardAllocationVoteUpdate],
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
+    currentMetagraphEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
@@ -52,7 +53,7 @@ trait GovernanceCombinerService[F[_]] {
     state: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     currentMetagraphEpochProgress: EpochProgress
-  ): DataState[AmmOnChainState, AmmCalculatedState]
+  ): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
 
 object GovernanceCombinerService {
@@ -85,34 +86,18 @@ object GovernanceCombinerService {
         }
       }
 
-      private def calculateAllocationRewards(
+      private def freezeUserVotes(
         acc: DataState[AmmOnChainState, AmmCalculatedState],
-        monthlyReference: MonthlyReference,
-        currentMetagraphEpochProgress: EpochProgress
-      ): AllocationsRewards = {
+        monthlyReference: MonthlyReference
+      ): FrozenAddressesVotes = {
         val votingWeights = acc.calculated.votingWeights
-
-        acc.calculated.allocations.usersAllocations.foldLeft(
-          AllocationsRewards(
-            monthlyReference.monthReference,
-            currentMetagraphEpochProgress,
-            SortedMap.empty
-          )
-        ) { (allocationsRewards, userAllocation) =>
-          userAllocation match {
-            case (address, allocationDetails) =>
-              votingWeights.get(address).fold(allocationsRewards) { votingWeight =>
-                val updatedRewardsInfo = allocationDetails.allocations.foldLeft(allocationsRewards.rewardsInfo) {
-                  case (rewardsInfo, allocation) =>
-                    val percentage = allocation.percentage.value
-                    val allocationAmount = votingWeight.total.value * percentage
-                    rewardsInfo.updated(allocation.id, rewardsInfo.getOrElse(allocation.id, 0d) + allocationAmount)
-                }
-
-                allocationsRewards.focus(_.rewardsInfo).replace(updatedRewardsInfo)
-              }
-          }
-        }
+        val frozenVotes: SortedMap[Address, VotingWeight] =
+          acc.calculated.allocations.usersAllocations
+            .withFilter(_._2.allocationEpochProgress >= monthlyReference.firstEpochOfMonth)
+            .withFilter(_._2.allocationEpochProgress <= monthlyReference.lastEpochOfMonth)
+            .map { case (address, _) => address -> votingWeights.getOrElse(address, VotingWeight.empty) }
+            .filter(_._2.info.nonEmpty)
+        FrozenAddressesVotes(monthlyReference, frozenVotes)
       }
 
       private def updateVotingWeightInfo(
@@ -135,6 +120,7 @@ object GovernanceCombinerService {
         signedUpdate: Signed[RewardAllocationVoteUpdate],
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
+        currentMetagraphEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
@@ -174,14 +160,14 @@ object GovernanceCombinerService {
                     UserAllocations(
                       maxCredits,
                       reference,
-                      globalEpochProgress,
+                      currentMetagraphEpochProgress,
                       allocationsUpdate
                     ).pure[F]
                   } { existing =>
                     getUpdatedCredits(
-                      existing.allocationGlobalEpochProgress.value.value,
+                      existing.allocationEpochProgress.value.value,
                       existing.credits,
-                      globalEpochProgress.value.value,
+                      currentMetagraphEpochProgress.value.value,
                       maxCredits,
                       applicationConfig.epochInfo.epochProgressOneDay
                     ) match {
@@ -190,12 +176,12 @@ object GovernanceCombinerService {
                         UserAllocations(
                           updatedCredits,
                           reference,
-                          globalEpochProgress,
+                          currentMetagraphEpochProgress,
                           allocationsUpdate
                         ).pure[F]
                     }
                   }
-                  .map { allocationsCalculatedState =>
+                  .flatMap { allocationsCalculatedState =>
                     val updatedUsersAllocation = oldState.calculated.allocations
                       .focus(_.usersAllocations)
                       .modify(_.updated(signedUpdate.source, allocationsCalculatedState))
@@ -204,7 +190,8 @@ object GovernanceCombinerService {
                       .focus(_.allocations)
                       .replace(updatedUsersAllocation)
 
-                    oldState.focus(_.calculated).replace(updatedAllocations)
+                    logger.debug(show"Update user allocation with: ${updatedAllocations.allocations.usersAllocations.toList}") >>
+                      oldState.focus(_.calculated).replace(updatedAllocations).pure[F]
                   }
               }
             }
@@ -255,49 +242,47 @@ object GovernanceCombinerService {
         state: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         currentMetagraphEpochProgress: EpochProgress
-      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val monthlyReference = state.calculated.allocations.monthlyReference
 
-        val (monthlyReferenceParsed, stateParsed) = if (monthlyReference.monthReference === NonNegInt.MinValue) {
+        val (monthlyReferenceParsed, stateParsed) = if (isFirstProcessedMonth(monthlyReference)) {
           val monthlyRef =
-            getMonthlyReference(applicationConfig.environment, globalEpochProgress, applicationConfig.epochInfo.oneEpochProgressInSeconds)
+            getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
           (monthlyRef, state.focus(_.calculated.allocations.monthlyReference).replace(monthlyRef))
         } else {
           (monthlyReference, state)
         }
 
-        val isExpired = globalEpochProgress > monthlyReferenceParsed.expireGlobalEpochProgress
+        val isExpired = currentMetagraphEpochProgress > monthlyReferenceParsed.lastEpochOfMonth
         if (!isExpired) {
-          stateParsed
+          val epochsToEndOfMonth = monthlyReferenceParsed.lastEpochOfMonth.value.value - currentMetagraphEpochProgress.value.value
+          logger.debug(show"Month is not expired yet, need to wait additional $epochsToEndOfMonth epoch(s)") >>
+            stateParsed.pure[F]
         } else {
-          val filteredAllocations = stateParsed.calculated.allocations.usersAllocations.map {
+          val frozenVotes = freezeUserVotes(stateParsed, monthlyReferenceParsed)
+
+          val clearedAllocations = stateParsed.calculated.allocations.usersAllocations.map {
             case (address, allocations) => address -> allocations.copy(allocations = SortedSet.empty)
           }
 
-          val allocationsRewards = calculateAllocationRewards(
-            stateParsed,
-            monthlyReferenceParsed,
-            currentMetagraphEpochProgress
-          )
-
-          val currentAllocationsRewards = (
-            stateParsed.calculated.allocations.allocationsRewards + allocationsRewards
-          ).toList
-            .sortBy(-_.epochProgressToReward.value.value)
-            .take(3)
-            .toSortedSet
-
           val updatedMonthlyReference =
-            getMonthlyReference(applicationConfig.environment, globalEpochProgress, applicationConfig.epochInfo.oneEpochProgressInSeconds)
+            getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
 
-          stateParsed
-            .focus(_.calculated.allocations.usersAllocations)
-            .replace(filteredAllocations)
-            .focus(_.calculated.allocations.allocationsRewards)
-            .replace(currentAllocationsRewards)
-            .focus(_.calculated.allocations.monthlyReference)
-            .replace(updatedMonthlyReference)
+          logger.info(
+            show"Month is expired, freeze user allocations: $frozenVotes, new user allocations are ${clearedAllocations.toList}, new month reference is $updatedMonthlyReference"
+          ) >>
+            stateParsed
+              .focus(_.calculated.allocations.usersAllocations)
+              .replace(clearedAllocations)
+              .focus(_.calculated.allocations.frozenUsedUserVotes)
+              .replace(frozenVotes)
+              .focus(_.calculated.allocations.monthlyReference)
+              .replace(updatedMonthlyReference)
+              .pure[F]
         }
       }
     }
+
+  private def isFirstProcessedMonth(monthlyReference: MonthlyReference): Boolean =
+    monthlyReference.lastEpochOfMonth == EpochProgress(NonNegLong.MinValue)
 }

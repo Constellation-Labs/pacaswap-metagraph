@@ -73,7 +73,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       NonNegLong.unsafeFrom((9223372036854775000L * 1e8).toLong)
     ),
     EpochProgress(NonNegLong.unsafeFrom(0L)),
-    EpochMetadata(43.seconds)
+    EpochMetadata(43.seconds, 30L)
   )
 
   override def sharedResource: Resource[IO, Res] = for {

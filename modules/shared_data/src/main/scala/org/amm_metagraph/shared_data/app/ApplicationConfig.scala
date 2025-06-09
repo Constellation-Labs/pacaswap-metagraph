@@ -59,10 +59,10 @@ object ApplicationConfig {
     maxTokens: NonNegLong
   )
 
-  case class EpochMetadata(oneEpochProgress: FiniteDuration) {
-    val oneEpochProgressInSeconds: Int = oneEpochProgress.toSeconds.toInt
+  case class EpochMetadata(oneEpochProgress: FiniteDuration, daysInMonth: Long) {
+    val oneEpochProgressInSeconds: Long = oneEpochProgress.toSeconds
     val epochProgressOneDay: Long = (1.day / oneEpochProgress).toLong
-    val epochProgress1Month: Long = epochProgressOneDay * 30L
+    val epochProgress1Month: Long = epochProgressOneDay * daysInMonth
     val epochProgress6Months: Long = epochProgress1Month * 6L
     val epochProgress1Year: Long = epochProgress6Months * 2
     val epochProgress2Years: Long = epochProgress1Year * 2

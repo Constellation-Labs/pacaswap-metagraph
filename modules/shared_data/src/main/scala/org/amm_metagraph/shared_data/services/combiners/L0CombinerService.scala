@@ -125,6 +125,7 @@ object L0CombinerService {
                         Signed(rewardAllocationVoteUpdate, signedUpdate.proofs),
                         acc,
                         lastSyncGlobalEpochProgress,
+                        currentSnapshotEpochProgress,
                         globalSnapshotSyncAllowSpends,
                         currencyId
                       )
@@ -388,7 +389,7 @@ object L0CombinerService {
             lastSyncGlobalEpochProgress
           )
 
-          stateCombinedGovernanceRewards = governanceCombinerService.handleMonthlyGovernanceRewards(
+          stateCombinedGovernanceRewards <- governanceCombinerService.handleMonthlyGovernanceRewards(
             stateCombinedByCleanupOperations,
             lastSyncGlobalEpochProgress,
             currentSnapshotEpochProgress

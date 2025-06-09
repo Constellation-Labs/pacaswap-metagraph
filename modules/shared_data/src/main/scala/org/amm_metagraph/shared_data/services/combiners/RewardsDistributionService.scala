@@ -4,6 +4,8 @@ import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedMap
+
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.currency.schema.currency.CurrencyIncrementalSnapshot
 import io.constellationnetwork.schema.address.Address
@@ -18,6 +20,8 @@ import eu.timepit.refined.types.all.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.rewards._
+import org.amm_metagraph.shared_data.types.Governance
+import org.amm_metagraph.shared_data.types.Governance.VotingWeight
 import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -85,8 +89,9 @@ object RewardsDistributionService {
           for {
             facilitators <- EitherT.liftF(lastArtifact.proofs.toList.traverse(_.id.toAddress[F]))
             votingPowers = calculatedState.votingWeights.toList.map { case (address, weight) => VotingPower(address, weight) }
+            (governanceUserVotes, lastProcessedMonth) <- EitherT.liftF(getGovernanceLastMonthVoting(calculatedState))
 
-            distribution <- calculateEpochRewards(currentEpoch, facilitators, votingPowers)
+            distribution <- calculateEpochRewards(currentEpoch, facilitators, votingPowers, governanceUserVotes)
             updateRewardFun = (v: NonNegLong) => NonNegLong.from(v.value * rewardsMultiplier).getOrElse(v)
             multipliedRewards = distribution.updateAllRewards(updateRewardFun)
 
@@ -97,6 +102,8 @@ object RewardsDistributionService {
             state
               .focus(_.calculated.rewards.availableRewards)
               .replace(mergedRewards)
+              .focus(_.calculated.rewards.lastProcessedGovernanceRewardMonth)
+              .replace(lastProcessedMonth)
               .focus(_.onChain.rewardsUpdate)
               .replace(distributionAsRewardInfo.some)
 
@@ -106,16 +113,32 @@ object RewardsDistributionService {
         )
       }
 
+      private def getGovernanceLastMonthVoting(
+        calculatedState: AmmCalculatedState
+      ): F[(SortedMap[Address, VotingWeight], Governance.MonthlyReference)] = {
+        val monthReference = calculatedState.allocations.frozenUsedUserVotes.monthlyReference
+        val votes = calculatedState.allocations.frozenUsedUserVotes.votes
+
+        if (calculatedState.rewards.lastProcessedGovernanceRewardMonth.monthReference != monthReference.monthReference) {
+          logger.info(show"Starting allocate governance reward based on frozen user votes: ${votes.toList} for month: $monthReference") >>
+            (votes, monthReference).pure[F]
+        } else {
+          (SortedMap.empty[Address, VotingWeight], calculatedState.rewards.lastProcessedGovernanceRewardMonth).pure[F]
+        }
+      }
+
       private def calculateEpochRewards(
         currentEpoch: EpochProgress,
         validators: List[Address],
-        votingPowers: List[VotingPower]
+        votingPowers: List[VotingPower],
+        governanceUserVotes: Map[Address, VotingWeight]
       ): EitherT[F, RewardDistributionError, RewardDistribution] =
         EitherT(
           rewardCalculator.calculateEpochRewards(
             currentEpoch,
             validators,
-            votingPowers
+            votingPowers,
+            governanceUserVotes
           )
         ).leftMap(e => RewardCalculationError(e))
 

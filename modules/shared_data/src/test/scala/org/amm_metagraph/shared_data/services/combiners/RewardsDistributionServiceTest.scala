@@ -49,7 +49,8 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     override def calculateEpochRewards(
       currentProgress: EpochProgress,
       validators: List[Address],
-      votingPowers: List[VotingPower]
+      votingPowers: List[VotingPower],
+      governanceUserVotes: Map[Address, VotingWeight]
     ): IO[Either[RewardError, RewardDistribution]] = {
       val distribution = RewardDistribution(
         epochProgress = currentProgress,
