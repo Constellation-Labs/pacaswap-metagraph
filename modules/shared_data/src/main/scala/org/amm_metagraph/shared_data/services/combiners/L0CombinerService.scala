@@ -148,50 +148,54 @@ object L0CombinerService {
         stateCombinedByNewUpdates: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
-        pendingAllowSpends.toList
-          .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingUpdate) =>
-            pendingUpdate.update.value match {
-              case lpUpdate: LiquidityPoolUpdate =>
-                liquidityPoolCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+        if (globalSnapshotSyncAllowSpends.isEmpty) {
+          stateCombinedByNewUpdates.pure
+        } else {
+          pendingAllowSpends.toList
+            .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingUpdate) =>
+              pendingUpdate.update.value match {
+                case lpUpdate: LiquidityPoolUpdate =>
+                  liquidityPoolCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
-              case stakingUpdate: StakingUpdate =>
-                stakingCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                case stakingUpdate: StakingUpdate =>
+                  stakingCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
-              case swapUpdate: SwapUpdate =>
-                swapCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
-              case _ => acc.pure
+                case swapUpdate: SwapUpdate =>
+                  swapCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
+                case _ => acc.pure
+              }
             }
-          }
+        }
 
       private def combinePendingSpendTransactionsUpdates(
         lastSyncGlobalEpochProgress: EpochProgress,
@@ -201,67 +205,71 @@ object L0CombinerService {
         stateCombinedByPendingAllowSpends: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
-        pendingSpendActions.toList
-          .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingUpdate) =>
-            pendingUpdate.update.value match {
-              case lpUpdate: LiquidityPoolUpdate =>
-                liquidityPoolCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
-              case stakingUpdate: StakingUpdate =>
-                stakingCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
-              case withdrawalUpdate: WithdrawalUpdate =>
-                withdrawalCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(withdrawalUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal
-                )
-              case swapUpdate: SwapUpdate =>
-                swapCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
-              case _ => acc.pure
+        if (globalSnapshotSyncSpendActions.isEmpty) {
+          stateCombinedByPendingAllowSpends.pure
+        } else {
+          pendingSpendActions.toList
+            .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingUpdate) =>
+              pendingUpdate.update.value match {
+                case lpUpdate: LiquidityPoolUpdate =>
+                  liquidityPoolCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
+                case stakingUpdate: StakingUpdate =>
+                  stakingCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
+                case withdrawalUpdate: WithdrawalUpdate =>
+                  withdrawalCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(withdrawalUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal
+                  )
+                case swapUpdate: SwapUpdate =>
+                  swapCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
+                case _ => acc.pure
+              }
             }
-          }
+        }
 
       private def cleanupExpiredOperations(
         stateCombinedByPendingSpendTransactions: DataState[AmmOnChainState, AmmCalculatedState],
