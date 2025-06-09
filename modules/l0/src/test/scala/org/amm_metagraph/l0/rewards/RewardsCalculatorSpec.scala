@@ -51,7 +51,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
     )
 
-  val epochData: ApplicationConfig.EpochMetadata = ApplicationConfig.EpochMetadata(43.seconds)
+  val epochData: ApplicationConfig.EpochMetadata = ApplicationConfig.EpochMetadata(43.seconds, 30L)
 
   private def address(str: String) = Address(refineV[DAGAddressRefined].unsafeFrom(str))
 
@@ -82,6 +82,11 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     VotingPower(voterB, VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress))))
   )
 
+  def createGovernanceVotes(currentProgress: EpochProgress): Map[Address, VotingWeight] =
+    List(
+      voterA -> VotingWeight(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress)))
+    ).toMap
+
   def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): RewardCalculator[IO] =
     RewardCalculator.make(config, epochData)
 
@@ -92,7 +97,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        createVotingPowers(currentProgress)
+        createVotingPowers(currentProgress),
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -114,7 +120,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        createVotingPowers(currentProgress)
+        createVotingPowers(currentProgress),
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -135,7 +142,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        createVotingPowers(currentProgress)
+        createVotingPowers(currentProgress),
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -165,7 +173,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        mixedVotingPowers
+        mixedVotingPowers,
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -180,7 +189,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        createVotingPowers(currentProgress)
+        createVotingPowers(currentProgress),
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -203,7 +213,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        createVotingPowers(currentProgress)
+        createVotingPowers(currentProgress),
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -226,7 +237,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       createCalculator().calculateEpochRewards(
         currentProgress,
         validators,
-        List.empty
+        List.empty,
+        createGovernanceVotes(currentProgress)
       )
     }
 
@@ -246,7 +258,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
         createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch)).calculateEpochRewards(
           progress,
           validators,
-          createVotingPowers(progress)
+          createVotingPowers(progress),
+          createGovernanceVotes(progress)
         )
       }
     }
@@ -274,11 +287,21 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     val result = for {
       lastEpochRewards <- EitherT {
         createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch))
-          .calculateEpochRewards(lastEpochInYear, validators, createVotingPowers(lastEpochInYear))
+          .calculateEpochRewards(
+            lastEpochInYear,
+            validators,
+            createVotingPowers(lastEpochInYear),
+            createVotingPowers(lastEpochInYear).map { case VotingPower(a, w) => a -> w }.toMap
+          )
       }
       regularEpochRewards <- EitherT {
         createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch))
-          .calculateEpochRewards(regularEpoch, validators, createVotingPowers(regularEpoch))
+          .calculateEpochRewards(
+            regularEpoch,
+            validators,
+            createVotingPowers(regularEpoch),
+            createVotingPowers(regularEpoch).map { case VotingPower(a, w) => a -> w }.toMap
+          )
       }
     } yield (lastEpochRewards, regularEpochRewards)
 
@@ -311,7 +334,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
           .calculateEpochRewards(
             lastEpochInYear,
             validators,
-            votingPowers
+            votingPowers,
+            votingPowers.map { case VotingPower(a, w) => a -> w }.toMap
           )
       }
     } yield lastEpochRewards
@@ -342,28 +366,32 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
         calculator.calculateEpochRewards(
           EpochProgress.MinValue,
           validators,
-          votingPowers
+          votingPowers,
+          votingPowers.map { case VotingPower(a, w) => a -> w }.toMap
         )
       }
       rewardsAA <- EitherT {
         calculator.calculateEpochRewards(
           EpochProgress.MinValue,
           validators,
-          votingPowers
+          votingPowers,
+          votingPowers.map { case VotingPower(a, w) => a -> w }.toMap
         )
       }
       rewardsB <- EitherT {
         calculator.calculateEpochRewards(
           EpochProgress.MaxValue,
           validators,
-          votingPowers
+          votingPowers,
+          votingPowers.map { case VotingPower(a, w) => a -> w }.toMap
         )
       }
       rewardsBB <- EitherT {
         calculator.calculateEpochRewards(
           EpochProgress.MaxValue,
           validators,
-          votingPowers
+          votingPowers,
+          votingPowers.map { case VotingPower(a, w) => a -> w }.toMap
         )
       }
     } yield (rewardsA, rewardsAA, rewardsB, rewardsBB)
@@ -393,7 +421,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
             .calculateEpochRewards(
               progress,
               validators,
-              createVotingPowers(progress)
+              createVotingPowers(progress),
+              createVotingPowers(progress).map { case VotingPower(a, w) => a -> w }.toMap
             )
             .map(_.map { rewards =>
               rewards.governanceRewards.values.map(_.value.value).sum

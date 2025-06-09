@@ -50,7 +50,7 @@ runs:
         export CL_GLOBAL_L0_PEER_ID=$GLOBAL_L0_NODE_ID
         export CL_L0_PEER_ID=$CURRENCY_L0_GENESIS_NODE_ID
         touch currency-l1-initial-validator.log
-        nohup java -Denvironment=dev -DONE_EPOCH_PROGRESS=0.0015s -DREWARD_CALC_INTERVAL=5 -DREWARD_WITHDRAW_DELAY=2 -jar $ROOT_DIRECTORY/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar run-initial-validator --ip 127.0.0.1 > currency-l1-initial-validator.log 2>&1 &
+        nohup java -Denvironment=dev -DONE_EPOCH_PROGRESS=1day -DDAYS_IN_MONTH=2 -DREWARD_CALC_INTERVAL=5 -DREWARD_WITHDRAW_DELAY=2 -jar $ROOT_DIRECTORY/.github/code/metagraphs/${{inputs.METAGRAPH_NAME}}/currency-l1/currency-l1.jar run-initial-validator --ip 127.0.0.1 > currency-l1-initial-validator.log 2>&1 &
         sleep 5
 
     - name: Check if node started

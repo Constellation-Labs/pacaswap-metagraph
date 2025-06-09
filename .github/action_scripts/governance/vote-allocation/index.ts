@@ -128,29 +128,36 @@ const validateVoteAllocations = async (
 
 };
 
-const validateAllocationsRewards = async (
+const validateAllocationsRewards = async ( 
     config: ReturnType<typeof createConfig>,
+    address: string,
+    expectedTotal: number,
     logger: (message: string, type?: string, context?: string) => void = log
 ) => {
     const { ammMl0Url } = config;
 
-        const { data: lastRewards } = await axios.get(`${ammMl0Url}/v1/governance/allocations/rewards`);
+    const { data: lastRewards } = await axios.get(`${ammMl0Url}/v1/governance/allocations/rewards`);
+    console.log(JSON.stringify(lastRewards.data, null, 2));
 
-        const someRewardFilled = lastRewards.data.find(reward => {
-            return Object.keys(reward.rewardsInfo).length > 0
-        })
+    const total = lastRewards.data.votes?.[address]?.total;
 
-        logger(`Check reward`);
-        if (someRewardFilled) {
-            const nodeValidatorsReward = someRewardFilled.rewardsInfo.NodeValidators
-            if (nodeValidatorsReward === 25000) {
-                logger(`Rewards filled correctly`);
-                return
-            }
-            throw new Error(`NodeValidatorsReward invalid weight: ${nodeValidatorsReward}`);
+    logger(`Check frozen governance votes ${total}`);
+
+    if (expectedTotal === 0) {
+        if (total === undefined) {
+            logger(`Governance votes correctly not filled`);
+            return;
+        } else {
+            throw new Error(`Expected no governance votes, but found: ${total}`);
         }
+    }
 
-        throw new Error(`Rewards not filled yet`);
+    if (total !== undefined && Number(total) === expectedTotal) {
+        logger(`Governance votes filled correctly`);
+        return;
+    }
+
+    throw new Error(`Invalid governance votes: expected ${expectedTotal}, got ${total}`);
 };
 
 const getExpectedAvaialbleRewardForAddress = async (
@@ -219,14 +226,16 @@ const voteAllocationTests = async (argsObject: object) => {
         await retry(`Validate voting weight second time for ${address}`)(async (logger) => {
             await validateVoteAllocations(config, address, logger)
         })
-    }
 
-    await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
-        await validateAllocationsRewards(config, logger)
-    })
+        log(`Governance voting shall appeared in frozen votes for ${address} as month pass`) 
+        await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
+            await validateAllocationsRewards(config, address, 100000, logger)
+        })
 
-    for (const voteAllocationInfo of voteAllocationsInfo) {
-        const { address } = voteAllocationInfo;
+        log(`Governance voting shall disappeared in frozen votes for ${address} as month pass again`) 
+        await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
+            await validateAllocationsRewards(config, address, 0, logger)
+        })
         const govRewardType = "GovernanceVoting"
       
         const initialBalance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId);

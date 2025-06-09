@@ -299,7 +299,8 @@ object States {
   case class RewardsState(
     withdraws: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState.empty,
     availableRewards: RewardInfo = RewardInfo.empty,
-    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue
+    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue,
+    lastProcessedGovernanceRewardMonth: MonthlyReference = MonthlyReference.empty
   )
 
   @derive(encoder, decoder)
