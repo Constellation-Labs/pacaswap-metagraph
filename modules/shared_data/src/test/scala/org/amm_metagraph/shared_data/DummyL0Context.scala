@@ -44,7 +44,7 @@ object DummyL0Context {
   ): F[Hashed[CurrencyIncrementalSnapshot]] =
     CurrencyIncrementalSnapshot
       .fromCurrencySnapshot[F](
-        CurrencySnapshot.mkGenesis(Map.empty, None)
+        CurrencySnapshot.mkGenesis(Map.empty, None, None)
       )
       .flatMap { currencyIncrementalSnapshot =>
         Signed
@@ -62,6 +62,7 @@ object DummyL0Context {
       SortedMap.empty,
       SortedMap.empty,
       activeAllowSpends.some,
+      none,
       none,
       none,
       none,
