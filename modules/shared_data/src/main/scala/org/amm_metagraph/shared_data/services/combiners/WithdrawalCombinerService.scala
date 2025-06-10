@@ -12,6 +12,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
@@ -23,6 +24,7 @@ import org.amm_metagraph.shared_data.globalSnapshots.logger
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
@@ -64,7 +66,9 @@ object WithdrawalCombinerService {
         withdrawalUpdate: Signed[WithdrawalUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
-        withdrawalCalculatedState: WithdrawalCalculatedState
+        withdrawalCalculatedState: WithdrawalCalculatedState,
+        updateHash: Hash,
+        currentState: StateTransitionType
       ) =
         failedCalculatedState.reason match {
           case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
@@ -81,8 +85,17 @@ object WithdrawalCombinerService {
 
             Async[F].pure(
               acc
-                .focus(_.onChain.updates)
-                .modify(current => current + withdrawalUpdate.value)
+                .focus(_.onChain.updatedStateDataUpdate)
+                .modify { current =>
+                  current + UpdatedStateDataUpdate(
+                    currentState,
+                    Failed,
+                    OperationType.Swap,
+                    withdrawalUpdate,
+                    updateHash,
+                    none
+                  )
+                }
                 .focus(_.calculated)
                 .replace(updatedCalculatedState)
             )
@@ -156,6 +169,7 @@ object WithdrawalCombinerService {
         if (withdrawalCalculatedState.pending.exists(_.update === signedUpdate)) {
           return oldState.pure[F]
         }
+        val updateHashedF = HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
 
         val combinedState = for {
           _ <- EitherT(
@@ -168,9 +182,7 @@ object WithdrawalCombinerService {
 
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
-          updateHashed <- EitherT.liftF(
-            HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
-          )
+          updateHashed <- EitherT.liftF(updateHashedF)
           withdrawalAmounts <- EitherT.fromEither[F](
             pricingService.calculateWithdrawalAmounts(
               signedUpdate,
@@ -210,10 +222,12 @@ object WithdrawalCombinerService {
             .focus(_.confirmed.value)
             .modify(_.updated(poolId.value, updatedPool))
 
+          pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, withdrawalAmounts.some)
+
           updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
             .focus(_.pending)
             .replace(
-              withdrawalCalculatedState.pending + PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, withdrawalAmounts.some)
+              withdrawalCalculatedState.pending + pendingAllowSpend
             )
 
           updatedCalculatedState = oldState.calculated
@@ -224,8 +238,17 @@ object WithdrawalCombinerService {
 
         } yield
           oldState
-            .focus(_.onChain.updates)
-            .modify(current => current + withdrawalUpdate)
+            .focus(_.onChain.updatedStateDataUpdate)
+            .modify { current =>
+              current + UpdatedStateDataUpdate(
+                NewUpdate,
+                PendingAllowSpends,
+                OperationType.Withdrawal,
+                signedUpdate,
+                updateHashed.hash,
+                Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
+              )
+            }
             .focus(_.calculated)
             .replace(updatedCalculatedState)
             .focus(_.sharedArtifacts)
@@ -236,7 +259,10 @@ object WithdrawalCombinerService {
             )
 
         combinedState.foldF(
-          failed => handleFailedUpdate(signedUpdate, oldState, failed, withdrawalCalculatedState),
+          failed =>
+            updateHashedF.flatMap(hashed =>
+              handleFailedUpdate(signedUpdate, oldState, failed, withdrawalCalculatedState, hashed.hash, NewUpdate)
+            ),
           success => success.pure[F]
         )
       }
@@ -334,8 +360,17 @@ object WithdrawalCombinerService {
                   .modify(_.updated(OperationType.Withdrawal, newWithdrawalState))
               } yield
                 oldState
-                  .focus(_.onChain.updates)
-                  .modify(current => current + withdrawalUpdate)
+                  .focus(_.onChain.updatedStateDataUpdate)
+                  .modify { current =>
+                    current + UpdatedStateDataUpdate(
+                      PendingSpendTransactions,
+                      Confirmed,
+                      OperationType.Withdrawal,
+                      pendingSpendAction.update,
+                      pendingSpendAction.updateHash,
+                      none
+                    )
+                  }
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
 
@@ -351,7 +386,9 @@ object WithdrawalCombinerService {
                       pendingSpendAction.update,
                       rolledBackState,
                       failed,
-                      withdrawalCalculatedState
+                      withdrawalCalculatedState,
+                      pendingSpendAction.updateHash,
+                      PendingSpendTransactions
                     )
                   },
                 success => success.pure[F]

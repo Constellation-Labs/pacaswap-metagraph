@@ -13,7 +13,6 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal, swap}
-import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
 import monocle.syntax.all._
@@ -329,7 +328,7 @@ object L0CombinerService {
           In other words, we will preserve between the update batches, but we should clean at every call of the combine.
            */
           newState = oldState
-            .focus(_.onChain.updates)
+            .focus(_.onChain.updatedStateDataUpdate)
             .replace(SortedSet.empty)
             .focus(_.onChain.rewardsUpdate)
             .replace(None)

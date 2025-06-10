@@ -71,7 +71,6 @@ const getCalculatedState = async (
     ammL0Url: string,
 ): Promise<CalculatedState> => {
     const { data } = await axios.get(`${ammL0Url}/v1/calculated-state/latest`);
-    console.log(`TESTING CALCULATED STATE: ${JSON.stringify(data)}`)
     return data.calculatedState;
 }
 

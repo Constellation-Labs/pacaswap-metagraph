@@ -12,6 +12,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId, SwapAmount}
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
@@ -24,6 +25,7 @@ import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking._
+import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors.DuplicatedUpdate
@@ -87,7 +89,9 @@ object StakingCombinerService {
         stakingUpdate: Signed[StakingUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         failedCalculatedState: FailedCalculatedState,
-        stakingCalculatedState: StakingCalculatedState
+        stakingCalculatedState: StakingCalculatedState,
+        updateHash: Hash,
+        currentState: StateTransitionType
       ) =
         failedCalculatedState.reason match {
           case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
@@ -104,8 +108,17 @@ object StakingCombinerService {
 
             Async[F].pure(
               acc
-                .focus(_.onChain.updates)
-                .modify(current => current + stakingUpdate.value)
+                .focus(_.onChain.updatedStateDataUpdate)
+                .modify { current =>
+                  current + UpdatedStateDataUpdate(
+                    currentState,
+                    Failed,
+                    OperationType.Staking,
+                    stakingUpdate,
+                    updateHash,
+                    none
+                  )
+                }
                 .focus(_.calculated)
                 .replace(updatedCalculatedState)
             )
@@ -144,6 +157,7 @@ object StakingCombinerService {
 
         val pendingStakings = stakingCalculatedState.getPendingUpdates
         val pendingAllowSpendsCalculatedState = stakingCalculatedState.pending
+        val updateHashedF = HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
 
         val stakingUpdate = signedUpdate.value
         val combinedState = for {
@@ -164,13 +178,16 @@ object StakingCombinerService {
             )
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
-          updateHashed <- EitherT.liftF(
-            HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
-          )
+          updateHashed <- EitherT.liftF(updateHashedF)
 
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
-              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + PendingAllowSpend(signedUpdate, updateHashed.hash)
+              val pendingAllowSpend = PendingAllowSpend(
+                signedUpdate,
+                updateHashed.hash
+              )
+
+              val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + pendingAllowSpend
               val newStakingState = stakingCalculatedState
                 .focus(_.pending)
                 .replace(updatedPendingCalculatedState)
@@ -181,8 +198,17 @@ object StakingCombinerService {
 
               EitherT.rightT[F, FailedCalculatedState](
                 oldState
-                  .focus(_.onChain.updates)
-                  .modify(current => current + stakingUpdate)
+                  .focus(_.onChain.updatedStateDataUpdate)
+                  .modify { current =>
+                    current + UpdatedStateDataUpdate(
+                      NewUpdate,
+                      PendingAllowSpends,
+                      OperationType.Staking,
+                      signedUpdate,
+                      updateHashed.hash,
+                      Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
+                    )
+                  }
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
               )
@@ -201,7 +227,10 @@ object StakingCombinerService {
         } yield response
 
         combinedState.foldF(
-          failed => handleFailedUpdate(signedUpdate, oldState, failed, stakingCalculatedState),
+          failed =>
+            updateHashedF.flatMap(hashed =>
+              handleFailedUpdate(signedUpdate, oldState, failed, stakingCalculatedState, hashed.hash, NewUpdate)
+            ),
           success => success.pure[F]
         )
       }
@@ -256,13 +285,14 @@ object StakingCombinerService {
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(stakingCalculatedState, pendingAllowSpendUpdate.update)
+                pendingSpendAction = PendingSpendAction(
+                  pendingAllowSpendUpdate.update,
+                  pendingAllowSpendUpdate.updateHash,
+                  spendAction
+                )
 
                 updatedPendingSpendActionCalculatedState =
-                  updatedPendingAllowSpendCalculatedState + PendingSpendAction(
-                    pendingAllowSpendUpdate.update,
-                    pendingAllowSpendUpdate.updateHash,
-                    spendAction
-                  )
+                  updatedPendingAllowSpendCalculatedState + pendingSpendAction
 
                 updatedStakingCalculatedState =
                   stakingCalculatedState
@@ -275,8 +305,17 @@ object StakingCombinerService {
 
               } yield
                 oldState
-                  .focus(_.onChain.updates)
-                  .modify(current => current + stakingUpdate)
+                  .focus(_.onChain.updatedStateDataUpdate)
+                  .modify { current =>
+                    current + UpdatedStateDataUpdate(
+                      PendingAllowSpends,
+                      PendingSpendTransactions,
+                      OperationType.Staking,
+                      pendingAllowSpendUpdate.update,
+                      pendingAllowSpendUpdate.updateHash,
+                      Some(pendingSpendAction.asInstanceOf[PendingAction[AmmUpdate]])
+                    )
+                  }
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
                   .focus(_.sharedArtifacts)
@@ -292,7 +331,15 @@ object StakingCombinerService {
         } yield result
 
         combinedState.foldF(
-          failed => handleFailedUpdate(pendingAllowSpendUpdate.update, oldState, failed, stakingCalculatedState),
+          failed =>
+            handleFailedUpdate(
+              pendingAllowSpendUpdate.update,
+              oldState,
+              failed,
+              stakingCalculatedState,
+              pendingAllowSpendUpdate.updateHash,
+              PendingAllowSpends
+            ),
           success => success.pure[F]
         )
       }
@@ -395,15 +442,32 @@ object StakingCombinerService {
 
               } yield
                 oldState
-                  .focus(_.onChain.updates)
-                  .modify(current => current + stakingUpdate)
+                  .focus(_.onChain.updatedStateDataUpdate)
+                  .modify { current =>
+                    current + UpdatedStateDataUpdate(
+                      PendingSpendTransactions,
+                      Confirmed,
+                      OperationType.Staking,
+                      pendingSpendAction.update,
+                      pendingSpendAction.updateHash,
+                      none
+                    )
+                  }
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
             }
         } yield result
 
         combinedState.foldF(
-          failed => handleFailedUpdate(pendingSpendAction.update, oldState, failed, stakingCalculatedState),
+          failed =>
+            handleFailedUpdate(
+              pendingSpendAction.update,
+              oldState,
+              failed,
+              stakingCalculatedState,
+              pendingSpendAction.updateHash,
+              PendingSpendTransactions
+            ),
           success => success.pure[F]
         )
       }
