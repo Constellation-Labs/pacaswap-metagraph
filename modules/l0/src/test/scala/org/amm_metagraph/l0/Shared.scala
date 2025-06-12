@@ -7,6 +7,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.hash.Hash
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
@@ -76,6 +77,7 @@ object Shared {
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
 
     val liquidityPool = LiquidityPool(
+      Hash.empty,
       poolId,
       tokenA,
       tokenB,

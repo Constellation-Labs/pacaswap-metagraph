@@ -64,6 +64,7 @@ object LiquidityPool {
 
   @derive(encoder, decoder)
   case class LiquidityPool(
+    updateHash: Hash,
     poolId: PoolId,
     tokenA: TokenInformation,
     tokenB: TokenInformation,

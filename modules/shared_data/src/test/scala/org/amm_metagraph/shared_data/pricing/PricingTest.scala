@@ -271,6 +271,7 @@ object PricingTest extends SimpleIOSuite {
 
       swapTokenInfo <- pricingService.getSwapTokenInfo(
         swapUpdate,
+        Hash.empty,
         poolId,
         EpochProgress.MaxValue
       )
@@ -324,6 +325,7 @@ object PricingTest extends SimpleIOSuite {
 
       stakingTokenInfo <- pricingService.getStakingTokenInfo(
         stakingUpdate,
+        Hash.empty,
         poolId,
         EpochProgress.MaxValue
       )

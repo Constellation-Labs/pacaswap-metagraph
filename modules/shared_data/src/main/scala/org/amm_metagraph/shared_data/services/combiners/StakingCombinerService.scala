@@ -168,7 +168,7 @@ object StakingCombinerService {
               globalEpochProgress
             )
           )
-          _ <- EitherT.fromEither(
+          _ <- EitherT(
             stakingValidations.newUpdateValidations(
               oldState.calculated,
               signedUpdate,
@@ -252,8 +252,11 @@ object StakingCombinerService {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
-                stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(pendingAllowSpendUpdate.update, poolId, globalEpochProgress))
-                _ <- EitherT.fromEither[F](
+                stakingTokenInfo <- EitherT(
+                  pricingService
+                    .getStakingTokenInfo(pendingAllowSpendUpdate.update, pendingAllowSpendUpdate.updateHash, poolId, globalEpochProgress)
+                )
+                _ <- EitherT(
                   stakingValidations.pendingAllowSpendsValidations(
                     pendingAllowSpendUpdate.update,
                     globalEpochProgress,
@@ -359,7 +362,7 @@ object StakingCombinerService {
         val stakingUpdate = signedStakingUpdate.value
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          _ <- EitherT.fromEither[F](
+          _ <- EitherT(
             stakingValidations.pendingSpendActionsValidation(
               pendingSpendAction.update,
               globalEpochProgress
@@ -385,18 +388,23 @@ object StakingCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
                 )
                 sourceAddress = signedStakingUpdate.source
-                stakingTokenInfo <- EitherT(pricingService.getStakingTokenInfo(signedStakingUpdate, poolId, globalEpochProgress))
+                stakingTokenInfo <- EitherT(
+                  pricingService.getStakingTokenInfo(signedStakingUpdate, pendingSpendAction.updateHash, poolId, globalEpochProgress)
+                )
 
                 liquidityPoolUpdated <- EitherT.fromEither[F](
                   pricingService.getUpdatedLiquidityPoolDueStaking(
                     liquidityPool,
                     signedStakingUpdate,
+                    pendingSpendAction.updateHash,
                     sourceAddress,
                     stakingTokenInfo,
                     globalEpochProgress
                   )
                 )
                 stakingCalculatedStateAddress = StakingCalculatedStateAddress(
+                  stakingUpdate.source,
+                  pendingSpendAction.updateHash,
                   stakingUpdate.tokenAAllowSpend,
                   stakingUpdate.tokenBAllowSpend,
                   stakingTokenInfo.primaryTokenInformation,

@@ -36,23 +36,23 @@ trait WithdrawalValidations[F[_]] {
     signedWithdrawalUpdate: Signed[WithdrawalUpdate],
     state: AmmCalculatedState,
     lastSyncGlobalEpochProgress: EpochProgress
-  )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
+  ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 
   def newUpdateValidations(
     signedUpdate: Signed[WithdrawalUpdate],
     withdrawalAmounts: WithdrawalTokenAmounts,
     lastSyncGlobalEpochProgress: EpochProgress,
     updatedPool: LiquidityPool
-  ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[WithdrawalUpdate],
     lastSyncGlobalEpochProgress: EpochProgress
-  ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 }
 
 object WithdrawalValidations {
-  def make[F[_]: Async](
+  def make[F[_]: Async: HasherSelector: SecurityProvider](
     applicationConfig: ApplicationConfig,
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): WithdrawalValidations[F] = new WithdrawalValidations[F] {
@@ -66,7 +66,7 @@ object WithdrawalValidations {
       signedWithdrawalUpdate: Signed[WithdrawalUpdate],
       state: AmmCalculatedState,
       lastSyncGlobalEpochProgress: EpochProgress
-    )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] =
+    ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] =
       for {
         signatures <- signatureValidations(signedWithdrawalUpdate, signedWithdrawalUpdate.source)
         sourceAddress = signedWithdrawalUpdate.source
@@ -96,7 +96,8 @@ object WithdrawalValidations {
           withdrawalCalculatedState.getPendingUpdates
         )
 
-        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedWithdrawalUpdate.toHashed(dataUpdateCodec.serialize))
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedWithdrawalUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
         duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
         lastRef = lastRefValidation(withdrawalCalculatedState, signedWithdrawalUpdate, sourceAddress)
@@ -104,19 +105,19 @@ object WithdrawalValidations {
 
         result =
           if (duplicatedUpdate.isInvalid) {
-            failWith(DuplicatedUpdate(signedWithdrawalUpdate.value), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(DuplicatedUpdate(signedWithdrawalUpdate.value), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (liquidityPoolExists.isInvalid) {
-            failWith(InvalidLiquidityPool(), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (signatures.isInvalid) {
-            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (hasEnoughShares.isInvalid) {
-            failWith(NotEnoughShares(), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(NotEnoughShares(), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (withdrawsAllLPShares.isInvalid) {
-            failWith(WithdrawalAllLPSharesError(), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(WithdrawalAllLPSharesError(), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (withdrawalNotPending.isInvalid) {
-            failWith(WithdrawalNotPendingError(), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(WithdrawalNotPendingError(), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else if (lastRef.isInvalid) {
-            failWith(InvalidLastReference(), expireEpochProgress, signedWithdrawalUpdate)
+            failWith(InvalidLastReference(), expireEpochProgress, signedWithdrawalUpdate, updateHash)
           } else {
             signedWithdrawalUpdate.asRight
           }
@@ -127,42 +128,50 @@ object WithdrawalValidations {
       withdrawalAmounts: WithdrawalTokenAmounts,
       lastSyncGlobalEpochProgress: EpochProgress,
       updatedPool: LiquidityPool
-    ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (
-        updatedPool.tokenA.amount < applicationConfig.tokenLimits.minTokens ||
-        updatedPool.tokenB.amount < applicationConfig.tokenLimits.minTokens
-      ) {
-        failWith(WithdrawalWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
-      } else if (
-        signedUpdate.minAmountAOut.exists(_ > withdrawalAmounts.tokenAAmount) ||
-        signedUpdate.minAmountBOut.exists(_ > withdrawalAmounts.tokenBAmount)
-      ) {
-        failWith(WithdrawalLessThanMinAmount(), expireEpochProgress, signedUpdate)
-      } else if (
-        signedUpdate.maxAmountAOut.exists(_ < withdrawalAmounts.tokenAAmount) ||
-        signedUpdate.maxAmountBOut.exists(_ < withdrawalAmounts.tokenBAmount)
-      ) {
-        failWith(WithdrawalHigherThanMaxAmount(), expireEpochProgress, signedUpdate)
-      } else {
-        Right(signedUpdate)
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            updatedPool.tokenA.amount < applicationConfig.tokenLimits.minTokens ||
+            updatedPool.tokenB.amount < applicationConfig.tokenLimits.minTokens
+          ) {
+            failWith(WithdrawalWouldDrainPoolBalance(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            signedUpdate.minAmountAOut.exists(_ > withdrawalAmounts.tokenAAmount) ||
+            signedUpdate.minAmountBOut.exists(_ > withdrawalAmounts.tokenBAmount)
+          ) {
+            failWith(WithdrawalLessThanMinAmount(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            signedUpdate.maxAmountAOut.exists(_ < withdrawalAmounts.tokenAAmount) ||
+            signedUpdate.maxAmountBOut.exists(_ < withdrawalAmounts.tokenBAmount)
+          ) {
+            failWith(WithdrawalHigherThanMaxAmount(), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            Right(signedUpdate)
+          }
+      } yield result
     }
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[WithdrawalUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
-    ): Either[FailedCalculatedState, Signed[WithdrawalUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else {
-        Right(signedUpdate)
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            Right(signedUpdate)
+          }
+      } yield result
     }
 
     private def validateIfLiquidityPoolExists(

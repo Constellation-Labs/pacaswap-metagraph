@@ -134,8 +134,8 @@ object CombinerTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
@@ -145,7 +145,7 @@ object CombinerTest extends MutableIOSuite {
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardsCombinerService = RewardsDistributionService
         .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
-      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations)
+      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -282,8 +282,8 @@ object CombinerTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
@@ -294,7 +294,7 @@ object CombinerTest extends MutableIOSuite {
 
       rewardsCombinerService = RewardsDistributionService
         .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
-      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations)
+      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](
@@ -440,8 +440,8 @@ object CombinerTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       pricingService = PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
@@ -451,7 +451,7 @@ object CombinerTest extends MutableIOSuite {
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardsCombinerService = RewardsDistributionService
         .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
-      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations)
+      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
         .make[IO](

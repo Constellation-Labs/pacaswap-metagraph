@@ -36,7 +36,7 @@ import org.amm_metagraph.shared_data.types.States._
 object Swap {
   @derive(encoder, decoder, order)
   case class SwapCalculatedStateAddress(
-    swapHash: Hash,
+    updateHash: Hash,
     sourceAddress: Address,
     fromToken: TokenInformation,
     toToken: TokenInformation,

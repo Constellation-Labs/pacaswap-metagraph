@@ -43,12 +43,14 @@ trait PricingService[F[_]] {
 
   def getSwapTokenInfo(
     signedUpdate: Signed[SwapUpdate],
+    updateHash: Hash,
     poolId: PoolId,
     lastSyncGlobalEpochProgress: EpochProgress
   ): F[Either[FailedCalculatedState, SwapTokenInfo]]
 
   def getStakingTokenInfo(
     signedUpdate: Signed[StakingUpdate],
+    updateHash: Hash,
     poolId: PoolId,
     lastSyncGlobalEpochProgress: EpochProgress
   ): F[Either[FailedCalculatedState, StakingTokenInformation]]
@@ -56,6 +58,7 @@ trait PricingService[F[_]] {
   def getUpdatedLiquidityPoolDueStaking(
     liquidityPool: LiquidityPool,
     signedUpdate: Signed[StakingUpdate],
+    updateHash: Hash,
     signerAddress: Address,
     stakingTokenInformation: StakingTokenInformation,
     lastSyncGlobalEpochProgress: EpochProgress
@@ -77,6 +80,7 @@ trait PricingService[F[_]] {
 
   def getUpdatedLiquidityPoolDueNewWithdrawal(
     signedUpdate: Signed[WithdrawalUpdate],
+    updateHash: Hash,
     liquidityPool: LiquidityPool,
     withdrawalAmounts: WithdrawalTokenAmounts,
     lastSyncGlobalEpochProgress: EpochProgress
@@ -84,6 +88,7 @@ trait PricingService[F[_]] {
 
   def calculateWithdrawalAmounts(
     signedUpdate: Signed[WithdrawalUpdate],
+    updateHash: Hash,
     liquidityPool: LiquidityPool,
     lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, WithdrawalTokenAmounts]
@@ -100,6 +105,7 @@ trait PricingService[F[_]] {
 
   def rollbackWithdrawalLiquidityPoolAmounts(
     signedUpdate: Signed[WithdrawalUpdate],
+    updateHash: Hash,
     lastSyncGlobalEpochProgress: EpochProgress,
     liquidityPool: LiquidityPool,
     tokenAAmountToReturn: SwapAmount,
@@ -250,6 +256,7 @@ object PricingService {
 
       override def getSwapTokenInfo(
         signedUpdate: Signed[SwapUpdate],
+        updateHash: Hash,
         poolId: PoolId,
         lastSyncGlobalEpochProgress: EpochProgress
       ): F[Either[FailedCalculatedState, SwapTokenInfo]] = for {
@@ -262,6 +269,7 @@ object PricingService {
               FailedCalculatedState(
                 InvalidLiquidityPool(),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -291,6 +299,7 @@ object PricingService {
                   FailedCalculatedState(
                     InvalidSwapTokenInfo(errorMsg),
                     expireEpochProgress,
+                    updateHash,
                     signedUpdate
                   )
                 )
@@ -301,6 +310,7 @@ object PricingService {
               FailedCalculatedState(
                 InvalidLiquidityPool(),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -310,6 +320,7 @@ object PricingService {
 
       def getStakingTokenInfo(
         signedUpdate: Signed[StakingUpdate],
+        updateHash: Hash,
         poolId: PoolId,
         lastSyncGlobalEpochProgress: EpochProgress
       ): F[Either[FailedCalculatedState, StakingTokenInformation]] = for {
@@ -322,6 +333,7 @@ object PricingService {
               FailedCalculatedState(
                 InvalidLiquidityPool(),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -357,6 +369,7 @@ object PricingService {
       def getUpdatedLiquidityPoolDueStaking(
         liquidityPool: LiquidityPool,
         signedUpdate: Signed[StakingUpdate],
+        updateHash: Hash,
         signerAddress: Address,
         stakingTokenInformation: StakingTokenInformation,
         lastSyncGlobalEpochProgress: EpochProgress
@@ -377,6 +390,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated token A amount $tokenAValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -385,6 +399,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated token B amount $tokenBValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -397,6 +412,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"poolShares $tokenBValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -488,6 +504,7 @@ object PricingService {
 
       def getUpdatedLiquidityPoolDueNewWithdrawal(
         signedUpdate: Signed[WithdrawalUpdate],
+        updateHash: Hash,
         liquidityPool: LiquidityPool,
         withdrawalAmounts: WithdrawalTokenAmounts,
         lastSyncGlobalEpochProgress: EpochProgress
@@ -504,6 +521,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated token A amount $tokenAValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -513,6 +531,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated token B amount $tokenBValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -522,6 +541,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated total shares $totalSharesValue is not positive"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -533,6 +553,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Updated address shares amount $sharesDifference is negative"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -561,6 +582,7 @@ object PricingService {
 
       def calculateWithdrawalAmounts(
         signedUpdate: Signed[WithdrawalUpdate],
+        updateHash: Hash,
         liquidityPool: LiquidityPool,
         lastSyncGlobalEpochProgress: EpochProgress
       ): Either[FailedCalculatedState, WithdrawalTokenAmounts] = {
@@ -577,6 +599,7 @@ object PricingService {
               FailedCalculatedState(
                 WithdrawalAmountExceedsAvailableShares(signedUpdate.shareToWithdraw),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -587,6 +610,7 @@ object PricingService {
             FailedCalculatedState(
               CannotWithdrawAllShares(),
               expireEpochProgress,
+              updateHash,
               signedUpdate
             )
           )
@@ -601,6 +625,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Token A amount doesn't match PosLong: $tokenAOut"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -610,6 +635,7 @@ object PricingService {
               FailedCalculatedState(
                 ArithmeticError(s"Token B amount doesn't match PosLong: $tokenBOut"),
                 expireEpochProgress,
+                updateHash,
                 signedUpdate
               )
             )
@@ -620,6 +646,7 @@ object PricingService {
             FailedCalculatedState(
               TokenExceedsAvailableAmount(liquidityPool.tokenA.identifier, liquidityPool.tokenA.amount.value, tokenAAmount.value),
               expireEpochProgress,
+              updateHash,
               signedUpdate
             )
           )
@@ -629,6 +656,7 @@ object PricingService {
             FailedCalculatedState(
               TokenExceedsAvailableAmount(liquidityPool.tokenB.identifier, liquidityPool.tokenB.amount.value, tokenBAmount.value),
               expireEpochProgress,
+              updateHash,
               signedUpdate
             )
           )
@@ -655,7 +683,7 @@ object PricingService {
         val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         def error(msg: String): FailedCalculatedState =
-          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)
+          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, updateHash, signedUpdate)
 
         val newTokenAAmountEither: Either[FailedCalculatedState, PosLong] =
           if (tokenAIsFrom)
@@ -692,6 +720,7 @@ object PricingService {
 
       def rollbackWithdrawalLiquidityPoolAmounts(
         signedUpdate: Signed[WithdrawalUpdate],
+        updateHash: Hash,
         lastSyncGlobalEpochProgress: EpochProgress,
         liquidityPool: LiquidityPool,
         tokenAAmountToReturn: SwapAmount,
@@ -700,7 +729,7 @@ object PricingService {
         val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         def error(msg: String): FailedCalculatedState =
-          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, signedUpdate)
+          FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, updateHash, signedUpdate)
 
         val newTokenAAmountEither: Either[FailedCalculatedState, PosLong] =
           (liquidityPool.tokenA.amount.value + tokenAAmountToReturn.value.value).toPosLong

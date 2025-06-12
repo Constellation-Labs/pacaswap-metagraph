@@ -64,16 +64,48 @@ object States {
   @derive(encoder, decoder)
   sealed trait ConfirmedCalculatedState
 
+  @derive(encoder, decoder, order, ordering)
+  sealed trait FailedCalculatedStateBase {
+    def reason: FailedCalculatedStateReason
+    def expiringEpochProgress: EpochProgress
+    def updateHash: Hash
+    def update: Signed[AmmUpdate]
+  }
+
   @derive(encoder, decoder)
   case class FailedCalculatedState(
     reason: FailedCalculatedStateReason,
     expiringEpochProgress: EpochProgress,
+    updateHash: Hash,
     update: Signed[AmmUpdate]
-  )
+  ) extends FailedCalculatedStateBase
 
   object FailedCalculatedState {
     implicit val order: Order[FailedCalculatedState] = Order.by(_.expiringEpochProgress)
     implicit val ordering: Ordering[FailedCalculatedState] = order.toOrdering
+  }
+
+  @derive(encoder, decoder)
+  case class SwapFailedCalculatedState(
+    reason: FailedCalculatedStateReason,
+    expiringEpochProgress: EpochProgress,
+    updateHash: Hash,
+    update: Signed[AmmUpdate],
+    swapInfo: Option[SwapTokenInfo]
+  ) extends FailedCalculatedStateBase
+
+  object SwapFailedCalculatedState {
+    implicit val order: Order[SwapFailedCalculatedState] = Order.by(_.expiringEpochProgress)
+    implicit val ordering: Ordering[SwapFailedCalculatedState] = order.toOrdering
+
+    def fromFailedCalculatedState(failedCalculatedState: FailedCalculatedState, swapInfo: Option[SwapTokenInfo]) =
+      SwapFailedCalculatedState(
+        failedCalculatedState.reason,
+        failedCalculatedState.expiringEpochProgress,
+        failedCalculatedState.updateHash,
+        failedCalculatedState.update,
+        swapInfo
+      )
   }
 
   @derive(encoder, decoder)
@@ -117,7 +149,7 @@ object States {
     type UpdateType <: AmmUpdate
     val confirmed: ConfirmedCalculatedState
     val pending: SortedSet[PendingAction[UpdateType]]
-    val failed: SortedSet[FailedCalculatedState]
+    val failed: SortedSet[_ <: FailedCalculatedStateBase]
 
     def getPendingUpdates: SortedSet[Signed[UpdateType]] =
       pending.collect {
@@ -186,7 +218,7 @@ object States {
   case class SwapCalculatedState(
     confirmed: ConfirmedSwapCalculatedState,
     pending: SortedSet[PendingAction[SwapUpdate]],
-    failed: SortedSet[FailedCalculatedState]
+    failed: SortedSet[SwapFailedCalculatedState]
   ) extends AmmOffChainState {
     type UpdateType = SwapUpdate
   }
@@ -195,7 +227,7 @@ object States {
     def empty: SwapCalculatedState = SwapCalculatedState(
       ConfirmedSwapCalculatedState.empty,
       SortedSet.empty,
-      SortedSet.empty
+      SortedSet.empty[SwapFailedCalculatedState]
     )
   }
 

@@ -24,34 +24,18 @@ import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.States.{LiquidityPoolCalculatedState, OperationType, SwapCalculatedState}
+import org.amm_metagraph.shared_data.types.States.StateTransitionType._
+import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
+import org.amm_metagraph.shared_data.types.Withdrawal.getWithdrawalCalculatedState
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 
 object SwapRoutes {
-
-  @derive(eqv, show)
-  sealed trait SwapState extends EnumEntry
-
-  private object SwapState extends Enum[SwapState] with SwapStateCodecs {
-    val values: IndexedSeq[SwapState] = findValues
-
-    case object Confirmed extends SwapState
-
-    case object Pending extends SwapState
-  }
-
-  trait SwapStateCodecs {
-    implicit val encode: Encoder[SwapState] = Encoder.encodeString.contramap[SwapState](_.entryName)
-    implicit val decode: Decoder[SwapState] =
-      Decoder.decodeString.emapTry(s => Try(SwapState.withName(s)))
-  }
-
   @derive(encoder, decoder)
   case class SwapQuoteRequest(
     fromTokenId: Option[CurrencyId],
@@ -61,16 +45,87 @@ object SwapRoutes {
   )
 
   @derive(encoder, decoder)
-  case class SwapResponse(
-    sourceAddress: Address,
+  case class SwapStateResponse(
+    sourceAddress: Option[Address],
     swapFromPair: Option[CurrencyId],
     swapToPair: Option[CurrencyId],
-    allowSpendReference: Hash,
-    amountIn: SwapAmount,
-    amountOutMinimum: SwapAmount,
-    maxValidGsEpochProgress: EpochProgress,
-    state: SwapState
+    amountIn: Option[SwapAmount],
+    amountOutGross: Option[SwapAmount],
+    amountOutNet: Option[SwapAmount],
+    amountOutMinimum: Option[SwapAmount],
+    amountOutMaximum: Option[SwapAmount],
+    state: StateTransitionType
   )
+
+  object SwapStateResponse {
+    def from(update: PendingAction[SwapUpdate], stateTransitionType: StateTransitionType): SwapStateResponse =
+      update match {
+        case PendingAllowSpend(update, _, _) =>
+          SwapStateResponse(
+            update.source.some,
+            update.swapFromPair,
+            update.swapToPair,
+            update.amountIn.some,
+            none,
+            none,
+            update.amountOutMinimum.some,
+            update.amountOutMaximum,
+            stateTransitionType
+          )
+
+        case PendingSpendAction(update, _, _, Some(swapInfo: SwapTokenInfo)) =>
+          SwapStateResponse(
+            update.source.some,
+            update.swapFromPair,
+            update.swapToPair,
+            update.amountIn.some,
+            swapInfo.grossReceived.some,
+            swapInfo.netReceived.some,
+            update.amountOutMinimum.some,
+            update.amountOutMaximum,
+            stateTransitionType
+          )
+
+        case PendingSpendAction(update, _, _, _) =>
+          SwapStateResponse(
+            update.source.some,
+            update.swapFromPair,
+            update.swapToPair,
+            update.amountIn.some,
+            none,
+            none,
+            update.amountOutMinimum.some,
+            update.amountOutMaximum,
+            stateTransitionType
+          )
+      }
+
+    def from(swap: SwapCalculatedStateAddress, stateTransitionType: StateTransitionType): SwapStateResponse =
+      SwapStateResponse(
+        swap.sourceAddress.some,
+        swap.fromToken.identifier,
+        swap.toToken.identifier,
+        swap.amountIn.some,
+        swap.grossReceived.some,
+        swap.netReceived.some,
+        swap.amountOutMinimum.some,
+        swap.amountOutMaximum,
+        stateTransitionType
+      )
+
+    def from(swapFailedCalculatedState: SwapFailedCalculatedState, stateTransitionType: StateTransitionType): SwapStateResponse =
+      SwapStateResponse(
+        none,
+        none,
+        none,
+        none,
+        swapFailedCalculatedState.swapInfo.map(_.grossReceived),
+        swapFailedCalculatedState.swapInfo.map(_.netReceived),
+        none,
+        none,
+        stateTransitionType
+      )
+  }
 
   object SwapQuoteRequestValidator {
 
@@ -140,75 +195,37 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
   import Responses._
   import SwapRoutes._
 
-  private def getSwapByHash(
-    swapHash: Hash
-  ): F[Response[F]] = {
-
-    def buildPendingSwapResponse(signedSwap: Signed[SwapUpdate]): F[Response[F]] = {
-      val swap = signedSwap.value
-      Ok(
-        SingleResponse(
-          SwapResponse(
-            sourceAddress = swap.source,
-            swapFromPair = swap.swapFromPair,
-            swapToPair = swap.swapToPair,
-            allowSpendReference = swap.allowSpendReference,
-            amountIn = swap.amountIn,
-            amountOutMinimum = swap.amountOutMinimum,
-            maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
-            state = SwapState.Pending
-          )
-        )
-      )
-    }
-
-    def buildConfirmedSwapResponse(swap: SwapCalculatedStateAddress): F[Response[F]] =
-      Ok(
-        SingleResponse(
-          SwapResponse(
-            sourceAddress = swap.sourceAddress,
-            swapFromPair = swap.fromToken.identifier,
-            swapToPair = swap.toToken.identifier,
-            allowSpendReference = swap.allowSpendReference,
-            amountIn = swap.amountIn,
-            amountOutMinimum = swap.amountOutMinimum,
-            maxValidGsEpochProgress = swap.maxValidGsEpochProgress,
-            state = SwapState.Confirmed
-          )
-        )
-      )
-
+  private def getSwapByHash(swapHash: Hash): F[Response[F]] =
     for {
       calculatedState <- calculatedStateService.get
       swapCalculatedState = getSwapCalculatedState(calculatedState.state)
-      pendingAllowSpendsSwap = getPendingAllowSpendsSwapUpdates(calculatedState.state)
-        .map(_.update)
-        .collect {
-          case Signed(update: SwapUpdate, proofs) => Signed(update, proofs)
-        }
-
-      pendingSpendActionSwap = getPendingSpendActionSwapUpdates(calculatedState.state)
-        .map(_.update)
-        .collect {
-          case Signed(update: SwapUpdate, proofs) => Signed(update, proofs)
-        }
-
-      hashedPendingSwaps <- HasherSelector[F].withCurrent { implicit hs =>
-        (pendingAllowSpendsSwap ++ pendingSpendActionSwap).toList
-          .traverse(_.toHashed(dataUpdateCodec.serialize))
-      }
-      result <- hashedPendingSwaps.find(_.hash === swapHash) match {
-        case Some(found) => buildPendingSwapResponse(found.signed)
-        case None =>
-          swapCalculatedState.confirmed.value.values
-            .flatMap(_.values)
-            .find(_.value.swapHash === swapHash)
-            .map(info => buildConfirmedSwapResponse(info.value))
-            .getOrElse(NotFound())
-      }
-
+      result <- findSwapByHash(swapCalculatedState, swapHash)
     } yield result
-  }
+
+  private def findSwapByHash(
+    state: SwapCalculatedState,
+    hash: Hash
+  ): F[Response[F]] =
+    state.pending.collectFirst {
+      case pending: PendingAllowSpend[SwapUpdate] if pending.updateHash === hash =>
+        SingleResponse(SwapStateResponse.from(pending, PendingAllowSpends))
+    }.orElse {
+      state.pending.collectFirst {
+        case pending: PendingSpendAction[SwapUpdate] if pending.updateHash === hash =>
+          SingleResponse(SwapStateResponse.from(pending, PendingSpendTransactions))
+      }
+    }.orElse {
+      state.confirmed.value.values.flatMap(_.values).collectFirst {
+        case info if info.value.updateHash === hash =>
+          SingleResponse(SwapStateResponse.from(info.value, Confirmed))
+      }
+    }.orElse {
+      state.failed.collectFirst {
+        case failed if failed.updateHash === hash =>
+          SingleResponse(SwapStateResponse.from(failed, Failed))
+      }
+    }.map(Ok(_))
+      .getOrElse(NotFound())
 
   private def handleSwapQuote(
     request: SwapQuoteRequest
@@ -256,7 +273,7 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "swaps" / HashVar(swapHashString) => getSwapByHash(swapHashString)
+    case GET -> Root / "swaps" / HashVar(swapHashString) / "state" => getSwapByHash(swapHashString)
     case req @ POST -> Root / "swap" / "quote" =>
       for {
         swapQuoteRequest <- req.as[SwapQuoteRequest]

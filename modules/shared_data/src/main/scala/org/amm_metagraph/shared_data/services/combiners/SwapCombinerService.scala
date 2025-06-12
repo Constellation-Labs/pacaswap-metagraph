@@ -24,6 +24,7 @@ import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
+import org.amm_metagraph.shared_data.types.States.SwapFailedCalculatedState.fromFailedCalculatedState
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
@@ -128,6 +129,7 @@ object SwapCombinerService {
         failedCalculatedState: FailedCalculatedState,
         swapCalculatedState: SwapCalculatedState,
         updateHash: Hash,
+        swapTokenInfo: Option[SwapTokenInfo],
         currentState: StateTransitionType
       ) =
         failedCalculatedState.reason match {
@@ -135,7 +137,7 @@ object SwapCombinerService {
           case _ =>
             val updatedSwapCalculatedState = swapCalculatedState
               .focus(_.failed)
-              .modify(_ + failedCalculatedState)
+              .modify(_ + fromFailedCalculatedState(failedCalculatedState, swapTokenInfo))
               .focus(_.pending)
               .modify(_.filter(_.update =!= swapUpdate))
 
@@ -218,7 +220,7 @@ object SwapCombinerService {
               globalEpochProgress
             )
           )
-          _ <- EitherT.fromEither(
+          _ <- EitherT(
             swapValidations.newUpdateValidations(
               oldState.calculated,
               signedUpdate,
@@ -230,8 +232,8 @@ object SwapCombinerService {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(swapUpdate, lastGlobalSnapshotsAllowSpends))
           poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
-          updatedTokenInformation <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, poolId, globalEpochProgress))
           updateHashed <- EitherT.liftF(updateHashedF)
+          updatedTokenInformation <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress))
 
           liquidityPoolUpdated <- EitherT.fromEither[F](
             pricingService.getUpdatedLiquidityPoolDueNewSwap(
@@ -307,7 +309,7 @@ object SwapCombinerService {
         combinedState.foldF(
           failed =>
             updateHashedF.flatMap(hashed =>
-              handleFailedUpdate(signedUpdate, oldState, failed, swapCalculatedState, hashed.hash, NewUpdate)
+              handleFailedUpdate(signedUpdate, oldState, failed, swapCalculatedState, hashed.hash, none, NewUpdate)
             ),
           success => success.pure[F]
         )
@@ -322,27 +324,27 @@ object SwapCombinerService {
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
         val swapUpdate = pendingAllowSpend.update.value
+        val maybeSwapTokenInfo = pendingAllowSpend.pricingTokenInfo.collect {
+          case swapTokenInfo: SwapTokenInfo => swapTokenInfo
+        }
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpend(pendingAllowSpend.update, lastGlobalSnapshotsAllowSpends))
 
           result <- updateAllowSpends match {
             case Some(allowSpendToken) =>
-              val maybeSwapTokenInfo = pendingAllowSpend.pricingTokenInfo.collect {
-                case swapTokenInfo: SwapTokenInfo => swapTokenInfo
-              }
-
               for {
                 updatedTokenInformation <- EitherT.fromOption[F](
                   maybeSwapTokenInfo,
                   FailedCalculatedState(
                     MissingSwapTokenInfo(),
                     getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingAllowSpend.updateHash,
                     pendingAllowSpend.update
                   )
                 )
 
-                _ <- EitherT.fromEither[F](
+                _ <- EitherT(
                   swapValidations.pendingAllowSpendsValidations(
                     pendingAllowSpend.update,
                     globalEpochProgress,
@@ -422,6 +424,7 @@ object SwapCombinerService {
                 failed,
                 swapCalculatedState,
                 pendingAllowSpend.updateHash,
+                maybeSwapTokenInfo,
                 PendingAllowSpends
               )
             },
@@ -442,24 +445,25 @@ object SwapCombinerService {
         val swapCalculatedState = getSwapCalculatedState(oldState.calculated)
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
         val swapUpdate = pendingSpendAction.update.value
+        val maybeSwapTokenInfo = pendingSpendAction.pricingTokenInfo.collect {
+          case swapTokenInfo: SwapTokenInfo => swapTokenInfo
+        }
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           swapReference <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => SwapReference.of(signedSwapUpdate)))
-          maybeSwapTokenInfo = pendingSpendAction.pricingTokenInfo.collect {
-            case swapTokenInfo: SwapTokenInfo => swapTokenInfo
-          }
 
           updatedTokenInformation <- EitherT.fromOption[F](
             maybeSwapTokenInfo,
             FailedCalculatedState(
               MissingSwapTokenInfo(),
               getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+              pendingSpendAction.updateHash,
               pendingSpendAction.update
             )
           )
 
           sourceAddress = signedSwapUpdate.source
-          _ <- EitherT.fromEither[F](
+          _ <- EitherT(
             swapValidations.pendingSpendActionsValidation(
               signedSwapUpdate,
               globalEpochProgress
@@ -563,6 +567,7 @@ object SwapCombinerService {
                 failed,
                 swapCalculatedState,
                 pendingSpendAction.updateHash,
+                maybeSwapTokenInfo,
                 PendingSpendTransactions
               )
             },

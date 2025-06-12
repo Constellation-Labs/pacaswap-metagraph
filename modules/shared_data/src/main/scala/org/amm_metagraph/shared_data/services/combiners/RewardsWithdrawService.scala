@@ -6,17 +6,18 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.types.DataUpdates.RewardWithdrawUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -34,7 +35,8 @@ trait RewardsWithdrawService[F[_]] {
 object RewardsWithdrawService {
   def make[F[_]: Async: HasherSelector](
     rewardsConfig: ApplicationConfig.Rewards,
-    rewardWithdrawValidation: RewardWithdrawValidations[F]
+    rewardWithdrawValidation: RewardWithdrawValidations[F],
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): RewardsWithdrawService[F] =
     new RewardsWithdrawService[F] {
       def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
@@ -64,14 +66,16 @@ object RewardsWithdrawService {
                 globalEpochProgress
               )
             )
+
+            updateHashed <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => withdrawRequest.toHashed(dataUpdateCodec.serialize)))
             _ <- EitherT.liftF(logger.info(show"Received reward withdrawn request: ${withdrawRequest.value}"))
-            withdrawEpoch <- calculateWithdrawEpoch(currentMetagraphEpochProgress, withdrawRequest)
+            withdrawEpoch <- calculateWithdrawEpoch(currentMetagraphEpochProgress, withdrawRequest, updateHashed.hash)
 
             removeFromPending = currentMetagraphEpochProgress.minus(pendingClearDelay).getOrElse(EpochProgress.MinValue)
             clearedPending = calculatedState.pending.removed(removeFromPending) // clear already distributed rewards
             pendingWithdraws = clearedPending.getOrElse(withdrawEpoch, RewardInfo.empty)
             (newAvailableRewards, newPendingRewards) <-
-              moveAvailableToPending(currentMetagraphEpochProgress, availableRewards, pendingWithdraws, withdrawRequest)
+              moveAvailableToPending(currentMetagraphEpochProgress, availableRewards, pendingWithdraws, withdrawRequest, updateHashed.hash)
             newPending = clearedPending + (withdrawEpoch -> newPendingRewards)
 
             reference <- EitherT.liftF(HasherSelector[F].withCurrent(implicit hs => RewardWithdrawReference.of(withdrawRequest)))
@@ -88,11 +92,12 @@ object RewardsWithdrawService {
 
       private def calculateWithdrawEpoch(
         currentSnapshotEpochProgress: EpochProgress,
-        rewardWithdrawRequest: Signed[RewardWithdrawUpdate]
+        rewardWithdrawRequest: Signed[RewardWithdrawUpdate],
+        updateHash: Hash
       ): EitherT[F, FailedCalculatedState, EpochProgress] =
         rewardsConfig.rewardWithdrawDelay
           .plus(currentSnapshotEpochProgress)
-          .leftMap(_ => FailedCalculatedState(WrongRewardWithdrawEpoch, currentSnapshotEpochProgress, rewardWithdrawRequest))
+          .leftMap(_ => FailedCalculatedState(WrongRewardWithdrawEpoch, currentSnapshotEpochProgress, updateHash, rewardWithdrawRequest))
           .toEitherT
 
       private def handleFailedUpdate(
@@ -105,7 +110,8 @@ object RewardsWithdrawService {
         currentEpoch: EpochProgress,
         availableRewards: RewardInfo,
         pendingRewards: RewardInfo,
-        update: Signed[RewardWithdrawUpdate]
+        update: Signed[RewardWithdrawUpdate],
+        updateHash: Hash
       ) = {
         for {
           newAvailableRewards <- availableRewards.subtractReward(update.source, update.rewardType, update.amount)
@@ -113,7 +119,7 @@ object RewardsWithdrawService {
         } yield (newAvailableRewards, newPendingRewards)
       }.leftMap { e =>
         val currentAmount = availableRewards.currentAmount(update.source, update.rewardType)
-        FailedCalculatedState(RewardWithdrawAmountError(currentAmount, e.show), currentEpoch, update)
+        FailedCalculatedState(RewardWithdrawAmountError(currentAmount, e.show), currentEpoch, updateHash, update)
       }.toEitherT
     }
 }

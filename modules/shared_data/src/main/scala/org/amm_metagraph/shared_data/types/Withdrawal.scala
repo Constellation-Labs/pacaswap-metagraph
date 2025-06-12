@@ -8,6 +8,7 @@ import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.ext.crypto.RefinedHasher
 import io.constellationnetwork.ext.derevo.ordering
+import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
@@ -31,6 +32,8 @@ object Withdrawal {
 
   @derive(encoder, decoder, order, ordering)
   case class WithdrawalCalculatedStateAddress(
+    sourceAddress: Address,
+    updateHash: Hash,
     tokenAId: Option[CurrencyId],
     tokenAAmount: SwapAmount,
     tokenBId: Option[CurrencyId],

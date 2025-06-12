@@ -34,7 +34,7 @@ trait SwapValidations[F[_]] {
     signedSwapUpdate: Signed[SwapUpdate],
     state: AmmCalculatedState,
     lastSyncGlobalEpochProgress: EpochProgress
-  )(implicit hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
+  ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 
   def newUpdateValidations(
     oldState: AmmCalculatedState,
@@ -42,7 +42,7 @@ trait SwapValidations[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress,
     confirmedSwaps: SortedSet[SwapCalculatedStateValue],
     pendingSwaps: SortedSet[Signed[SwapUpdate]]
-  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 
   def pendingAllowSpendsValidations(
     signedUpdate: Signed[SwapUpdate],
@@ -50,16 +50,16 @@ trait SwapValidations[F[_]] {
     currencyId: CurrencyId,
     tokenInformation: SwapTokenInfo,
     allowSpendToken: Hashed[AllowSpend]
-  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[SwapUpdate],
     lastSyncGlobalEpochProgress: EpochProgress
-  ): Either[FailedCalculatedState, Signed[SwapUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 }
 
 object SwapValidations {
-  def make[F[_]: Async: SecurityProvider](
+  def make[F[_]: Async: SecurityProvider: HasherSelector](
     applicationConfig: ApplicationConfig,
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): SwapValidations[F] = new SwapValidations[F] {
@@ -73,7 +73,7 @@ object SwapValidations {
       signedSwapUpdate: Signed[SwapUpdate],
       state: AmmCalculatedState,
       lastSyncGlobalEpochProgress: EpochProgress
-    )(implicit hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
+    ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val liquidityPoolsCalculatedState = getConfirmedLiquidityPools(state)
       val swapUpdate = signedSwapUpdate.value
 
@@ -95,7 +95,8 @@ object SwapValidations {
           swapCalculatedState.getPendingUpdates
         )
 
-        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedSwapUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
         duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
         lastRef = lastRefValidation(swapCalculatedState, signedSwapUpdate, sourceAddress)
@@ -103,15 +104,15 @@ object SwapValidations {
 
         result =
           if (duplicatedUpdate.isInvalid) {
-            failWith(DuplicatedUpdate(swapUpdate), expireEpochProgress, signedSwapUpdate)
+            failWith(DuplicatedUpdate(swapUpdate), expireEpochProgress, signedSwapUpdate, updateHash)
           } else if (liquidityPoolExists.isInvalid) {
-            failWith(InvalidLiquidityPool(), expireEpochProgress, signedSwapUpdate)
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedSwapUpdate, updateHash)
           } else if (signatures.isInvalid) {
-            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedSwapUpdate)
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedSwapUpdate, updateHash)
           } else if (transactionAlreadyExists.isInvalid) {
-            failWith(TransactionAlreadyExists(swapUpdate), expireEpochProgress, signedSwapUpdate)
+            failWith(TransactionAlreadyExists(swapUpdate), expireEpochProgress, signedSwapUpdate, updateHash)
           } else if (lastRef.isInvalid) {
-            failWith(InvalidLastReference(), expireEpochProgress, signedSwapUpdate)
+            failWith(InvalidLastReference(), expireEpochProgress, signedSwapUpdate, updateHash)
           } else {
             signedSwapUpdate.asRight
           }
@@ -124,7 +125,7 @@ object SwapValidations {
       lastSyncGlobalEpochProgress: EpochProgress,
       confirmedSwaps: SortedSet[SwapCalculatedStateValue],
       pendingSwaps: SortedSet[Signed[SwapUpdate]]
-    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
       val allowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
@@ -133,22 +134,23 @@ object SwapValidations {
       )
 
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      def failWith(reason: FailedCalculatedStateReason): Left[FailedCalculatedState, Signed[SwapUpdate]] =
-        Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
-
-      if (allowSpendIsDuplicated.isInvalid) {
-        failWith(DuplicatedAllowSpend(signedUpdate))
-      } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate))
-      } else if (
-        confirmedSwaps.exists(swap => swap.value.allowSpendReference === signedUpdate.allowSpendReference) ||
-        pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
-      ) {
-        failWith(DuplicatedSwapRequest(signedUpdate))
-      } else {
-        signedUpdate.asRight
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (allowSpendIsDuplicated.isInvalid) {
+            failWith(DuplicatedAllowSpend(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            confirmedSwaps.exists(swap => swap.value.allowSpendReference === signedUpdate.allowSpendReference) ||
+            pendingSwaps.exists(swap => swap.allowSpendReference === signedUpdate.allowSpendReference)
+          ) {
+            failWith(DuplicatedSwapRequest(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            signedUpdate.asRight
+          }
+      } yield result
     }
 
     def pendingAllowSpendsValidations(
@@ -157,49 +159,62 @@ object SwapValidations {
       currencyId: CurrencyId,
       tokenInformation: SwapTokenInfo,
       allowSpendToken: Hashed[AllowSpend]
-    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      if (allowSpendToken.source =!= signedUpdate.source) {
-        failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (allowSpendToken.destination =!= currencyId.value) {
-        failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
-      } else if (allowSpendToken.currencyId =!= signedUpdate.swapFromPair) {
-        failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (signedUpdate.amountIn.value.value > allowSpendToken.amount.value.value) {
-        failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
-      } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
-        failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate)
-      } else if (signedUpdate.amountOutMaximum.exists(_ < tokenInformation.netReceived)) {
-        failWith(SwapHigherThanMaxAmount(), expireEpochProgress, signedUpdate)
-      } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate)
-      } else if (
-        tokenInformation.primaryTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value ||
-        tokenInformation.pairTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value
-      ) {
-        failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate)
-      } else if (
-        tokenInformation.grossReceived.value.value > applicationConfig.tokenLimits.maxTokens.value ||
-        signedUpdate.amountIn.value.value > applicationConfig.tokenLimits.maxTokens.value
-      ) {
-        failWith(SwapExceedsMaxTokensLimit(signedUpdate.value, tokenInformation.grossReceived), expireEpochProgress, signedUpdate)
-      } else {
-        Right(signedUpdate)
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (allowSpendToken.source =!= signedUpdate.source) {
+            failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendToken.destination =!= currencyId.value) {
+            failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendToken.currencyId =!= signedUpdate.swapFromPair) {
+            failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (signedUpdate.amountIn.value.value > allowSpendToken.amount.value.value) {
+            failWith(AmountGreaterThanAllowSpendLimit(allowSpendToken.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else if (tokenInformation.netReceived < signedUpdate.amountOutMinimum) {
+            failWith(SwapLessThanMinAmount(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (signedUpdate.amountOutMaximum.exists(_ < tokenInformation.netReceived)) {
+            failWith(SwapHigherThanMaxAmount(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendToken.lastValidEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(AllowSpendExpired(allowSpendToken.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            tokenInformation.primaryTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value ||
+            tokenInformation.pairTokenInformationUpdated.amount.value < applicationConfig.tokenLimits.minTokens.value
+          ) {
+            failWith(SwapWouldDrainPoolBalance(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            tokenInformation.grossReceived.value.value > applicationConfig.tokenLimits.maxTokens.value ||
+            signedUpdate.amountIn.value.value > applicationConfig.tokenLimits.maxTokens.value
+          ) {
+            failWith(
+              SwapExceedsMaxTokensLimit(signedUpdate.value, tokenInformation.grossReceived),
+              expireEpochProgress,
+              signedUpdate,
+              updateHash
+            )
+          } else {
+            Right(signedUpdate)
+          }
+      } yield result
     }
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[SwapUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
-    ): Either[FailedCalculatedState, Signed[SwapUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else {
-        signedUpdate.asRight
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            signedUpdate.asRight
+          }
+      } yield result
     }
 
     private def validateIfLiquidityPoolExists(
