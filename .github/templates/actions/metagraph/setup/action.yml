@@ -39,7 +39,7 @@ runs:
           HASH=${{ hashFiles(format('.github/templates/metagraphs/{0}/**', inputs.TEMPLATE_NAME)) }}
           echo "Template hash: $HASH"
         else
-          HASH=${{ hashFiles('modules/**', 'project/**', 'build.sbt', 'version.sbt') }}
+          HASH=${{ hashFiles('modules/**', 'project/**', 'build.sbt') }}
           echo "Project hash: $HASH"
         fi
         echo "hash=$HASH" >> $GITHUB_OUTPUT
