@@ -171,7 +171,7 @@ object LiquidityPoolCombinerService {
             pendingLps.toList.traverse(pendingLp => buildLiquidityPoolUniqueIdentifier(pendingLp.tokenAId, pendingLp.tokenBId))
           )
           updateHashed <- EitherT.liftF(updateHashedF)
-          _ <- EitherT.fromEither(
+          _ <- EitherT(
             liquidityPoolValidations.newUpdateValidations(
               oldState.calculated,
               poolId,
@@ -252,7 +252,7 @@ object LiquidityPoolCombinerService {
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
-                _ <- EitherT.fromEither[F](
+                _ <- EitherT(
                   liquidityPoolValidations.pendingAllowSpendsValidations(
                     pendingAllowSpendUpdate.update,
                     globalEpochProgress,
@@ -346,7 +346,7 @@ object LiquidityPoolCombinerService {
           poolId <- EitherT.liftF(
             buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.tokenAId, signedLiquidityPoolUpdate.tokenBId)
           )
-          _ <- EitherT.fromEither[F](
+          _ <- EitherT(
             liquidityPoolValidations.pendingSpendActionsValidation(
               signedLiquidityPoolUpdate,
               globalEpochProgress
@@ -374,6 +374,7 @@ object LiquidityPoolCombinerService {
               val initialFeeShares: NonNegLong = 0L.toNonNegLongUnsafe
 
               val liquidityPool = LiquidityPool(
+                pendingSpendAction.updateHash,
                 poolId,
                 TokenInformation(
                   liquidityPoolUpdate.tokenAId,

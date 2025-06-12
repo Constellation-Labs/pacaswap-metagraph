@@ -10,10 +10,11 @@ import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
-import org.amm_metagraph.shared_data.types.DataUpdates.RewardWithdrawUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, FailedCalculatedState, RewardWithdrawCalculatedState}
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations.{failWith, signatureValidations}
 
@@ -27,8 +28,9 @@ trait RewardWithdrawValidations[F[_]] {
 }
 
 object RewardWithdrawValidations {
-  def make[F[_]: Async: SecurityProvider](
-    applicationConfig: ApplicationConfig
+  def make[F[_]: Async: SecurityProvider: HasherSelector](
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): RewardWithdrawValidations[F] =
     new RewardWithdrawValidations[F] {
       override def rewardWithdrawValidationL1(rewardWithdrawUpdate: RewardWithdrawUpdate): F[DataApplicationValidationErrorOr[Unit]] =
@@ -49,13 +51,26 @@ object RewardWithdrawValidations {
           amount = amountValidation(availableRewards, signedRewardWithdrawUpdate)
           expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
+          hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedRewardWithdrawUpdate.toHashed(dataUpdateCodec.serialize))
+          updateHash = hashedUpdate.hash
+
           result =
             if (signatures.isInvalid) {
-              failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedRewardWithdrawUpdate)
+              failWith(
+                InvalidSignatures(signatures.map(_.show).mkString_(",")),
+                expireEpochProgress,
+                signedRewardWithdrawUpdate,
+                updateHash
+              )
             } else if (lastRef.isInvalid) {
-              failWith(InvalidLastReference(), expireEpochProgress, signedRewardWithdrawUpdate)
+              failWith(InvalidLastReference(), expireEpochProgress, signedRewardWithdrawUpdate, updateHash)
             } else if (amount.isInvalid) {
-              failWith(InvalidWithdrawalAmount(signedRewardWithdrawUpdate.value), expireEpochProgress, signedRewardWithdrawUpdate)
+              failWith(
+                InvalidWithdrawalAmount(signedRewardWithdrawUpdate.value),
+                expireEpochProgress,
+                signedRewardWithdrawUpdate,
+                updateHash
+              )
             } else {
               signedRewardWithdrawUpdate.asRight
             }

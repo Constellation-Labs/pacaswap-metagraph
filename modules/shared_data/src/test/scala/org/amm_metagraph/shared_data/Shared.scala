@@ -10,6 +10,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.hex.Hex
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.signature.signature.{Signature, SignatureProof}
@@ -83,6 +84,7 @@ object Shared {
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
 
     val liquidityPool = LiquidityPool(
+      Hash.empty,
       poolId,
       tokenA,
       tokenB,

@@ -21,12 +21,12 @@ import monocle.Monocle._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
-import org.amm_metagraph.shared_data.types.DataUpdates.RewardWithdrawUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.RewardWithdrawValidations
 import weaver.MutableIOSuite
 
@@ -66,8 +66,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations, jsonBase64BinaryCodec).pure[IO]
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
         RewardWithdrawUpdate(
@@ -107,8 +108,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations, jsonBase64BinaryCodec).pure[IO]
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
         RewardWithdrawUpdate(CurrencyId(ownerAddress), a1, RewardWithdrawReference.empty, requestedRewardType, requestAmount)
@@ -142,8 +144,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations, jsonBase64BinaryCodec).pure[IO]
       reference = RewardWithdrawReference.empty
 
       rewardWithdrawUpdate = getFakeSignedUpdate(
@@ -192,8 +195,9 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         ownerAddress
       )
 
-      rewardsValidations = RewardWithdrawValidations.make[IO](config)
-      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations).pure[IO]
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawService <- RewardsWithdrawService.make(Shared.config.rewards, rewardsValidations, jsonBase64BinaryCodec).pure[IO]
       reference1 = RewardWithdrawReference.empty
 
       rewardWithdrawUpdate1 = getFakeSignedUpdate(

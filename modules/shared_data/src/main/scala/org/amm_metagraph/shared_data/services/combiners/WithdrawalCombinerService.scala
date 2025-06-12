@@ -110,6 +110,7 @@ object WithdrawalCombinerService {
 
       private def rollbackAmountInLPs(
         signedUpdate: Signed[WithdrawalUpdate],
+        updateHash: Hash,
         lastSyncGlobalSnapshotEpoch: EpochProgress,
         maybePricingTokenInfo: Option[PricingTokenInfo],
         oldState: DataState[AmmOnChainState, AmmCalculatedState]
@@ -132,6 +133,7 @@ object WithdrawalCombinerService {
             updatedLiquidityPool <- EitherT.fromEither(
               pricingService.rollbackWithdrawalLiquidityPoolAmounts(
                 signedUpdate,
+                updateHash,
                 lastSyncGlobalSnapshotEpoch,
                 liquidityPool,
                 tokenAAmount,
@@ -186,6 +188,7 @@ object WithdrawalCombinerService {
           withdrawalAmounts <- EitherT.fromEither[F](
             pricingService.calculateWithdrawalAmounts(
               signedUpdate,
+              updateHashed.hash,
               liquidityPool,
               globalEpochProgress
             )
@@ -194,13 +197,14 @@ object WithdrawalCombinerService {
           updatedPool <- EitherT.fromEither[F](
             pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
               signedUpdate,
+              updateHashed.hash,
               liquidityPool,
               withdrawalAmounts,
               globalEpochProgress
             )
           )
 
-          _ <- EitherT.fromEither(
+          _ <- EitherT(
             withdrawalValidations.newUpdateValidations(
               signedUpdate,
               withdrawalAmounts,
@@ -290,7 +294,7 @@ object WithdrawalCombinerService {
               oldState.pure[F]
             } else {
               val processingState = for {
-                _ <- EitherT.fromEither(
+                _ <- EitherT(
                   withdrawalValidations.pendingSpendActionsValidation(
                     signedWithdrawalUpdate,
                     globalEpochProgress
@@ -310,11 +314,14 @@ object WithdrawalCombinerService {
                   FailedCalculatedState(
                     MissingWithdrawalsAmount(),
                     getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingSpendAction.updateHash,
                     pendingSpendAction.update
                   )
                 )
 
                 withdrawalCalculatedStateAddress = WithdrawalCalculatedStateAddress(
+                  withdrawalUpdate.source,
+                  pendingSpendAction.updateHash,
                   withdrawalUpdate.tokenAId,
                   withdrawalAmounts.tokenAAmount,
                   withdrawalUpdate.tokenBId,
@@ -378,6 +385,7 @@ object WithdrawalCombinerService {
                 failed =>
                   rollbackAmountInLPs(
                     pendingSpendAction.update,
+                    pendingSpendAction.updateHash,
                     globalEpochProgress,
                     pendingSpendAction.pricingTokenInfo,
                     oldState

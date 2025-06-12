@@ -31,10 +31,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                data:
-                  $ref: './components.yml#/components/schemas/SwapQuoteRequest'
+              $ref: './components.yml#/components/schemas/SwapQuoteRequest'
       responses:
         200:
           description: Successful response
@@ -48,17 +45,17 @@ paths:
           description: Token pair not found
         500:
           description: Internal server error
-  /swaps/{allowSpendHash}:
+  /swaps/{swapHash}/state:
     get:
       tags:
         - Swap
       summary: Get swap details
-      description: Retrieve swap information by allowSpendHash. Returns both pending and confirmed swaps.
+      description: Retrieve swap information by swap hash.
       parameters:
-        - name: allowSpendHash
+        - name: swapHash
           in: path
           required: true
-          description: Hash of the allow spend transaction
+          description: Hash of the swap data update
           schema:
             type: string
       responses:
@@ -70,7 +67,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: './components.yml#/components/schemas/Swap'
+                    $ref: './components.yml#/components/schemas/SwapStateResponse'
         404:
           description: Swap not found
   /liquidity-pools:
@@ -95,6 +92,24 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: address
+          in: query
+          description: Address with pool shares
+          example: 'DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL'
+          schema:
+            type: string
+        - name: tokenId
+          in: query
+          description: Pools with tokenId
+          schema:
+            type: string
+          examples:
+            DAG:
+              summary: Native DAG token
+              value: "DAG"
+            DAGAddress:
+              summary: Token represented by a DAG address
+              value: "DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL"
       responses:
         200:
           description: Successful response
@@ -182,6 +197,31 @@ paths:
                         minimum: 0
         404:
           description: Liquidity pool not found
+  /liquidity-pools/{lpHash}/state:
+    get:
+      tags:
+        - LPs
+      summary: Get liquidity pool update details
+      description: Retrieve liquidity pool update information by lp hash.
+      parameters:
+        - name: lpHash
+          in: path
+          required: true
+          description: Hash of the lp data update
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LiquidityPoolStateResponse'
+        404:
+          description: LP not found
   /addresses/{address}/vote-info:
     get:
       tags:
@@ -278,6 +318,33 @@ paths:
                 properties:
                   data:
                     $ref: './components.yml#/components/schemas/WithdrawalReference'
+
+  /withdrawals/{withdrawalHash}/state:
+    get:
+      tags:
+        - Withdrawals
+      summary: Get withdrawal update details
+      description: Retrieve withdrawal update information by withdrawal hash.
+      parameters:
+        - name: withdrawalHash
+          in: path
+          required: true
+          description: Hash of the withdrawal data update
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/WithdrawalStateResponse'
+        404:
+          description: Withdrawal not found
+
   /governance/allocations/rewards:
     get:
       tags:
@@ -317,3 +384,28 @@ paths:
                 properties:
                   data:
                     $ref: './components.yml#/components/schemas/LastReference'
+  /stakings/{stakingHash}/state:
+    get:
+      tags:
+        - Staking
+      summary: Get staking update details
+      description: Retrieve staking update information by staking hash.
+      parameters:
+        - name: stakingHash
+          in: path
+          required: true
+          description: Hash of the staking data update
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/StakingStateResponse'
+        404:
+          description: Staking not found

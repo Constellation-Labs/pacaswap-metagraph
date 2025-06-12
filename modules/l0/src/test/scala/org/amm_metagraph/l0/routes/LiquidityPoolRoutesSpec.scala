@@ -23,6 +23,7 @@ import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import weaver.MutableIOSuite
 
 object LiquidityPoolRoutesSpec extends MutableIOSuite {
@@ -52,9 +53,11 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+      implicit0(hs: HasherSelector[IO]) = res._2
+
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
-      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(paginationParams, none)
+      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(paginationParams, none, none, shouldSearchDAG = false)
     } yield
       expect.all(
         liquidityPools.size === 1,
@@ -76,11 +79,14 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+      implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
       (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(
         paginationParams,
-        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb").some
+        Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb").some,
+        none,
+        false
       )
     } yield
       expect.all(
@@ -102,13 +108,68 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
       pricingService = PricingService.make[IO](config, calculatedStateService)
+      implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
-      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(paginationParams, ownerAddress.some)
+      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(paginationParams, ownerAddress.some, none, shouldSearchDAG = false)
     } yield
       expect.all(
         liquidityPools.size === 1,
         liquidityPools.head.poolId === liquidityPoolCalculatedState.confirmed.value.head._2.poolId.value
+      )
+  }
+
+  test("Should return LP when provide the tokenId") { implicit res =>
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammCalculatedState = AmmCalculatedState(
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    for {
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      implicit0(hs: HasherSelector[IO]) = res._2
+      liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
+      paginationParams = PaginationParams(10, 0)
+      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(
+        paginationParams,
+        none,
+        primaryToken.identifier.map(_.value),
+        shouldSearchDAG = false
+      )
+    } yield
+      expect.all(
+        liquidityPools.size === 1,
+        liquidityPools.head.poolId === liquidityPoolCalculatedState.confirmed.value.head._2.poolId.value
+      )
+  }
+
+  test("Should not return when providing DAG") { implicit res =>
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammCalculatedState = AmmCalculatedState(
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+
+    for {
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      implicit0(hs: HasherSelector[IO]) = res._2
+      liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
+      paginationParams = PaginationParams(10, 0)
+      (liquidityPools, _) <- liquidityPoolRoutes.getLiquidityPools(paginationParams, none, none, shouldSearchDAG = true)
+    } yield
+      expect.all(
+        liquidityPools.size === 0
       )
   }
 }

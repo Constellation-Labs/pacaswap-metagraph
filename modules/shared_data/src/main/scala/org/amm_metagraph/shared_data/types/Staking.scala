@@ -31,6 +31,8 @@ object Staking {
 
   @derive(encoder, decoder)
   case class StakingCalculatedStateAddress(
+    sourceAddress: Address,
+    updateHash: Hash,
     tokenAAllowSpend: Hash,
     tokenBAllowSpend: Hash,
     tokenA: TokenInformation,

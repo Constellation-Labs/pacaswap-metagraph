@@ -32,7 +32,7 @@ trait StakingValidations[F[_]] {
     signedStakingUpdate: Signed[StakingUpdate],
     state: AmmCalculatedState,
     lastSyncGlobalEpochProgress: EpochProgress
-  )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
+  ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 
   def newUpdateValidations(
     oldState: AmmCalculatedState,
@@ -40,7 +40,7 @@ trait StakingValidations[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress,
     confirmedStakings: SortedSet[StakingCalculatedStateValue],
     pendingStakings: SortedSet[Signed[StakingUpdate]]
-  ): Either[FailedCalculatedState, Signed[StakingUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 
   def pendingAllowSpendsValidations(
     signedUpdate: Signed[StakingUpdate],
@@ -49,16 +49,16 @@ trait StakingValidations[F[_]] {
     tokenInformation: StakingTokenInformation,
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
-  ): Either[FailedCalculatedState, Signed[StakingUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[StakingUpdate],
     lastSyncGlobalEpochProgress: EpochProgress
-  ): Either[FailedCalculatedState, Signed[StakingUpdate]]
+  ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 }
 
 object StakingValidations {
-  def make[F[_]: Async](
+  def make[F[_]: Async: SecurityProvider: HasherSelector](
     applicationConfig: ApplicationConfig,
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): StakingValidations[F] = new StakingValidations[F] {
@@ -72,7 +72,7 @@ object StakingValidations {
       signedStakingUpdate: Signed[StakingUpdate],
       state: AmmCalculatedState,
       lastSyncGlobalEpochProgress: EpochProgress
-    )(implicit sp: SecurityProvider[F], hasherSelector: HasherSelector[F]): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
+    ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val stakingUpdate = signedStakingUpdate.value
 
       val stakingCalculatedState = getStakingCalculatedState(state)
@@ -96,23 +96,23 @@ object StakingValidations {
           liquidityPoolsCalculatedState
         )
 
-        hashedUpdate <- hasherSelector.withCurrent(implicit hs => signedStakingUpdate.toHashed(dataUpdateCodec.serialize))
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedStakingUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
         duplicatedUpdate = validateDuplicatedUpdate(state, hashedUpdate)
 
         lastRef = lastRefValidation(stakingCalculatedState, signedStakingUpdate, sourceAddress)
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
         result =
           if (duplicatedUpdate.isInvalid) {
-            failWith(DuplicatedUpdate(stakingUpdate), expireEpochProgress, signedStakingUpdate)
+            failWith(DuplicatedUpdate(stakingUpdate), expireEpochProgress, signedStakingUpdate, updateHash)
           } else if (liquidityPoolExists.isInvalid) {
-            failWith(InvalidLiquidityPool(), expireEpochProgress, signedStakingUpdate)
+            failWith(InvalidLiquidityPool(), expireEpochProgress, signedStakingUpdate, updateHash)
           } else if (signatures.isInvalid) {
-            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedStakingUpdate)
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, signedStakingUpdate, updateHash)
           } else if (transactionAlreadyExists.isInvalid) {
-            failWith(TransactionAlreadyExists(stakingUpdate), expireEpochProgress, signedStakingUpdate)
+            failWith(TransactionAlreadyExists(stakingUpdate), expireEpochProgress, signedStakingUpdate, updateHash)
           } else if (lastRef.isInvalid) {
-            failWith(InvalidLastReference(), expireEpochProgress, signedStakingUpdate)
+            failWith(InvalidLastReference(), expireEpochProgress, signedStakingUpdate, updateHash)
           } else {
             signedStakingUpdate.asRight
           }
@@ -125,7 +125,7 @@ object StakingValidations {
       lastSyncGlobalEpochProgress: EpochProgress,
       confirmedStakings: SortedSet[StakingCalculatedStateValue],
       pendingStakings: SortedSet[Signed[StakingUpdate]]
-    ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val allAllowSpendsInUse = getAllAllowSpendsInUseFromState(oldState)
 
       val tokenAAllowSpendIsDuplicated = validateIfAllowSpendsAreDuplicated(
@@ -144,16 +144,20 @@ object StakingValidations {
       )
 
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
-
-      if (tokenAAllowSpendIsDuplicated.isInvalid || tokenBAllowSpendIsDuplicated.isInvalid) {
-        failWith(DuplicatedAllowSpend(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (isDuplicated) {
-        failWith(DuplicatedStakingRequest(signedUpdate), expireEpochProgress, signedUpdate)
-      } else {
-        signedUpdate.asRight
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (tokenAAllowSpendIsDuplicated.isInvalid || tokenBAllowSpendIsDuplicated.isInvalid) {
+            failWith(DuplicatedAllowSpend(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (isDuplicated) {
+            failWith(DuplicatedStakingRequest(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            signedUpdate.asRight
+          }
+      } yield result
     }
 
     def pendingAllowSpendsValidations(
@@ -163,7 +167,7 @@ object StakingValidations {
       tokenInformation: StakingTokenInformation,
       allowSpendTokenA: Hashed[AllowSpend],
       allowSpendTokenB: Hashed[AllowSpend]
-    ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
       val (tokenA, tokenB) = if (tokenInformation.primaryTokenInformation.identifier == allowSpendTokenA.currencyId) {
@@ -173,38 +177,48 @@ object StakingValidations {
       }
       val allowSpendDelay = applicationConfig.allowSpendEpochBufferDelay.value.value
 
-      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
-        failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
-        failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate)
-      } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
-        failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate)
-      } else if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
-        failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
-      } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
-        failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
-      } else if (allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
-        failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate)
-      } else if (allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
-        failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate)
-      } else {
-        Right(signedUpdate)
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendTokenA.source =!= signedUpdate.source || allowSpendTokenB.source =!= signedUpdate.source) {
+            failWith(SourceAddressBetweenUpdateAndAllowSpendDifferent(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendTokenA.destination =!= currencyId.value || allowSpendTokenB.destination =!= currencyId.value) {
+            failWith(AllowSpendsDestinationAddressInvalid(), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendTokenA.currencyId =!= signedUpdate.tokenAId || allowSpendTokenB.currencyId =!= signedUpdate.tokenBId) {
+            failWith(InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (tokenA.amount.value > allowSpendTokenA.amount.value.value) {
+            failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
+            failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+            failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else if (allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+            failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            Right(signedUpdate)
+          }
+      } yield result
     }
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[StakingUpdate],
       lastSyncGlobalEpochProgress: EpochProgress
-    ): Either[FailedCalculatedState, Signed[StakingUpdate]] = {
+    ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
-      if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
-        failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate)
-      } else {
-        signedUpdate.asRight
-      }
+      for {
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+        result =
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else {
+            signedUpdate.asRight
+          }
+      } yield result
     }
 
     private def validateIfTransactionAlreadyExists(

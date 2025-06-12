@@ -32,9 +32,10 @@ object SharedValidations {
   def failWith[A <: AmmUpdate](
     reason: FailedCalculatedStateReason,
     expireEpochProgress: EpochProgress,
-    signedUpdate: Signed[A]
+    signedUpdate: Signed[A],
+    updateHash: Hash
   ): Left[FailedCalculatedState, Signed[A]] =
-    Left(FailedCalculatedState(reason, expireEpochProgress, signedUpdate))
+    Left(FailedCalculatedState(reason, expireEpochProgress, updateHash, signedUpdate))
 
   def signatureValidations[F[_]: Async: SecurityProvider, A](
     signed: Signed[A],

@@ -12,10 +12,11 @@ import io.constellationnetwork.security.signature.Signed
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
-import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardAllocationVoteUpdate}
 import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWeight, maxCredits}
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SharedValidations._
 
@@ -32,8 +33,9 @@ trait GovernanceValidations[F[_]] {
 }
 
 object GovernanceValidations {
-  def make[F[_]: Async](
-    applicationConfig: ApplicationConfig
+  def make[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): GovernanceValidations[F] = new GovernanceValidations[F] {
     def l1Validations(
       rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
@@ -70,17 +72,30 @@ object GovernanceValidations {
         )
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalSnapshotEpochProgress)
 
+        hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => rewardAllocationVoteUpdate.toHashed(dataUpdateCodec.serialize))
+        updateHash = hashedUpdate.hash
+
         result =
           if (lastTransactionRef.isInvalid) {
-            failWith(InvalidLastReference(), expireEpochProgress, rewardAllocationVoteUpdate)
+            failWith(InvalidLastReference(), expireEpochProgress, rewardAllocationVoteUpdate, updateHash)
           } else if (signatures.isInvalid) {
-            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, rewardAllocationVoteUpdate)
+            failWith(InvalidSignatures(signatures.map(_.show).mkString_(",")), expireEpochProgress, rewardAllocationVoteUpdate, updateHash)
           } else if (dailyLimitAllocation.isInvalid) {
-            failWith(GovernanceDailyLimitAllocation(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+            failWith(
+              GovernanceDailyLimitAllocation(rewardAllocationVoteUpdate.value),
+              expireEpochProgress,
+              rewardAllocationVoteUpdate,
+              updateHash
+            )
           } else if (walletHasVotingWeight.isInvalid) {
-            failWith(GovernanceWalletWithNoVotingWeight(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+            failWith(
+              GovernanceWalletWithNoVotingWeight(rewardAllocationVoteUpdate.value),
+              expireEpochProgress,
+              rewardAllocationVoteUpdate,
+              updateHash
+            )
           } else if (isValidId.isInvalid) {
-            failWith(GovernanceInvalidVoteId(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate)
+            failWith(GovernanceInvalidVoteId(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate, updateHash)
           } else {
             rewardAllocationVoteUpdate.asRight
           }

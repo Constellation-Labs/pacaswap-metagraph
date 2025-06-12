@@ -114,8 +114,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       validationService = ValidationService.make[IO](
         config,
@@ -159,8 +159,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       validationService = ValidationService.make[IO](
         config,
@@ -225,8 +225,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       validationService = ValidationService.make[IO](
         config,
@@ -283,8 +283,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       validationService = ValidationService.make[IO](
         config,
@@ -382,8 +382,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
       swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
-      governanceValidations = GovernanceValidations.make[IO](config)
-      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
       validationService = ValidationService.make[IO](
         config,

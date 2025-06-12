@@ -192,9 +192,9 @@ components:
           type: integer
           description: Total number of LP shares
 
-    Swap:
+    SwapStateResponse:
       type: object
-      description: Information about a swap operation
+      description: Information about a swap data update operation
       properties:
         sourceAddress:
           type: string
@@ -206,23 +206,119 @@ components:
         swapToPair:
           type: string
           description: Destination token currency ID
-        allowSpendReference:
-          type: string
-          description: Allow spend hash reference
-        minAmount:
+        amountIn:
           type: integer
-          description: Minimum swap amount
-        maxAmount:
+          description: The amount of tokens in
+        amountOutGross:
           type: integer
-          description: Maximum swap amount
-        maxValidGsEpochProgress:
+          description: The gross out amount
+        amountOutNet:
           type: integer
-          description: Maximum valid global snapshot epoch progress
+          description: The net out amount
+        amountOutMinimum:
+          type: integer
+          description: The amount out minimum provided on the data update
+        amountOutMaximum:
+          type: integer
+          description: The amount out maximum provided on the data update
         state:
           type: string
-          description: Current state of the swap
-          enum: [Pending, Confirmed, Failed]
+          description: Current state of the swap update
+          enum: [PendingAllowSpends, PendingSpendTransactions, Confirmed, Failed]
 
+    LiquidityPoolStateResponse:
+      type: object
+      description: Information about a lp data update operation
+      properties:
+        owner:
+          type: string
+          description: Address that created the pool
+          example: 'DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL'
+        tokenAId:
+          type: string
+          description: Token A currency ID
+        tokenBId:
+          type: string
+          description: Token B currency ID
+        tokenAAmount:
+          type: integer
+          description: Token A amount
+        tokenBAmount:
+          type: integer
+          description: Token B amount
+        poolFees:
+          type: object
+          description: The net out amount
+          properties:
+            total:
+              type: number
+              description: Total fees of the pool
+            providers:
+              type: number
+              description: Providers fees of the pool
+            operators:
+              type: number
+              description: Operators fees of the pool
+        state:
+          type: string
+          description: Current state of the liquidity pool update
+          enum: [PendingAllowSpends, PendingSpendTransactions, Confirmed, Failed]
+
+    StakingStateResponse:
+      type: object
+      description: Information about a staking data update operation
+      properties:
+        sourceAddress:
+          type: string
+          description: Address that created the stake
+          example: 'DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL'
+        tokenAId:
+          type: string
+          description: Token A currency ID
+        tokenBId:
+          type: string
+          description: Token B currency ID
+        tokenAAmount:
+          type: integer
+          description: Token A amount
+        state:
+          type: string
+          description: Current state of the staking update
+          enum: [PendingAllowSpends, PendingSpendTransactions, Confirmed, Failed]
+
+    WithdrawalStateResponse:
+      type: object
+      description: Information about a staking data update operation
+      properties:
+        sourceAddress:
+          type: string
+          description: Address that created the withdrawal
+          example: 'DAGaa99YgUGKQef92D34FGRBGnAiKUBoEmjNoIrL'
+        tokenAId:
+          type: string
+          description: Token A currency ID
+        tokenBId:
+          type: string
+          description: Token B currency ID
+        shareToWithdraw:
+          type: number
+          description: Share to withdrawal
+        minAmountAOut:
+          type: number
+          description: Min amount token A out
+        minAmountBOut:
+          type: number
+          description: Min amount token B out
+        maxAmountAOut:
+          type: number
+          description: Max amount token A out
+        maxAmountBOut:
+          type: number
+          description: Max amount token B out
+        state:
+          type: string
+          description: Current state of the withdrawal update
+          enum: [PendingAllowSpends, PendingSpendTransactions, Confirmed, Failed]
     VoteInfo:
       type: object
       description: Voting information for an address
