@@ -8,6 +8,8 @@ ThisBuild / scalaVersion := "2.13.16"
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / scalafixDependencies += Libraries.organizeImports
 
+enablePlugins(GitVersioningPlugin)
+
 ThisBuild / assemblyMergeStrategy := {
   case "logback.xml"                                       => MergeStrategy.first
   case x if x.contains("io.netty.versions.properties")     => MergeStrategy.discard
@@ -27,7 +29,10 @@ lazy val commonTestSettings = Seq(
     Libraries.weaverDiscipline,
     Libraries.weaverScalaCheck,
     Libraries.catsEffectTestkit
-  ).map(_ % Test)
+  ).map(_ % Test),
+  resolvers ++= List(
+    Resolver.bintrayRepo("rallyhealth", "sbt-plugins")
+  )
 )
 
 lazy val root = (project in file("."))
