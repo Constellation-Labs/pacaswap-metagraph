@@ -462,6 +462,9 @@ components:
         rate:
           type: number
           description: Exchange rate between the tokens (toToken per fromToken)
+        slippagePercent:
+          type: number
+          description: The swap slippage percent
         priceImpactPercent:
           type: integer
           description: Estimated price impact of the swap as a percentage
@@ -471,6 +474,35 @@ components:
         minimumReceived:
           type: integer
           description: Minimum amount of toToken to be received given slippage
+
+    SwapQuoteReverse:
+      type: object
+      description: Quote information for a swap
+      properties:
+        fromTokenId:
+          type: string
+          description: Source token currency ID
+        toTokenId:
+          type: string
+          description: Destination token currency ID
+        desiredOutputAmount:
+          type: integer
+          description: Amount of desired toToken to swap
+        rate:
+          type: number
+          description: Exchange rate between the tokens (toToken per fromToken)
+        slippagePercent:
+          type: number
+          description: The swap slippage percent
+        priceImpactPercent:
+          type: integer
+          description: Estimated price impact of the swap as a percentage
+        requiredInputAmount:
+          type: integer
+          description: The input amount required for swap
+        maxInputRequired:
+          type: integer
+          description: The maximum input required for the swap
 
     Pagination:
       type: object

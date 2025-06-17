@@ -4,32 +4,24 @@ import cats.data.{Validated, ValidatedNec}
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.util.Try
-
 import io.constellationnetwork.ext.http4s.{AddressVar, HashVar}
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
-import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
-import io.constellationnetwork.security.signature.Signed
 
-import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import enumeratum.{Enum, EnumEntry}
 import io.circe.generic.auto._
-import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate, WithdrawalUpdate}
+import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
-import org.amm_metagraph.shared_data.types.Withdrawal.getWithdrawalCalculatedState
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
@@ -260,6 +252,39 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
         BadRequest(ErrorResponse(errors.toList.mkString(", ")))
     }
 
+  private def handleReverseSwapQuote(
+    request: SwapQuoteRequest
+  ): F[Response[F]] =
+    SwapQuoteRequestValidator.validate(request) match {
+      case Validated.Valid(_) =>
+        for {
+          calculatedState <- calculatedStateService.get
+          liquidityPoolState = getLiquidityPoolCalculatedState(calculatedState.state)
+          validatedWithState <- SwapQuoteRequestValidator.validateWithState(request, liquidityPoolState)
+          result <- validatedWithState match {
+            case Validated.Valid(_) =>
+              for {
+                maybeQuote <- pricingService.getReverseSwapQuote(
+                  request.fromTokenId,
+                  request.toTokenId,
+                  request.amount,
+                  request.slippagePercent
+                )
+                response <- maybeQuote match {
+                  case Right(quote) => Ok(SingleResponse(quote))
+                  case Left(error)  => BadRequest(ErrorResponse(error))
+                }
+              } yield response
+
+            case Validated.Invalid(errors) =>
+              BadRequest(ErrorResponse(errors.toList.mkString(", ")))
+          }
+        } yield result
+
+      case Validated.Invalid(errors) =>
+        BadRequest(ErrorResponse(errors.toList.mkString(", ")))
+    }
+
   private def getLastSwapReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
       val maybeRef = for {
@@ -278,6 +303,11 @@ case class SwapRoutes[F[_]: Async: HasherSelector](
       for {
         swapQuoteRequest <- req.as[SwapQuoteRequest]
         response <- handleSwapQuote(swapQuoteRequest)
+      } yield response
+    case req @ POST -> Root / "swap" / "quote" / "reverse" =>
+      for {
+        swapQuoteRequest <- req.as[SwapQuoteRequest]
+        response <- handleReverseSwapQuote(swapQuoteRequest)
       } yield response
     case GET -> Root / "addresses" / AddressVar(address) / "swaps" / "last-reference" => getLastSwapReference(address)
   }

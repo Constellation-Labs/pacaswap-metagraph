@@ -76,6 +76,18 @@ object Swap {
     minimumReceived: BigInt
   )
 
+  @derive(encoder, decoder)
+  case class ReverseSwapQuote(
+    fromTokenId: Option[CurrencyId],
+    toTokenId: Option[CurrencyId],
+    desiredOutputAmount: Amount,
+    slippagePercent: Percentage,
+    rate: BigDecimal,
+    priceImpactPercent: BigDecimal,
+    requiredInputAmount: BigInt,
+    maxInputRequired: Long
+  )
+
   @derive(decoder, encoder, order, ordering)
   case class SwapReference(ordinal: SwapOrdinal, hash: Hash)
 

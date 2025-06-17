@@ -28,7 +28,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.PoolShares.toPendingFee
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingTokenInformation
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.Swap.SwapQuote
+import org.amm_metagraph.shared_data.types.Swap.{ReverseSwapQuote, SwapQuote}
 import org.amm_metagraph.shared_data.validations.Errors._
 
 trait PricingService[F[_]] {
@@ -38,6 +38,13 @@ trait PricingService[F[_]] {
     amount: Amount,
     slippagePercent: Percentage
   ): F[Either[String, SwapQuote]]
+
+  def getReverseSwapQuote(
+    fromTokenId: Option[CurrencyId],
+    toTokenId: Option[CurrencyId],
+    desiredOutputAmount: Amount,
+    slippagePercent: Percentage
+  ): F[Either[String, ReverseSwapQuote]]
 
   def getLiquidityPoolPrices(poolId: PoolId): F[Either[String, (Long, Long)]]
 
@@ -128,6 +135,16 @@ object PricingService {
       estimatedReceivedAfterFee: BigInt
     )
 
+    case class InputRequiredAndReserves(
+      requiredInputAmount: BigInt,
+      newInputReserveBeforeFee: BigInt,
+      newOutputReserveBeforeFee: BigInt,
+      outputBeforeFee: BigInt,
+      newInputReserveAfterFee: BigInt,
+      newOutputReserveAfterFee: BigInt,
+      actualOutputAfterFee: BigInt
+    )
+
     new PricingService[F] {
       private def getConfirmedLiquidityPools =
         calculatedStateService.get.map(calculatedState => getLiquidityPoolCalculatedState(calculatedState.state))
@@ -172,6 +189,71 @@ object PricingService {
             estimatedReceivedAfterFee
           )
 
+      private def calculateReverseReservesAndReceived(
+        pool: LiquidityPool,
+        fromTokenId: Option[CurrencyId],
+        desiredOutputAmount: Amount
+      ): Either[String, InputRequiredAndReserves] =
+        for {
+          (inputToken, outputToken) <- fromTokenId match {
+            case id if id === pool.tokenA.identifier => Right((pool.tokenA, pool.tokenB))
+            case id if id === pool.tokenB.identifier => Right((pool.tokenB, pool.tokenA))
+            case _                                   => Left("Invalid token pair for swap")
+          }
+
+          inputReserve = BigInt(inputToken.amount.value)
+          outputReserve = BigInt(outputToken.amount.value)
+
+          _ <- Either.cond(
+            inputReserve > 0 && outputReserve > 0,
+            (),
+            "Insufficient liquidity in the pool"
+          )
+
+          desiredOutputBigInt = BigInt(desiredOutputAmount.value.value)
+
+          _ <- Either.cond(
+            desiredOutputBigInt < outputReserve,
+            (),
+            "Desired output amount exceeds available liquidity"
+          )
+
+          totalFeeDecimal = pool.poolFees.total
+          outputBeforeFeeDecimal = desiredOutputBigInt.toBigDecimal / (BigDecimal(1) - totalFeeDecimal)
+          outputBeforeFee = outputBeforeFeeDecimal.toBigInt
+          totalFeeAmount = outputBeforeFee - desiredOutputBigInt
+
+          newOutputReserveBeforeFee = outputReserve - outputBeforeFee
+
+          _ <- Either.cond(
+            newOutputReserveBeforeFee > 0,
+            (),
+            "Required output would drain the pool"
+          )
+
+          newInputReserveBeforeFee = pool.k / newOutputReserveBeforeFee
+          requiredInputAmount = newInputReserveBeforeFee - inputReserve
+
+          _ <- Either.cond(
+            requiredInputAmount > 0,
+            (),
+            "Invalid calculation: negative input required"
+          )
+
+          newInputReserveAfterFee = newInputReserveBeforeFee
+          newOutputReserveAfterFee = newOutputReserveBeforeFee + totalFeeAmount
+
+        } yield
+          InputRequiredAndReserves(
+            requiredInputAmount,
+            newInputReserveBeforeFee,
+            newOutputReserveBeforeFee,
+            outputBeforeFee,
+            newInputReserveAfterFee,
+            newOutputReserveAfterFee,
+            desiredOutputBigInt
+          )
+
       private def calculateSwapQuote(
         pool: LiquidityPool,
         fromTokenId: Option[CurrencyId],
@@ -214,6 +296,71 @@ object PricingService {
             estimatedReceived = reservesAndReceived.estimatedReceivedAfterFee,
             minimumReceived = minimumReceived
           )
+
+      private def calculateReverseSwapQuote(
+        pool: LiquidityPool,
+        fromTokenId: Option[CurrencyId],
+        toTokenId: Option[CurrencyId],
+        desiredOutputAmount: Amount,
+        slippagePercent: Percentage
+      ): Either[String, ReverseSwapQuote] =
+        for {
+          inputAndReserves <- calculateReverseReservesAndReceived(pool, fromTokenId, desiredOutputAmount)
+          inputToken = if (fromTokenId === pool.tokenA.identifier) pool.tokenA else pool.tokenB
+
+          _ <- Either.cond(
+            inputToken.identifier === fromTokenId,
+            (),
+            "Invalid input token"
+          )
+
+          requiredInputDecimal = inputAndReserves.requiredInputAmount.toBigDecimal
+
+          maxInputRequired = (requiredInputDecimal / slippagePercent.toFactor)
+            .setScale(0, RoundingMode.CEILING)
+            .toLong
+
+          desiredOutputDecimal = BigDecimal(desiredOutputAmount.value.value)
+          rate = if (requiredInputDecimal > 0) desiredOutputDecimal / requiredInputDecimal else BigDecimal(0)
+
+          inputReserve = BigInt(inputToken.amount.value)
+          inputReserveDecimal = inputReserve.toBigDecimal
+          newInputReserveDecimal = inputAndReserves.newInputReserveAfterFee.toBigDecimal
+
+          priceImpactPercent =
+            if (inputReserve > 0) {
+              ((newInputReserveDecimal - inputReserveDecimal) / inputReserveDecimal).toPercentage
+            } else BigDecimal(0)
+        } yield
+          ReverseSwapQuote(
+            fromTokenId = fromTokenId,
+            toTokenId = toTokenId,
+            desiredOutputAmount = desiredOutputAmount,
+            slippagePercent = slippagePercent,
+            rate = rate,
+            priceImpactPercent = priceImpactPercent.setScale(2, RoundingMode.HALF_UP),
+            requiredInputAmount = inputAndReserves.requiredInputAmount,
+            maxInputRequired = maxInputRequired
+          )
+
+      def getReverseSwapQuote(
+        fromTokenId: Option[CurrencyId],
+        toTokenId: Option[CurrencyId],
+        desiredOutputAmount: Amount,
+        slippagePercent: Percentage
+      ): F[Either[String, ReverseSwapQuote]] = for {
+        liquidityPools <- getConfirmedLiquidityPools
+        poolIdEither <- buildLiquidityPoolUniqueIdentifier(fromTokenId, toTokenId).attempt
+        result <- poolIdEither match {
+          case Right(poolId) =>
+            getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
+              case Right(pool) =>
+                calculateReverseSwapQuote(pool, fromTokenId, toTokenId, desiredOutputAmount, slippagePercent)
+              case Left(_) => Left("Liquidity pool does not exist")
+            }
+          case Left(e) => Async[F].pure(Left(s"Failed to build pool identifier: ${e.getMessage}"))
+        }
+      } yield result
 
       override def getSwapQuote(
         fromTokenId: Option[CurrencyId],
