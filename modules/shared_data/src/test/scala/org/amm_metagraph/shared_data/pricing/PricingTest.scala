@@ -338,4 +338,55 @@ object PricingTest extends SimpleIOSuite {
         stakingTokenInfo.toOption.get.newlyIssuedShares === 5000000L
       )
   }
+
+  test("Test successfully getSwapQuote and getReverseSwapQuote should return the same info") {
+    val primaryToken = TokenInformation(
+      CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some,
+      PosLong.unsafeFrom(toFixedPoint(1000.0))
+    )
+
+    val pairToken = TokenInformation(
+      CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some,
+      PosLong.unsafeFrom(toFixedPoint(500.0))
+    )
+
+    val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
+
+    val (_, liquidityPoolCalculatedState) = buildLiquidityPoolCalculatedState(primaryToken, pairToken, ownerAddress)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammCalculatedState = AmmCalculatedState(
+      SortedMap(OperationType.LiquidityPool -> liquidityPoolCalculatedState)
+    )
+    val state = DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      pricingService = PricingService.make[IO](config, calculatedStateService)
+      swapQuoteResponse <- pricingService.getSwapQuote(
+        primaryToken.identifier,
+        pairToken.identifier,
+        Amount(PosLong.unsafeFrom(toFixedPoint(1.0))),
+        Percentage.unsafeFrom(BigDecimal(3L))
+      )
+      reverseSwapQuoteResponse <- pricingService.getReverseSwapQuote(
+        primaryToken.identifier,
+        pairToken.identifier,
+        Amount(PosLong.unsafeFrom(swapQuoteResponse.toOption.get.estimatedReceived.toLong)),
+        Percentage.unsafeFrom(BigDecimal(3L))
+      )
+
+    } yield
+      expect.all(
+        swapQuoteResponse.isRight,
+        swapQuoteResponse.toOption.get.slippagePercent == Percentage.unsafeFrom(BigDecimal(3L)),
+        swapQuoteResponse.toOption.get.rate === 0.4995005,
+        swapQuoteResponse.toOption.get.priceImpactPercent === BigDecimal(0.10),
+        swapQuoteResponse.toOption.get.estimatedReceived === BigInt(49950050L),
+        swapQuoteResponse.toOption.get.minimumReceived === BigInt(48451548L),
+        swapQuoteResponse.toOption.get.slippagePercent == reverseSwapQuoteResponse.toOption.get.slippagePercent,
+        swapQuoteResponse.toOption.get.estimatedReceived.toLong == reverseSwapQuoteResponse.toOption.get.desiredOutputAmount.value.value,
+        swapQuoteResponse.toOption.get.amount.value.value == reverseSwapQuoteResponse.toOption.get.requiredInputAmount.toLong
+      )
+  }
 }
