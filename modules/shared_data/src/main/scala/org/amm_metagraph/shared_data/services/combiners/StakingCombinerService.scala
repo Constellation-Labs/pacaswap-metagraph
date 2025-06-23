@@ -19,7 +19,7 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.epochProgress.getConfirmedExpireEpochProgress
+import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
@@ -28,7 +28,7 @@ import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.Errors.DuplicatedUpdate
+import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, MissingStakingTokenInfo, MissingSwapTokenInfo}
 import org.amm_metagraph.shared_data.validations.StakingValidations
 
 trait StakingCombinerService[F[_]] {
@@ -179,12 +179,17 @@ object StakingCombinerService {
           )
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
           updateHashed <- EitherT.liftF(updateHashedF)
-
+          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
+          stakingTokenInfo <- EitherT(
+            pricingService
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress)
+          )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
               val pendingAllowSpend = PendingAllowSpend(
                 signedUpdate,
-                updateHashed.hash
+                updateHashed.hash,
+                stakingTokenInfo.some
               )
 
               val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + pendingAllowSpend
@@ -216,7 +221,7 @@ object StakingCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate, updateHashed.hash),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash, stakingTokenInfo.some),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -245,16 +250,22 @@ object StakingCombinerService {
 
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
         val stakingUpdate = pendingAllowSpendUpdate.update.value
-
+        val maybeStakingTokenInfo = pendingAllowSpendUpdate.pricingTokenInfo.collect {
+          case stakingTokenInfo: StakingTokenInfo => stakingTokenInfo
+        }
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
           updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
-                poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
-                stakingTokenInfo <- EitherT(
-                  pricingService
-                    .getStakingTokenInfo(pendingAllowSpendUpdate.update, pendingAllowSpendUpdate.updateHash, poolId, globalEpochProgress)
+                stakingTokenInfo <- EitherT.fromOption[F](
+                  maybeStakingTokenInfo,
+                  FailedCalculatedState(
+                    MissingStakingTokenInfo(),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingAllowSpendUpdate.updateHash,
+                    pendingAllowSpendUpdate.update
+                  )
                 )
                 _ <- EitherT(
                   stakingValidations.pendingAllowSpendsValidations(
@@ -291,7 +302,8 @@ object StakingCombinerService {
                 pendingSpendAction = PendingSpendAction(
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
-                  spendAction
+                  spendAction,
+                  pendingAllowSpendUpdate.pricingTokenInfo
                 )
 
                 updatedPendingSpendActionCalculatedState =

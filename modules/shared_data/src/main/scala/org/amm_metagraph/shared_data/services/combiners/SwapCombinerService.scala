@@ -119,8 +119,7 @@ object SwapCombinerService {
             }
           } yield updatedState).valueOrF(_ => oldState.pure)
 
-        case Some(_: WithdrawalTokenAmounts) => oldState.pure
-        case None                            => oldState.pure
+        case _ => oldState.pure
       }
 
       private def handleFailedUpdate(

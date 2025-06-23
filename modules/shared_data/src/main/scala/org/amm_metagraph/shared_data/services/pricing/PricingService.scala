@@ -26,7 +26,6 @@ import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.PoolShares.toPendingFeeShares
 import org.amm_metagraph.shared_data.types.LiquidityPool._
-import org.amm_metagraph.shared_data.types.Staking.StakingTokenInformation
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.{ReverseSwapQuote, SwapQuote}
 import org.amm_metagraph.shared_data.validations.Errors._
@@ -60,14 +59,14 @@ trait PricingService[F[_]] {
     updateHash: Hash,
     poolId: PoolId,
     lastSyncGlobalEpochProgress: EpochProgress
-  ): F[Either[FailedCalculatedState, StakingTokenInformation]]
+  ): F[Either[FailedCalculatedState, StakingTokenInfo]]
 
   def getUpdatedLiquidityPoolDueStaking(
     liquidityPool: LiquidityPool,
     signedUpdate: Signed[StakingUpdate],
     updateHash: Hash,
     signerAddress: Address,
-    stakingTokenInformation: StakingTokenInformation,
+    stakingTokenInformation: StakingTokenInfo,
     lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, LiquidityPool]
 
@@ -89,16 +88,16 @@ trait PricingService[F[_]] {
     signedUpdate: Signed[WithdrawalUpdate],
     updateHash: Hash,
     liquidityPool: LiquidityPool,
-    withdrawalAmounts: WithdrawalTokenAmounts,
+    withdrawalAmounts: WithdrawalTokenInfo,
     lastSyncGlobalEpochProgress: EpochProgress
   ): Either[FailedCalculatedState, LiquidityPool]
 
-  def calculateWithdrawalAmounts(
+  def getWithdrawalTokenInfo(
     signedUpdate: Signed[WithdrawalUpdate],
     updateHash: Hash,
     liquidityPool: LiquidityPool,
     lastSyncGlobalEpochProgress: EpochProgress
-  ): Either[FailedCalculatedState, WithdrawalTokenAmounts]
+  ): Either[FailedCalculatedState, WithdrawalTokenInfo]
 
   def rollbackSwapLiquidityPoolAmounts(
     signedUpdate: Signed[SwapUpdate],
@@ -470,7 +469,7 @@ object PricingService {
         updateHash: Hash,
         poolId: PoolId,
         lastSyncGlobalEpochProgress: EpochProgress
-      ): F[Either[FailedCalculatedState, StakingTokenInformation]] = for {
+      ): F[Either[FailedCalculatedState, StakingTokenInfo]] = for {
         liquidityPools <- getConfirmedLiquidityPools
         stakingUpdate = signedUpdate.value
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
@@ -504,9 +503,10 @@ object PricingService {
             val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
 
             Right(
-              StakingTokenInformation(
+              StakingTokenInfo(
                 primaryToken.copy(amount = incomingPrimaryAmount.toPosLongUnsafe),
                 pairToken.copy(amount = incomingPairAmount.toLong.toPosLongUnsafe),
+                SwapAmount(incomingPairAmount.toLong.toPosLongUnsafe),
                 newlyIssuedShares.toLong
               )
             )
@@ -518,7 +518,7 @@ object PricingService {
         signedUpdate: Signed[StakingUpdate],
         updateHash: Hash,
         signerAddress: Address,
-        stakingTokenInformation: StakingTokenInformation,
+        stakingTokenInformation: StakingTokenInfo,
         lastSyncGlobalEpochProgress: EpochProgress
       ): Either[FailedCalculatedState, LiquidityPool] = {
         val primaryToken = stakingTokenInformation.primaryTokenInformation
@@ -653,7 +653,7 @@ object PricingService {
         signedUpdate: Signed[WithdrawalUpdate],
         updateHash: Hash,
         liquidityPool: LiquidityPool,
-        withdrawalAmounts: WithdrawalTokenAmounts,
+        withdrawalAmounts: WithdrawalTokenInfo,
         lastSyncGlobalEpochProgress: EpochProgress
       ): Either[FailedCalculatedState, LiquidityPool] = {
         val tokenAValue = liquidityPool.tokenA.amount.value - withdrawalAmounts.tokenAAmount.value
@@ -727,12 +727,12 @@ object PricingService {
           )
       }
 
-      def calculateWithdrawalAmounts(
+      def getWithdrawalTokenInfo(
         signedUpdate: Signed[WithdrawalUpdate],
         updateHash: Hash,
         liquidityPool: LiquidityPool,
         lastSyncGlobalEpochProgress: EpochProgress
-      ): Either[FailedCalculatedState, WithdrawalTokenAmounts] = {
+      ): Either[FailedCalculatedState, WithdrawalTokenInfo] = {
         val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
         val PRECISION = 8
@@ -808,7 +808,7 @@ object PricingService {
             )
           )
         } yield
-          WithdrawalTokenAmounts(
+          WithdrawalTokenInfo(
             liquidityPool.tokenA.identifier,
             SwapAmount(tokenAAmount),
             liquidityPool.tokenB.identifier,
