@@ -46,7 +46,7 @@ trait StakingValidations[F[_]] {
     signedUpdate: Signed[StakingUpdate],
     lastSyncGlobalEpochProgress: EpochProgress,
     currencyId: CurrencyId,
-    tokenInformation: StakingTokenInformation,
+    tokenInformation: StakingTokenInfo,
     allowSpendTokenA: Hashed[AllowSpend],
     allowSpendTokenB: Hashed[AllowSpend]
   ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
@@ -164,7 +164,7 @@ object StakingValidations {
       signedUpdate: Signed[StakingUpdate],
       lastSyncGlobalEpochProgress: EpochProgress,
       currencyId: CurrencyId,
-      tokenInformation: StakingTokenInformation,
+      tokenInformation: StakingTokenInfo,
       allowSpendTokenA: Hashed[AllowSpend],
       allowSpendTokenB: Hashed[AllowSpend]
     ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {

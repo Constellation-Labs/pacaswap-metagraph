@@ -19,6 +19,7 @@ import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
+import eu.timepit.refined.types.numeric.PosLong
 import io.circe.{KeyDecoder, KeyEncoder}
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
@@ -248,7 +249,7 @@ object States {
   sealed trait PricingTokenInfo
 
   @derive(encoder, decoder)
-  case class WithdrawalTokenAmounts(
+  case class WithdrawalTokenInfo(
     tokenAIdentifier: Option[CurrencyId],
     tokenAAmount: SwapAmount,
     tokenBIdentifier: Option[CurrencyId],
@@ -262,6 +263,13 @@ object States {
     amount: SwapAmount,
     grossReceived: SwapAmount,
     netReceived: SwapAmount
+  ) extends PricingTokenInfo
+
+  case class StakingTokenInfo(
+    primaryTokenInformation: TokenInformation,
+    pairTokenInformation: TokenInformation,
+    incomingPairAmount: SwapAmount,
+    newlyIssuedShares: Long
   ) extends PricingTokenInfo
 
   @derive(encoder, decoder)

@@ -281,6 +281,9 @@ components:
         tokenAAmount:
           type: integer
           description: Token A amount
+        tokenBAmount:
+          type: integer
+          description: Token B amount
         state:
           type: string
           description: Current state of the staking update

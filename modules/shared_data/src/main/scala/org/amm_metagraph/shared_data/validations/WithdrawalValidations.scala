@@ -40,7 +40,7 @@ trait WithdrawalValidations[F[_]] {
 
   def newUpdateValidations(
     signedUpdate: Signed[WithdrawalUpdate],
-    withdrawalAmounts: WithdrawalTokenAmounts,
+    withdrawalAmounts: WithdrawalTokenInfo,
     lastSyncGlobalEpochProgress: EpochProgress,
     updatedPool: LiquidityPool
   ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
@@ -125,7 +125,7 @@ object WithdrawalValidations {
 
     def newUpdateValidations(
       signedUpdate: Signed[WithdrawalUpdate],
-      withdrawalAmounts: WithdrawalTokenAmounts,
+      withdrawalAmounts: WithdrawalTokenInfo,
       lastSyncGlobalEpochProgress: EpochProgress,
       updatedPool: LiquidityPool
     ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] = {

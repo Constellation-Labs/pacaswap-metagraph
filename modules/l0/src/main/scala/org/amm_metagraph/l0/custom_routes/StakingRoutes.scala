@@ -34,18 +34,50 @@ case class StakingRoutes[F[_]: Async](
     tokenAId: Option[CurrencyId],
     tokenAAmount: Option[PosLong],
     tokenBId: Option[CurrencyId],
+    tokenBAmount: Option[PosLong],
     state: StateTransitionType
   )
 
   object StakingStateResponse {
-    def from(update: Signed[StakingUpdate], stateTransitionType: StateTransitionType): StakingStateResponse =
-      StakingStateResponse(
-        update.source.some,
-        update.tokenAId,
-        update.tokenAAmount.some,
-        update.tokenBId,
-        stateTransitionType
-      )
+    def from(pendingAction: PendingAction[StakingUpdate], stateTransitionType: StateTransitionType): StakingStateResponse =
+      pendingAction match {
+        case PendingAllowSpend(update, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
+          StakingStateResponse(
+            update.source.some,
+            update.tokenAId,
+            update.tokenAAmount.some,
+            update.tokenBId,
+            stakingTokenInfo.incomingPairAmount.value.some,
+            stateTransitionType
+          )
+        case PendingSpendAction(update, _, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
+          StakingStateResponse(
+            update.source.some,
+            update.tokenAId,
+            update.tokenAAmount.some,
+            update.tokenBId,
+            stakingTokenInfo.incomingPairAmount.value.some,
+            stateTransitionType
+          )
+        case PendingAllowSpend(update, _, _) =>
+          StakingStateResponse(
+            update.source.some,
+            update.tokenAId,
+            update.tokenAAmount.some,
+            update.tokenBId,
+            none,
+            stateTransitionType
+          )
+        case PendingSpendAction(update, _, _, _) =>
+          StakingStateResponse(
+            update.source.some,
+            update.tokenAId,
+            update.tokenAAmount.some,
+            update.tokenBId,
+            none,
+            stateTransitionType
+          )
+      }
 
     def from(staking: StakingCalculatedStateAddress, stateTransitionType: StateTransitionType): StakingStateResponse =
       StakingStateResponse(
@@ -53,11 +85,13 @@ case class StakingRoutes[F[_]: Async](
         staking.tokenA.identifier,
         staking.tokenA.amount.some,
         staking.tokenB.identifier,
+        staking.tokenB.amount.some,
         stateTransitionType
       )
 
     def from(stateTransitionType: StateTransitionType): StakingStateResponse =
       StakingStateResponse(
+        none,
         none,
         none,
         none,
@@ -91,11 +125,11 @@ case class StakingRoutes[F[_]: Async](
   ): F[Response[F]] =
     state.pending.collectFirst {
       case pending: PendingAllowSpend[StakingUpdate] if pending.updateHash === hash =>
-        SingleResponse(StakingStateResponse.from(pending.update, PendingAllowSpends))
+        SingleResponse(StakingStateResponse.from(pending, PendingAllowSpends))
     }.orElse {
       state.pending.collectFirst {
         case pending: PendingSpendAction[StakingUpdate] if pending.updateHash === hash =>
-          SingleResponse(StakingStateResponse.from(pending.update, PendingSpendTransactions))
+          SingleResponse(StakingStateResponse.from(pending, PendingSpendTransactions))
       }
     }.orElse {
       state.confirmed.value.values.flatMap(_.values).collectFirst {

@@ -190,6 +190,7 @@ object Errors {
   case class SourceAddressBetweenUpdateAndAllowSpendDifferent(update: AmmUpdate) extends FailedCalculatedStateReason
   case class AllowSpendsDestinationAddressInvalid() extends FailedCalculatedStateReason
   case class MissingSwapTokenInfo() extends FailedCalculatedStateReason
+  case class MissingStakingTokenInfo() extends FailedCalculatedStateReason
   case class MissingWithdrawalsAmount() extends FailedCalculatedStateReason
   case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
   case object WrongRewardWithdrawEpoch extends FailedCalculatedStateReason

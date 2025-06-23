@@ -115,7 +115,7 @@ object WithdrawalCombinerService {
         maybePricingTokenInfo: Option[PricingTokenInfo],
         oldState: DataState[AmmOnChainState, AmmCalculatedState]
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = maybePricingTokenInfo match {
-        case Some(WithdrawalTokenAmounts(tokenAIdentifier, tokenAAmount, tokenBIdentifier, tokenBAmount)) =>
+        case Some(WithdrawalTokenInfo(tokenAIdentifier, tokenAAmount, tokenBIdentifier, tokenBAmount)) =>
           (for {
             poolId <- EitherT.liftF(
               buildLiquidityPoolUniqueIdentifier(
@@ -153,8 +153,7 @@ object WithdrawalCombinerService {
               oldState.copy(calculated = updatedCalculatedState)
             }
           } yield updatedState).valueOrF(_ => oldState.pure)
-        case Some(_: SwapTokenInfo) => oldState.pure
-        case None                   => oldState.pure
+        case _ => oldState.pure
       }
 
       override def combineNew(
@@ -186,7 +185,7 @@ object WithdrawalCombinerService {
           liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
           updateHashed <- EitherT.liftF(updateHashedF)
           withdrawalAmounts <- EitherT.fromEither[F](
-            pricingService.calculateWithdrawalAmounts(
+            pricingService.getWithdrawalTokenInfo(
               signedUpdate,
               updateHashed.hash,
               liquidityPool,
@@ -306,7 +305,7 @@ object WithdrawalCombinerService {
                 )
 
                 maybeWithdrawalTokenAmounts = pendingSpendAction.pricingTokenInfo.collect {
-                  case withdrawalTokenAmounts: WithdrawalTokenAmounts => withdrawalTokenAmounts
+                  case withdrawalTokenAmounts: WithdrawalTokenInfo => withdrawalTokenAmounts
                 }
 
                 withdrawalAmounts <- EitherT.fromOption[F](
