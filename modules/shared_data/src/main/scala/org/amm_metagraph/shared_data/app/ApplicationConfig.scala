@@ -6,7 +6,8 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
-import eu.timepit.refined.types.numeric.{NonNegLong, PosDouble, PosLong}
+import eu.timepit.refined.types.numeric._
+import org.amm_metagraph.shared_data.app.ApplicationConfig.TokenLockLimitsConfig
 
 case class ApplicationConfig(
   expirationEpochProgresses: ApplicationConfig.ExpirationEpochProgresses,
@@ -16,7 +17,8 @@ case class ApplicationConfig(
   rewards: ApplicationConfig.Rewards,
   tokenLimits: ApplicationConfig.TokenLimits,
   allowSpendEpochBufferDelay: EpochProgress,
-  epochInfo: ApplicationConfig.EpochMetadata
+  epochInfo: ApplicationConfig.EpochMetadata,
+  tokenLockLimits: TokenLockLimitsConfig
 )
 
 object ApplicationConfig {
@@ -67,4 +69,9 @@ object ApplicationConfig {
     val epochProgress1Year: Long = epochProgress6Months * 2
     val epochProgress2Years: Long = epochProgress1Year * 2
   }
+
+  case class TokenLockLimitsConfig(
+    maxTokenLocksPerAddress: PosInt,
+    minTokenLockAmount: PosLong
+  )
 }

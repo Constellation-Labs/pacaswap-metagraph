@@ -19,6 +19,7 @@ import io.constellationnetwork.security._
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
+import eu.timepit.refined.types.numeric.PosInt
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -69,7 +70,11 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       NonNegLong.unsafeFrom((9223372036854775000L * 1e8).toLong)
     ),
     EpochProgress(NonNegLong.unsafeFrom(0L)),
-    EpochMetadata(43.seconds, 30L)
+    EpochMetadata(43.seconds, 30L),
+    TokenLockLimitsConfig(
+      PosInt.unsafeFrom(10),
+      PosLong.unsafeFrom(toFixedPoint(1000))
+    )
   )
 
   override def sharedResource: Resource[IO, Res] = for {

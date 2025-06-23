@@ -229,7 +229,7 @@ const voteAllocationTests = async (argsObject: object) => {
 
         log(`Governance voting shall appeared in frozen votes for ${address} as month pass`) 
         await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
-            await validateAllocationsRewards(config, address, 100000, logger)
+            await validateAllocationsRewards(config, address, 10000 * 1e8, logger)
         })
 
         log(`Governance voting shall disappeared in frozen votes for ${address} as month pass again`) 
@@ -248,7 +248,7 @@ const voteAllocationTests = async (argsObject: object) => {
         }
 
         
-        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 10, delayMs: 10000 })(async (logger) => {
+        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 120, delayMs: 1000 })(async (logger) => {
             await getExpectedAvaialbleRewardForAddress(address, govRewardType, config.ammMl0Url, (balance) => balance === 0)
         })
 
@@ -256,7 +256,7 @@ const voteAllocationTests = async (argsObject: object) => {
         log(`Available rewards for ${address} is ${avaiableGovReward}`) 
         const rewardWithdrawRequest = await getSignedRewardWithdraw(config, voteAllocationInfo, govRewardType, avaiableGovReward)
         await sendDataUpdate(config.ammDl1Url, rewardWithdrawRequest);
-        await retry(`Waiting withdraw rewards for ${address}`, { maxAttempts: 10, delayMs: 10000 })(async (logger) => {
+        await retry(`Waiting withdraw rewards for ${address}`, { maxAttempts: 120, delayMs: 1000 })(async (logger) => {
             await getExpectedAvaialbleRewardForAddress(address, govRewardType, config.ammMl0Url, (balance) => balance >= avaiableGovReward)
         })
         const avaiableGovRewardAfter = await getAvaialbleRewardsForAddress(address, govRewardType, config.ammMl0Url, "")
@@ -264,7 +264,7 @@ const voteAllocationTests = async (argsObject: object) => {
 
         const expectedBalance = Number(initialBalance) + Number(avaiableGovReward)
 
-        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 15, delayMs: 20000 })(async (logger) => {
+        await retry(`Waiting avaialble rewards for ${address}`, { maxAttempts: 300, delayMs: 1000 })(async (logger) => {
             await getExpectedBalance(address, config.gl0Url, config.metagraphId, expectedBalance)
         })
         const reward = await getSnapshotRewardForAddress(address, config.gl0Url, "", config.metagraphId)

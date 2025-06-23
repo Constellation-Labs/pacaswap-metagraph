@@ -7,12 +7,12 @@ import { z } from 'zod';
 const tokenLocks = [
     {
         "privateKey": "8971dcc9a07f2db7fa769582139768fd5d73c56501113472977eca6200c679c8",
-        "lockAmount": 100000,
+        "lockAmount": 10000 * 1e8,
         "multiplier": 0.25,
         "expireEpochProgress": 5000
     }, {
         "privateKey": "7bf1b37351f164ae4cdc5f10a55987163d42bf68e607383e7fa5121f7e7624ed",
-        "lockAmount": 1000,
+        "lockAmount": 10000 * 1e8,
         "multiplier": 0.25,
         "expireEpochProgress": 5000
     }]

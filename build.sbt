@@ -67,6 +67,7 @@ lazy val currencyL1 = (project in file("modules/l1"))
   .enablePlugins(AshScriptPlugin)
   .enablePlugins(BuildInfoPlugin)
   .enablePlugins(JavaAppPackaging)
+  .dependsOn(sharedData)
   .settings(
     name := "amm_metagraph-currency-l1",
     scalacOptions ++= List("-Ymacro-annotations", "-Yrangepos", "-Wconf:cat=unused:info", "-language:reflectiveCalls"),
