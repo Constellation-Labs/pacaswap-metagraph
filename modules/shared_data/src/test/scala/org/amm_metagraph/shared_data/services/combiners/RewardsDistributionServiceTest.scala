@@ -29,8 +29,10 @@ import eu.timepit.refined.types.all.NonNegLong
 import monocle.Monocle._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared
+import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.rewards._
-import org.amm_metagraph.shared_data.types.Governance.VotingWeight
+import org.amm_metagraph.shared_data.types.Governance.{AllocationId, VotingWeight}
+import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States._
@@ -49,15 +51,17 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     override def calculateEpochRewards(
       currentProgress: EpochProgress,
       validators: List[Address],
-      votingPowers: List[VotingPower],
-      governanceUserVotes: Map[Address, VotingWeight]
+      frozenVotingPowers: Map[Address, VotingWeight],
+      frozenGovernanceVotes: Map[AllocationId, Percentage],
+      currentLiquidityPools: Map[String, LiquidityPool],
+      approvedValidators: List[Address]
     ): IO[Either[RewardError, RewardDistribution]] = {
       val distribution = RewardDistribution(
         epochProgress = currentProgress,
         month = 1,
         validatorRewards = validators.map(_ -> validatorReward).toMap,
         daoRewards = ownerAddress -> daoReward,
-        votingRewards = votingPowers.map(vp => vp.address -> votingReward).toMap,
+        votingRewards = frozenVotingPowers.map { case (address, _) => address -> votingReward },
         governanceRewards = Map(ownerAddress -> governanceReward)
       )
       distribution.asRight[RewardError].pure[IO]
@@ -169,7 +173,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
       votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
-      stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
+      stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
       newState <- rewardService.updateRewardsDistribution(
@@ -233,7 +237,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
       votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
-      stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
+      stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
       newState1 <- rewardService.updateRewardsDistribution(
@@ -305,7 +309,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
       votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
-      stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
+      stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, Shared.config.rewards).pure[IO]
       newState1 <- rewardService.updateRewardsDistribution(

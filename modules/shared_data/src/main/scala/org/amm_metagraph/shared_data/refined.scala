@@ -1,15 +1,11 @@
 package org.amm_metagraph.shared_data
 
-import cats.implicits.{catsSyntaxEitherId, catsSyntaxSemigroup, toBifunctorOps}
-import cats.{Eq, Order}
+import cats.{Eq, Order, Show}
 
 import scala.math.BigDecimal.RoundingMode
-import scala.util.control.NoStackTrace
 
-import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.balance.Amount
 
-import derevo.circe.magnolia.{decoder, encoder}
-import derevo.derive
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Interval
 import eu.timepit.refined.types.all.{NonNegDouble, NonNegLong}
@@ -62,6 +58,8 @@ object refined {
 
     def floor: BigDecimal = bd.setScale(8, RoundingMode.FLOOR)
     def halfUp: BigDecimal = bd.setScale(8, RoundingMode.HALF_UP)
+
+    def toAmountUnsafe: Amount = Amount(NonNegLong.unsafeFrom(floor.toLong))
   }
 
   implicit class BigIntOps(val bi: BigInt) extends AnyVal {
@@ -94,6 +92,7 @@ object refined {
 
     implicit val percentageEq: Eq[Percentage] = Eq.by(_.value)
     implicit val percentageOrder: Order[Percentage] = Order.by(_.value)
+    implicit val percentageShow: Show[Percentage] = p => f"${p.value}%.3f"
 
     implicit class PercentageOps(percentage: Percentage) {
       lazy val toDecimal: BigDecimal = percentage.value.setScale(8) / BigDecimal(100)

@@ -8,7 +8,7 @@ import scala.math.BigDecimal.RoundingMode
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.CurrencyId
 
-import derevo.cats.eqv
+import derevo.cats.{eqv, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.all.NonNegLong
@@ -33,7 +33,7 @@ object FeeDistributor {
     Percentage.unsafeFrom(0.0)
   )
 
-  @derive(eqv, encoder, decoder)
+  @derive(eqv, encoder, decoder, show)
   case class FeePercentages(total: Percentage, providers: Percentage, operators: Percentage)
 
   object FeePercentages {

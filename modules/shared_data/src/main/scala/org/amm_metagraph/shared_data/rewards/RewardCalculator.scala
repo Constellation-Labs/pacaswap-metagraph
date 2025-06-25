@@ -5,6 +5,7 @@ import cats.effect.kernel.Async
 import cats.effect.std.Random
 import cats.syntax.all._
 
+import io.constellationnetwork.schema.AmountOps.AmountOps
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -15,7 +16,11 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.types.Governance.VotingWeight
+import org.amm_metagraph.shared_data.refined.{BigDecimalOps, LongOps, Percentage}
+import org.amm_metagraph.shared_data.types.Governance._
+import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 @derive(show)
 sealed trait RewardError extends Throwable
@@ -55,8 +60,10 @@ trait RewardCalculator[F[_]] {
   def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: List[Address],
-    votingPowers: List[VotingPower],
-    governanceUserVotes: Map[Address, VotingWeight]
+    frozenVotingPowers: Map[Address, VotingWeight],
+    frozenGovernanceVotes: Map[AllocationId, Percentage],
+    currentLiquidityPools: Map[String, LiquidityPool],
+    approvedValidators: List[Address]
   ): F[Either[RewardError, RewardDistribution]]
 }
 
@@ -67,6 +74,8 @@ object RewardCalculator {
 
 class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata)
     extends RewardCalculator[F] {
+  def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardCalculator")
+
   private def toAmount(value: Long): Either[RewardError, Amount] =
     NonNegLong
       .from(value)
@@ -75,20 +84,9 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
         Amount(_)
       )
 
-  private def getMonthStartProgress(progress: EpochProgress): Long = {
-    val monthNumber = progress.value.value / epochData.epochProgressOneDay / 30
-    monthNumber * epochData.epochProgressOneDay * 30L
-  }
-
   private def epochProgressToMonth(progress: EpochProgress): Either[RewardError, Month] = {
     val month = ((progress.value.value / epochData.epochProgressOneDay / 30) % 12) + 1
     refineV[MonthRefinement](month.toInt).leftMap(_ => InvalidMonthError(month.toInt))
-  }
-
-  private def isVoteFromCurrentMonth(currentProgress: EpochProgress, voteProgress: EpochProgress): Boolean = {
-    val currentMonthStart = getMonthStartProgress(currentProgress)
-    val nextMonthStart = currentMonthStart + epochData.epochProgressOneDay * 30
-    voteProgress.value >= currentMonthStart && voteProgress.value < nextMonthStart
   }
 
   private def isLastEpochInYear(currentEpoch: EpochProgress): Boolean = {
@@ -97,122 +95,147 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
   }
 
   private def calculateValidatorShare(
-    perEpoch: Amount,
+    perEpoch: BigDecimal,
     validators: List[Address]
-  ): Either[RewardError, (Map[Address, Amount], Amount)] =
+  ): Either[RewardError, Map[Address, Amount]] =
     if (validators.isEmpty) {
-      (Map.empty[Address, Amount], Amount.empty).asRight
+      Map.empty[Address, Amount].asRight
     } else {
-      val share = perEpoch.value.value / validators.length
-      val remainder = perEpoch.value.value % validators.length
-      (toAmount(share), toAmount(remainder)).mapN {
-        case (s, r) =>
-          (validators.map(_ -> s).toMap, r)
-      }
+      val share = (perEpoch / validators.length).toAmountUnsafe
+      validators.map(_ -> share).toMap.asRight
     }
 
   private def calculateVotingShare(
-    perEpoch: Amount,
-    votingPowers: List[VotingPower],
-    currentProgress: EpochProgress
-  ): Either[RewardError, (Map[Address, Amount], Amount)] = {
-    val votersOfCurrentMonth = votingPowers.filter { vp =>
-      vp.power.info.exists(info => isVoteFromCurrentMonth(currentProgress, info.votedAtEpochProgress))
+    perEpoch: BigDecimal,
+    approvedValidators: List[Address],
+    frozenGovernanceVotes: Map[AllocationId, Percentage],
+    currentLiquidityPools: Map[String, LiquidityPool]
+  ): Either[RewardError, Map[Address, Amount]] = {
+    val epochRewardsForAllocation = frozenGovernanceVotes.map {
+      case (allocation, percentage) => allocation -> (percentage * perEpoch)
     }
 
-    val totalVotingPower = votersOfCurrentMonth.map(_.power.total.value).sum
+    val lpRewards = calculateLiquidityPoolsRewards(epochRewardsForAllocation, currentLiquidityPools)
+    val validatorRewards = calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
 
-    if (totalVotingPower === 0L) {
-      (Map.empty[Address, Amount], Amount.empty).asRight
-    } else {
-      votersOfCurrentMonth.traverse { vote =>
-        toAmount((perEpoch.value.value * vote.power.total.value) / totalVotingPower)
-          .map(reward => vote.address -> reward)
-      }.flatMap { distribution =>
-        val distributionMap = distribution.toMap
-        val sum = distribution.map { case (_, amount) => amount.value.value }.sum
-        toAmount(perEpoch.value.value - sum).map { remainder =>
-          (distributionMap, remainder)
-        }
+    val unifiedRewards = (lpRewards.toList ++ validatorRewards.toList).groupMapReduce(_._1)(_._2)(_ + _).filter(_._2 > 0)
+    val refinedRewards: Map[Address, Amount] =
+      unifiedRewards.map {
+        case (address, reward) => address -> reward.toAmountUnsafe // only positive here because it was checked on previous step
       }
-    }
+    refinedRewards.asRight
   }
+
+  private def calculateLiquidityPoolsRewards(
+    epochRewardsForAllocation: Map[AllocationId, BigDecimal],
+    currentLiquidityPools: Map[String, LiquidityPool]
+  ): Map[Address, BigDecimal] = {
+    val liquidityPoolAddressesRewards: Seq[(Address, BigDecimal)] =
+      currentLiquidityPools.toSeq.flatMap {
+        case (stringId, liquidityPool) =>
+          val id = AllocationId(stringId, AllocationCategory.LiquidityPool)
+          val totalRewardForLiquidityPool = epochRewardsForAllocation.getOrElse(id, BigDecimal(0))
+          val totalInLp = liquidityPool.poolShares.totalShares
+          liquidityPool.poolShares.addressShares.toSeq.map {
+            case (address, shareAmount) =>
+              val globalPercentage = shareAmount.value.toBigDecimal / totalInLp.value * totalRewardForLiquidityPool
+              address -> globalPercentage
+          }
+      }
+
+    liquidityPoolAddressesRewards.groupMapReduce(_._1)(_._2)(_ + _)
+  }
+
+  private def calculateValidatorsRewards(
+    epochRewardsForAllocation: Map[AllocationId, BigDecimal],
+    approvedValidators: List[Address]
+  ): Map[Address, BigDecimal] =
+    approvedValidators.map { address =>
+      val allocationId = AllocationId(address.value.value, AllocationCategory.NodeOperator)
+      val reward = epochRewardsForAllocation.getOrElse(allocationId, BigDecimal(0))
+      address -> reward
+    }.toMap
 
   private def calculateGovernanceRewards(
     votingPowers: List[VotingPower],
     currentProgress: EpochProgress
-  ): F[Either[RewardError, Map[Address, Amount]]] = {
+  ): EitherT[F, RewardError, Map[Address, Amount]] = {
     val basePerEpoch = rewardConfig.governancePool.value.value / epochData.epochProgress1Year
     val yearRemainder = if (isLastEpochInYear(currentProgress)) {
       rewardConfig.governancePool.value.value % epochData.epochProgress1Year
     } else 0L
     val totalPower = votingPowers.map(_.power.total.value).sum
 
-    (if (votingPowers.isEmpty || totalPower === 0L) {
-       EitherT.pure[F, RewardError](Map.empty[Address, Amount])
-     } else {
-       val totalForEpoch = basePerEpoch + yearRemainder
+    if (votingPowers.isEmpty || totalPower === 0L) {
+      EitherT.pure[F, RewardError](Map.empty[Address, Amount])
+    } else {
+      val totalForEpoch = basePerEpoch + yearRemainder
 
-       for {
-         baseDistribution <- EitherT.fromEither[F](votingPowers.traverse { vote =>
-           val share = (totalForEpoch * vote.power.total.value) / totalPower
-           toAmount(share).map(vote.address -> _)
-         }.map(_.toMap))
+      for {
+        baseDistribution <- EitherT.fromEither[F](votingPowers.traverse { vote =>
+          val share = (totalForEpoch * vote.power.total.value) / totalPower
+          toAmount(share).map(vote.address -> _)
+        }.map(_.toMap))
 
-         distributedAmount = baseDistribution.values.map(_.value.value).sum
-         remainder = totalForEpoch - distributedAmount
+        distributedAmount = baseDistribution.values.map(_.value.value).sum
+        remainder = totalForEpoch - distributedAmount
 
-         finalDistribution <-
-           if (remainder > 0) {
-             for {
-               random <- EitherT.liftF(Random.scalaUtilRandomSeedLong(currentProgress.value.value))
-               maxPower = votingPowers.map(_.power.total.value).max
-               highestPowerVoters = votingPowers.filter(_.power.total.value === maxPower)
-               shuffled <- EitherT.liftF(random.shuffleList(highestPowerVoters))
-               luckyVoter = shuffled.head
-               updatedAmount = baseDistribution(luckyVoter.address).value.value + remainder
-               finalAmount <- EitherT.fromEither[F](toAmount(updatedAmount))
-             } yield baseDistribution.updated(luckyVoter.address, finalAmount)
-           } else {
-             EitherT.pure[F, RewardError](baseDistribution)
-           }
-       } yield finalDistribution
-     }).value
+        finalDistribution <-
+          if (remainder > 0) {
+            for {
+              random <- EitherT.liftF(Random.scalaUtilRandomSeedLong(currentProgress.value.value))
+              maxPower = votingPowers.map(_.power.total.value).max
+              highestPowerVoters = votingPowers.filter(_.power.total.value === maxPower)
+              shuffled <- EitherT.liftF(random.shuffleList(highestPowerVoters))
+              luckyVoter = shuffled.head
+              updatedAmount = baseDistribution(luckyVoter.address).value.value + remainder
+              finalAmount <- EitherT.fromEither[F](toAmount(updatedAmount))
+            } yield baseDistribution.updated(luckyVoter.address, finalAmount)
+          } else {
+            EitherT.pure[F, RewardError](baseDistribution)
+          }
+      } yield finalDistribution
+    }
   }
 
-  def calculateEpochRewards(
+  override def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: List[Address],
-    votingPowers: List[VotingPower],
-    governanceUserVotes: Map[Address, VotingWeight]
+    frozenVotingPowers: Map[Address, VotingWeight],
+    frozenGovernanceVotes: Map[AllocationId, Percentage],
+    currentLiquidityPools: Map[String, LiquidityPool],
+    approvedValidators: List[Address]
   ): F[Either[RewardError, RewardDistribution]] =
     (for {
       currentMonth <- EitherT.fromEither[F](epochProgressToMonth(currentProgress))
 
-      epochTokens <- EitherT.fromEither[F](toAmount(rewardConfig.totalAnnualTokens.value.value / epochData.epochProgress1Year))
-      yearRemainder = rewardConfig.totalAnnualTokens.value.value % epochData.epochProgress1Year
+      epochTokens = rewardConfig.totalAnnualTokens.toBigDecimal / epochData.epochProgress1Year
+      yearRemainder = rewardConfig.totalAnnualTokens.toBigDecimal % epochData.epochProgress1Year
 
-      totalEpochTokens <- EitherT.fromEither[F](
-        toAmount(
-          epochTokens.value.value + (if (isLastEpochInYear(currentProgress)) yearRemainder else 0L)
-        )
+      totalEpochTokens = epochTokens + (if (isLastEpochInYear(currentProgress)) yearRemainder else 0L)
+      validatorsPerEpoch = totalEpochTokens * rewardConfig.validatorWeight.value / 100L
+      daoPerEpoch = totalEpochTokens * rewardConfig.daoWeight.value / 100L
+      votingPerEpoch = totalEpochTokens * rewardConfig.votingWeight.value / 100L
+
+      _ <- EitherT.fromEither[F](logger.info(s"Going to distribute $totalEpochTokens as rewards for epoch $currentProgress").asRight)
+
+      validatorDistribution <- EitherT.fromEither[F](calculateValidatorShare(validatorsPerEpoch, validators))
+      validatorDistributed = validatorDistribution.map(_._2.toBigDecimal).sum
+
+      votingDistribution <- EitherT.fromEither[F](
+        calculateVotingShare(votingPerEpoch, approvedValidators, frozenGovernanceVotes, currentLiquidityPools)
+      )
+      votingDistributed = votingDistribution.map(_._2.toBigDecimal).sum
+
+      allRemainders = totalEpochTokens - (validatorDistributed + daoPerEpoch + votingDistributed)
+
+      daoReward = (daoPerEpoch + allRemainders).toAmountUnsafe
+      _ <- EitherT.fromEither[F](
+        logger.info(s"Incentive distribution for epoch $currentProgress is: $validatorDistributed, $votingDistribution, $daoReward").asRight
       )
 
-      validatorsPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.validatorWeight.value / 100L))
-      daoPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.daoWeight.value / 100L))
-      votingPerEpoch <- EitherT.fromEither[F](toAmount(totalEpochTokens.value.value * rewardConfig.votingWeight.value / 100L))
-
-      (validatorDistribution, validatorRemainder) <- EitherT.fromEither[F](calculateValidatorShare(validatorsPerEpoch, validators))
-      (votingDistribution, votingRemainder) <- EitherT.fromEither[F](calculateVotingShare(votingPerEpoch, votingPowers, currentProgress))
-
-      allRemainders = (totalEpochTokens.value.value -
-        (validatorsPerEpoch.value.value + daoPerEpoch.value.value + votingPerEpoch.value.value)) +
-        validatorRemainder.value.value + votingRemainder.value.value
-
-      daoReward <- EitherT.fromEither[F](toAmount(daoPerEpoch.value.value + allRemainders))
-      governanceVotingPowers = governanceUserVotes.map { case (address, vote) => VotingPower(address, vote) }.toList
-      governanceDistribution <- EitherT(calculateGovernanceRewards(governanceVotingPowers, currentProgress))
-
+      governanceVotingPowers = frozenVotingPowers.map { case (address, vote) => VotingPower(address, vote) }.toList
+      governanceDistribution <- calculateGovernanceRewards(governanceVotingPowers, currentProgress)
     } yield
       RewardDistribution(
         epochProgress = currentProgress,
