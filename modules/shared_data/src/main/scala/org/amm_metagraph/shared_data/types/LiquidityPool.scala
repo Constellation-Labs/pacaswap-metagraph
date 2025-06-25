@@ -13,7 +13,7 @@ import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
-import derevo.cats.{eqv, order}
+import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
@@ -21,6 +21,7 @@ import io.circe.refined._
 import io.circe.{KeyDecoder, KeyEncoder}
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
+import org.amm_metagraph.shared_data.refined.LongOps
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.States._
 
@@ -35,7 +36,7 @@ object LiquidityPool {
     amount: PosLong
   )
 
-  @derive(eqv, encoder, decoder, order)
+  @derive(eqv, encoder, decoder, order, show)
   @newtype
   case class ShareAmount(value: Amount)
 

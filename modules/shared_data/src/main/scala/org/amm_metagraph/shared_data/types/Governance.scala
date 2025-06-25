@@ -1,20 +1,18 @@
 package org.amm_metagraph.shared_data.types
 
-import java.time._
-
 import cats.Order._
 import cats.effect.kernel.Async
 import cats.syntax.all._
 import cats.{Order, Show}
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.concurrent.duration.FiniteDuration
 
 import io.constellationnetwork.ext.crypto._
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.tokenLock.TokenLock
+import io.constellationnetwork.schema.{tupleKeyDecoder, tupleKeyEncoder}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
@@ -25,16 +23,12 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import eu.timepit.refined.auto._
 import eu.timepit.refined.cats._
-import eu.timepit.refined.types.numeric.{NonNegDouble, NonNegInt, NonNegLong}
+import eu.timepit.refined.types.numeric.NonNegLong
+import io.circe._
 import io.circe.refined._
-import io.circe.{Decoder, Encoder}
 import io.estatico.newtype.macros.newtype
-import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
-import org.amm_metagraph.shared_data.types.States.OperationType
-
 object Governance {
   val maxCredits = 50.0
 
@@ -104,13 +98,17 @@ object Governance {
     implicit val decoder: Decoder[AllocationCategory] = Decoder.decodeString.emap { str =>
       values.find(_.value === str).toRight(s"Invalid AllocationCategory value: $str")
     }
+
+    implicit val keyEncoder: KeyEncoder[AllocationCategory] = KeyEncoder.encodeKeyString.contramap(_.value)
+    implicit val keyDecoder: KeyDecoder[AllocationCategory] = KeyDecoder.instance { str =>
+      values.find(_.value === str)
+    }
   }
 
   @derive(encoder, decoder, order, ordering, show)
   case class Allocation(
-    id: String,
-    category: AllocationCategory,
-    percentage: NonNegDouble
+    id: AllocationId,
+    percentage: Percentage
   )
 
   @derive(encoder, decoder, order, ordering, show)
@@ -141,12 +139,16 @@ object Governance {
   }
 
   @derive(encoder, decoder, order, ordering, show)
-  case class FrozenAddressesVotes(monthlyReference: MonthlyReference, votes: SortedMap[Address, VotingWeight])
+  case class FrozenAddressesVotes(
+    monthlyReference: MonthlyReference,
+    votes: SortedMap[Address, VotingWeight],
+    allocationVotes: SortedMap[AllocationId, Percentage]
+  )
   object FrozenAddressesVotes {
-    val empty: FrozenAddressesVotes = FrozenAddressesVotes(MonthlyReference.empty, SortedMap.empty)
+    val empty: FrozenAddressesVotes = FrozenAddressesVotes(MonthlyReference.empty, SortedMap.empty, SortedMap.empty)
   }
 
-  @derive(encoder, decoder, order, ordering)
+  @derive(encoder, decoder, order, ordering, show)
   case class Allocations(
     monthlyReference: MonthlyReference,
     usersAllocations: SortedMap[Address, UserAllocations],
@@ -169,4 +171,16 @@ object Governance {
     def empty: UserAllocations =
       UserAllocations(maxCredits, RewardAllocationVoteReference.empty, EpochProgress.MinValue, SortedSet.empty)
   }
+
+  @derive(encoder, decoder, order, ordering, show)
+  case class AllocationId(
+    id: String,
+    category: AllocationCategory
+  )
+
+  implicit val keyEncoder: KeyEncoder[AllocationId] =
+    tupleKeyEncoder[String, String].contramap(aId => (aId.id, implicitly[KeyEncoder[AllocationCategory]].apply(aId.category)))
+
+  implicit val keyDecoder: KeyDecoder[AllocationId] =
+    tupleKeyDecoder[String, AllocationCategory].map { case (id, category) => AllocationId(id, category) }
 }

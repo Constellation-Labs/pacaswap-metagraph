@@ -10,6 +10,7 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshot, CurrencySnapshotInfo}
+import io.constellationnetwork.domain.seedlist.SeedlistEntry
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
@@ -142,5 +143,7 @@ object DummyL0Context {
           .replace(spendActions)
         globalSnapshotInfo = buildGlobalSnapshotInfo(gsAllowSpends)
       } yield Some((updated, globalSnapshotInfo))
+
+      override def getMetagraphL0Seedlist: Option[Set[SeedlistEntry]] = None
     }
 }

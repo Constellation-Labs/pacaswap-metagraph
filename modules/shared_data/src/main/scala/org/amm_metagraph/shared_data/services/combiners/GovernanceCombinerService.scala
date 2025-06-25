@@ -5,7 +5,6 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
-import scala.tools.nsc.tasty.SafeEq
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
@@ -18,7 +17,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import eu.timepit.refined.auto._
-import eu.timepit.refined.types.numeric.{NonNegInt, NonNegLong}
+import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
@@ -49,9 +48,8 @@ trait GovernanceCombinerService[F[_]] {
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
   ): SortedMap[Address, VotingWeight]
 
-  def handleMonthlyGovernanceRewards(
+  def handleMonthExpiration(
     state: DataState[AmmOnChainState, AmmCalculatedState],
-    globalEpochProgress: EpochProgress,
     currentMetagraphEpochProgress: EpochProgress
   ): F[DataState[AmmOnChainState, AmmCalculatedState]]
 }
@@ -91,13 +89,41 @@ object GovernanceCombinerService {
         monthlyReference: MonthlyReference
       ): FrozenAddressesVotes = {
         val votingWeights = acc.calculated.votingWeights
+
+        val allocationsAndVotes: Map[Address, (SortedSet[Allocation], VotingWeight)] = acc.calculated.allocations.usersAllocations
+          .withFilter(_._2.allocationEpochProgress >= monthlyReference.firstEpochOfMonth)
+          .withFilter(_._2.allocationEpochProgress <= monthlyReference.lastEpochOfMonth)
+          .flatMap {
+            case (address, allocations) =>
+              votingWeights.get(address).map(voteWeights => address -> (allocations.allocations, voteWeights))
+          }
+
+        val totalVotes =
+          allocationsAndVotes.values.map { case (_, votingWeight) => BigDecimal(votingWeight.total.value) }.sum
+
+        val allocationsToGlobalPercent: Seq[(AllocationId, Percentage)] = allocationsAndVotes.toSeq.flatMap {
+          case (_, (allocations, weight)) =>
+            // We could use unsafe here because totalVotes always bigger than weights
+            val addressVotingPercentage = Percentage.unsafeFrom(weight.total.value / totalVotes)
+            allocations.toSeq.map {
+              case Allocation(AllocationId(id, category), percentage) =>
+                val allocationId = AllocationId(id, category)
+                val globalPercentage = addressVotingPercentage * percentage.value
+                allocationId -> Percentage.unsafeFrom(globalPercentage)
+            }
+        }
+        val resAllocations: SortedMap[AllocationId, Percentage] =
+          SortedMap.from(
+            allocationsToGlobalPercent
+              .groupMapReduce(_._1)(_._2.value)(_ + _)
+              .view
+              .mapValues(v => Percentage.unsafeFrom(v))
+          )
+
         val frozenVotes: SortedMap[Address, VotingWeight] =
-          acc.calculated.allocations.usersAllocations
-            .withFilter(_._2.allocationEpochProgress >= monthlyReference.firstEpochOfMonth)
-            .withFilter(_._2.allocationEpochProgress <= monthlyReference.lastEpochOfMonth)
-            .map { case (address, _) => address -> votingWeights.getOrElse(address, VotingWeight.empty) }
-            .filter(_._2.info.nonEmpty)
-        FrozenAddressesVotes(monthlyReference, frozenVotes)
+          SortedMap.from(allocationsAndVotes.map { case (address, (_, votingWeight)) => address -> votingWeight })
+
+        FrozenAddressesVotes(monthlyReference, frozenVotes, resAllocations)
       }
 
       private def updateVotingWeightInfo(
@@ -151,7 +177,7 @@ object GovernanceCombinerService {
                       AllocationCategory.NodeOperator
                     }
 
-                    Allocation(key, category, votingWeight.toNonNegDoubleUnsafe)
+                    Allocation(AllocationId(key, category), Percentage.unsafeFrom(votingWeight))
                 }.toSortedSet
 
                 oldState.calculated.allocations.usersAllocations
@@ -238,9 +264,8 @@ object GovernanceCombinerService {
           .getOrElse(currentVotingWeights)
       }
 
-      def handleMonthlyGovernanceRewards(
+      override def handleMonthExpiration(
         state: DataState[AmmOnChainState, AmmCalculatedState],
-        globalEpochProgress: EpochProgress,
         currentMetagraphEpochProgress: EpochProgress
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val monthlyReference = state.calculated.allocations.monthlyReference

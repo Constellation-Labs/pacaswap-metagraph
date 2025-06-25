@@ -389,9 +389,8 @@ object L0CombinerService {
             lastSyncGlobalEpochProgress
           )
 
-          stateCombinedGovernanceRewards <- governanceCombinerService.handleMonthlyGovernanceRewards(
+          stateCombinedGovernanceRewards <- governanceCombinerService.handleMonthExpiration(
             stateCombinedByCleanupOperations,
-            lastSyncGlobalEpochProgress,
             currentSnapshotEpochProgress
           )
 
