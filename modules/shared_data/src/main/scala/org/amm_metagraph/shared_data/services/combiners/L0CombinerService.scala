@@ -47,7 +47,7 @@ object L0CombinerService {
     rewardsWithdrawService: RewardsWithdrawService[F]
   ): L0CombinerService[F] =
     new L0CombinerService[F] {
-      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CombinerService")
+      val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
       def getPendingAllowSpendsUpdates(
         state: AmmCalculatedState

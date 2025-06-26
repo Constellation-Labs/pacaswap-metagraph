@@ -39,7 +39,7 @@ object RewardsWithdrawService {
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): RewardsWithdrawService[F] =
     new RewardsWithdrawService[F] {
-      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
+      val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
       // Actual reward distribution done in Rewards Service.
       // Reward Service can't remove already distributed rewards because it can't change state directly.
       // Thus, we shall clear it here by assuming that rewards had been distributed already and we no longer

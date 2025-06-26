@@ -29,7 +29,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   */
 object RewardsService {
   def make[F[_]: Async: SecurityProvider]: Rewards[F, CurrencySnapshotStateProof, CurrencyIncrementalSnapshot, CurrencySnapshotEvent] = {
-    def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsWithdrawService")
+    val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
     (
       lastArtifact: Signed[CurrencyIncrementalSnapshot],

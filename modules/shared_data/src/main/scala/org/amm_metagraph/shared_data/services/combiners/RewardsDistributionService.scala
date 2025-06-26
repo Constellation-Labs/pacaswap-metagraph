@@ -40,7 +40,7 @@ object RewardsDistributionService {
     rewardsConfig: ApplicationConfig.Rewards
   ): RewardsDistributionService[F] =
     new RewardsDistributionService[F] {
-      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("RewardsDistributionService")
+      val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
       private val interval = rewardsConfig.rewardCalculationInterval
 
       override def updateRewardsDistribution(
