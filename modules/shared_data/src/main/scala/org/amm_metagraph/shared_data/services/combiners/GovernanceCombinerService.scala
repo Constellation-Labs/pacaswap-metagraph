@@ -60,7 +60,7 @@ object GovernanceCombinerService {
     governanceValidations: GovernanceValidations[F]
   ): GovernanceCombinerService[F] =
     new GovernanceCombinerService[F] {
-      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("GovernanceCombinerService")
+      val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
       private def handleFailedUpdate(
         acc: DataState[AmmOnChainState, AmmCalculatedState],
