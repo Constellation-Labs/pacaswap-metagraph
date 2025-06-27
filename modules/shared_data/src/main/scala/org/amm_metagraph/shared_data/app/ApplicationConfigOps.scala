@@ -18,6 +18,12 @@ import pureconfig.module.catseffect.syntax._
 
 object ApplicationConfigOps {
   import ConfigReaders._
+  implicit val applicationConfigReader: ConfigReader[ApplicationConfig] = deriveReader
+
+  def readDefaultPure: ApplicationConfig =
+    ConfigSource.default
+      .load[ApplicationConfig](applicationConfigReader)
+      .getOrElse(throw new RuntimeException("Failed to load ApplicationConfig"))
 
   def readDefault[F[_]: Sync]: F[ApplicationConfig] =
     ConfigSource.default
@@ -61,5 +67,5 @@ object ConfigReaders {
     case other            => Left(CannotConvert(other, "Environment", "Must be 'dev', 'testnet', 'integrationnet', or 'mainnet'"))
   }
 
-  implicit val applicationConfigReader: ConfigReader[ApplicationConfig] = deriveReader
+  implicit val tokenLockLimitsConfig: ConfigReader[ApplicationConfig.TokenLockLimitsConfig] = deriveReader
 }
