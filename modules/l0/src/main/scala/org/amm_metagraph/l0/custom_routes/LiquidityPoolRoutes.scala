@@ -43,7 +43,8 @@ object LiquidityPoolRoutes {
     tokenB: TokenInfoResponse,
     owner: Address,
     k: BigInt,
-    totalShared: Long
+    totalShared: Long,
+    poolFees: FeePercentages
   )
 
   private object LiquidityPoolResponse {
@@ -54,7 +55,8 @@ object LiquidityPoolRoutes {
         tokenB = TokenInfoResponse(pool.tokenB.identifier, pool.tokenB.amount.value, priceTokenB),
         owner = pool.owner,
         k = pool.k,
-        totalShared = pool.poolShares.totalShares.value
+        totalShared = pool.poolShares.totalShares.value,
+        poolFees = pool.poolFees
       )
   }
 
