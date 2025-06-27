@@ -191,7 +191,18 @@ components:
         totalShares:
           type: integer
           description: Total number of LP shares
-
+        poolFees:
+          type: object
+          properties:
+            total:
+              type: number
+              description: Total fees
+            providers:
+              type: number
+              description: Providers fees
+            operators:
+              type: number
+              description: Providers fees
     SwapStateResponse:
       type: object
       description: Information about a swap data update operation
