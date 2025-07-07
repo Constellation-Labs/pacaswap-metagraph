@@ -7,7 +7,7 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencyIncrementalSnapshot
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.BalanceArithmeticError
+import io.constellationnetwork.schema.balance.{Amount, BalanceArithmeticError}
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
@@ -21,7 +21,7 @@ import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.rewards._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
-import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
+import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -47,15 +47,52 @@ object RewardsDistributionService {
         lastArtifact: Signed[CurrencyIncrementalSnapshot],
         state: DataState[AmmOnChainState, AmmCalculatedState],
         currentEpoch: EpochProgress
-      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-        // Clean any existed reward distribution, we use them for indexer only
-        val updatedState =
-          state
-            .focus(_.onChain.rewardsUpdate)
-            .replace(None)
-            .focus(_.calculated.rewards.lastProcessedEpoch)
-            .replace(currentEpoch)
+      )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] =
+        for {
+          approvedValidators <- context.getMetagraphL0Seedlist.getOrElse(Set.empty).toList.traverse(_.peerId.toAddress)
 
+          clearedOnChain <- state.focus(_.onChain.rewardsUpdate).replace(None).pure[F]
+          withUpdateBuffer <- tryToUpdateRewardBuffer(lastArtifact, clearedOnChain, currentEpoch, approvedValidators)
+          clearedEpoch <- withUpdateBuffer.focus(_.calculated.rewards.lastProcessedEpoch).replace(currentEpoch).pure[F]
+
+          updatedRewards <- updateAvailableRewardsAndOnChainData(clearedEpoch, rewardsConfig)
+        } yield updatedRewards
+
+      private def updateAvailableRewardsAndOnChainData(
+        state: DataState[AmmOnChainState, AmmCalculatedState],
+        rewardsConfig: ApplicationConfig.Rewards
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+        val rewardsBuffer = state.calculated.rewards.rewardsBuffer
+
+        val rewardsTransactionCount = rewardsConfig.rewardTransactionsPerSnapshot.value
+
+        val (rewardsToDistribute, rewardsToStay) = rewardsBuffer.data.splitAt(rewardsTransactionCount)
+        val res = for {
+          distributionInfo <- RewardInfo.make(rewardsToDistribute)
+          mergedRewards <- state.calculated.rewards.availableRewards.addRewards(distributionInfo)
+        } yield
+          state
+            .focus(_.calculated.rewards.rewardsBuffer.data)
+            .replace(rewardsToStay)
+            .focus(_.calculated.rewards.availableRewards)
+            .replace(mergedRewards)
+            .focus(_.onChain.rewardsUpdate)
+            .replace(Option.when(distributionInfo.info.nonEmpty)(distributionInfo))
+
+        EitherT
+          .fromEither(res.leftMap(RewardMergingError))
+          .foldF(
+            error => logger.warn(show"Failed to update available rewards $error") >> state.pure[F],
+            _.pure[F]
+          )
+      }
+
+      private def tryToUpdateRewardBuffer(
+        lastArtifact: Signed[CurrencyIncrementalSnapshot],
+        state: DataState[AmmOnChainState, AmmCalculatedState],
+        currentEpoch: EpochProgress,
+        approvedValidators: Seq[Address]
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val currentEpochNumber = currentEpoch.value.value
         val newEpoch = currentEpochNumber > state.calculated.rewards.lastProcessedEpoch.value.value
         val rewardDistributionEpoch = currentEpochNumber % interval.value == 0
@@ -63,10 +100,10 @@ object RewardsDistributionService {
         (newEpoch, rewardDistributionEpoch) match {
           case (false, _) =>
             logger.info(show"Skip reward distribution for epoch $currentEpochNumber. Epoch had been processed already") >>
-              updatedState.pure[F]
+              state.pure[F]
           case (true, false) =>
             logger.info(show"Skip reward distribution for epoch $currentEpochNumber. Not an epoch for distribution") >>
-              updatedState.pure[F]
+              state.pure[F]
           case (true, true) =>
             // We don't calculate rewards every epoch,
             // instead we skip "interval" epochs but increase rewards distribution to "interval".
@@ -74,14 +111,13 @@ object RewardsDistributionService {
             val rewardsMultiplier = interval.value
             for {
               _ <- logger.info(show"Start reward distribution. Current epoch $currentEpochNumber, interval ${interval.value}")
-              approvedValidators <- context.getMetagraphL0Seedlist.getOrElse(Set.empty).toList.traverse(_.peerId.toAddress)
-              res <- doUpdateRewardState(approvedValidators, lastArtifact, updatedState, rewardsMultiplier, currentEpoch)
+              res <- doUpdateRewardsBuffer(approvedValidators, lastArtifact, state, rewardsMultiplier, currentEpoch)
             } yield res
         }
       }
 
-      private def doUpdateRewardState(
-        approvedValidators: List[Address],
+      private def doUpdateRewardsBuffer(
+        approvedValidators: Seq[Address],
         lastArtifact: Signed[CurrencyIncrementalSnapshot],
         state: DataState[AmmOnChainState, AmmCalculatedState],
         rewardsMultiplier: Long,
@@ -96,14 +132,8 @@ object RewardsDistributionService {
             multipliedRewards = distribution.updateAllRewards(updateRewardFun)
 
             distributionAsRewardInfo = RewardInfo.fromRewardDistribution(multipliedRewards)
-            mergedRewards <- mergeRewards(calculatedState.rewards.availableRewards, distributionAsRewardInfo)
-            _ <- EitherT.liftF(logger.info(show"Reward distribution for ${currentEpoch.value.value} is $mergedRewards"))
-          } yield
-            state
-              .focus(_.calculated.rewards.availableRewards)
-              .replace(mergedRewards)
-              .focus(_.onChain.rewardsUpdate)
-              .replace(distributionAsRewardInfo.some)
+            _ <- EitherT.liftF(logger.info(show"Calculated rewards for epoch ${currentEpoch.value.value} is $distributionAsRewardInfo"))
+          } yield state.focus(_.calculated.rewards.rewardsBuffer.data).modify(_ ++ distributionAsRewardInfo.info.toSeq)
 
         res.foldF(
           error => logger.warn(show"Failed to distribute rewards $error") >> state.pure[F],
@@ -113,8 +143,8 @@ object RewardsDistributionService {
 
       private def calculateEpochRewards(
         currentEpoch: EpochProgress,
-        approvedValidators: List[Address],
-        validators: List[Address],
+        approvedValidators: Seq[Address],
+        validators: Seq[Address],
         state: AmmCalculatedState
       ): EitherT[F, RewardDistributionError, RewardDistribution] = {
         val frozenVotingWeights = state.allocations.frozenUsedUserVotes.votes
@@ -140,12 +170,6 @@ object RewardsDistributionService {
             )
           ).leftMap(e => RewardCalculationError(e))
       }
-
-      private def mergeRewards(
-        currentRewards: RewardInfo,
-        newRewards: RewardInfo
-      ): EitherT[F, RewardDistributionError, RewardInfo] =
-        currentRewards.addRewards(newRewards).toEitherT.leftMap(e => RewardMergingError(e))
     }
 
   @derive(show)

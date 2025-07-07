@@ -24,7 +24,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
-import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
+import org.amm_metagraph.shared_data.types.Rewards.{RewardInfo, RewardsBuffer}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
@@ -338,7 +338,8 @@ object States {
   case class RewardsState(
     withdraws: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState.empty,
     availableRewards: RewardInfo = RewardInfo.empty,
-    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue
+    lastProcessedEpoch: EpochProgress = EpochProgress.MinValue,
+    rewardsBuffer: RewardsBuffer = RewardsBuffer.empty
   )
 
   @derive(encoder, decoder)

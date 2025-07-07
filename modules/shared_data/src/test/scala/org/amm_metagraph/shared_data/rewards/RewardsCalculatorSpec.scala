@@ -17,7 +17,7 @@ import io.constellationnetwork.security.hash.Hash
 
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.all.NonNegLong
-import eu.timepit.refined.types.numeric.PosLong
+import eu.timepit.refined.types.numeric.{NonNegInt, PosLong}
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined.Percentage
@@ -48,13 +48,14 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     ApplicationConfig.Rewards(
       totalAnnualTokens = toAmount(toFixedPoint(120000000)),
       governancePool = toAmount(toFixedPoint(20000000)),
-      validatorWeight = validatorProportion,
+      nodeValidatorWeight = validatorProportion,
       daoWeight = daoProportion,
-      votingWeight = votingProportion,
+      voteBasedWeight = votingProportion,
       initialEpoch = EpochProgress.MinValue,
       daoAddress = address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU"),
       rewardCalculationInterval = NonNegLong(100L),
-      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
+      rewardTransactionsPerSnapshot = NonNegInt(100)
     )
 
   val epochData: ApplicationConfig.EpochMetadata = ApplicationConfig.EpochMetadata(1.day, 10L)
@@ -180,9 +181,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       val expectedPerEpoch = rewardsConfig.totalAnnualTokens.value.value / epochData.epochProgress1Year
 
       val totalRewards =
-        rewards.validatorRewards.values.map(_.value.value).sum +
+        rewards.nodeValidatorRewards.values.map(_.value.value).sum +
           rewards.daoRewards._2.value.value +
-          rewards.votingRewards.values.map(_.value.value).sum
+          rewards.voteBasedRewards.values.map(_.value.value).sum
 
       expect(totalRewards === expectedPerEpoch)
     }
@@ -204,13 +205,13 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       val totalRewards =
-        rewards.validatorRewards.values.map(_.toBigDecimal).sum +
+        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum +
           rewards.daoRewards._2.toBigDecimal +
-          rewards.votingRewards.values.map(_.toBigDecimal).sum
+          rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
 
-      val validators = rewards.validatorRewards.values.map(_.toBigDecimal).sum
+      val validators = rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum
       val dao = rewards.daoRewards._2.toBigDecimal
-      val voting = rewards.votingRewards.values.map(_.toBigDecimal).sum
+      val voting = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
 
       expect(approximatelyEqual((validators / totalRewards).doubleValue, validatorProportion.value.doubleValue / 100, 0.1)) &&
       expect(approximatelyEqual((dao / totalRewards).doubleValue, daoProportion.value.doubleValue / 100, 0.1)) &&
@@ -233,7 +234,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      expect(rewards.validatorRewards.values.map(_.toBigDecimal).toSet.size == 1)
+      expect(rewards.nodeValidatorRewards.values.map(_.toBigDecimal).toSet.size == 1)
     }
   }
 
@@ -252,10 +253,10 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalVotingRewards = rewards.votingRewards.values.map(_.toBigDecimal).sum
+      val totalVotingRewards = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
       expect(totalVotingRewards == BigDecimal(75000000000000L))
       val percentageMap =
-        rewards.votingRewards.map { case (address, reward) => address -> reward.toBigDecimal / totalVotingRewards }
+        rewards.voteBasedRewards.map { case (address, reward) => address -> reward.toBigDecimal / totalVotingRewards }
       val expectedPercentage = Map(
         address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU") -> 0.01666666666666666666666666666666667,
         address("DAG0y4eLqhhXUafeE3mgBstezPTnr8L3tZjAtMWB") -> 0.3833333333333333333333333333333333,
@@ -284,13 +285,13 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       val totalRewards =
-        rewards.validatorRewards.values.map(_.toBigDecimal).sum +
+        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum +
           rewards.daoRewards._2.toBigDecimal +
-          rewards.votingRewards.values.map(_.toBigDecimal).sum
+          rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
 
-      val validators = rewards.validatorRewards.values.map(_.toBigDecimal).sum
+      val validators = rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum
       val dao = rewards.daoRewards._2.toBigDecimal
-      val voting = rewards.votingRewards.values.map(_.toBigDecimal).sum
+      val voting = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
 
       expect(approximatelyEqual((validators / totalRewards).doubleValue, validatorProportion.value.doubleValue / 100, 0.1)) &&
       expect(
@@ -323,17 +324,17 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalValidatorRewards = rewards.flatMap(_.validatorRewards.values).map(_.value.value).sum
+      val totalValidatorRewards = rewards.flatMap(_.nodeValidatorRewards.values).map(_.value.value).sum
       val totalDaoRewards = rewards.map(_.daoRewards._2.value.value).sum
-      val totalVotingRewards = rewards.flatMap(_.votingRewards.values).map(_.value.value).sum
+      val totalVotingRewards = rewards.flatMap(_.voteBasedRewards.values).map(_.value.value).sum
 
       val totalDistributed = totalValidatorRewards + totalDaoRewards + totalVotingRewards
       val annualAmount = rewardsConfig.totalAnnualTokens.value.value
 
       expect(totalDistributed === annualAmount) &&
       // Base proportions should be maintained for distributable amount (excluding remainders in DAO)
-      expect((totalValidatorRewards * 100L / annualAmount - rewardsConfig.validatorWeight.value).abs <= 1) &&
-      expect((totalVotingRewards * 100L / annualAmount - rewardsConfig.votingWeight.value).abs <= 1)
+      expect((totalValidatorRewards * 100L / annualAmount - rewardsConfig.nodeValidatorWeight.value).abs <= 1) &&
+      expect((totalVotingRewards * 100L / annualAmount - rewardsConfig.voteBasedWeight.value).abs <= 1)
     }
   }
 }

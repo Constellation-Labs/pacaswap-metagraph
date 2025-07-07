@@ -41,17 +41,18 @@ object ConfigReaders {
     val cfg = Rewards(
       totalAnnualTokens = Amount(65000000_00000000L),
       governancePool = Amount(20000000_00000000L),
-      validatorWeight = NonNegLong(5L),
+      nodeValidatorWeight = NonNegLong(5L),
       daoWeight = NonNegLong(20L),
-      votingWeight = NonNegLong(75L),
+      voteBasedWeight = NonNegLong(75L),
       initialEpoch = _cfg.initialEpoch,
       daoAddress = _cfg.daoAddress,
       rewardCalculationInterval = _cfg.rewardCalculationInterval,
-      rewardWithdrawDelay = _cfg.rewardWithdrawDelay
+      rewardWithdrawDelay = _cfg.rewardWithdrawDelay,
+      rewardTransactionsPerSnapshot = _cfg.rewardTransactionsPerSnapshot
     )
 
     Either.cond(
-      cfg.validatorWeight.value + cfg.daoWeight.value + cfg.votingWeight.value === 100L,
+      cfg.nodeValidatorWeight.value + cfg.daoWeight.value + cfg.voteBasedWeight.value === 100L,
       cfg,
       CannotConvert(cfg.toString, "Rewards", "Voting weights must sum up to 100")
     )

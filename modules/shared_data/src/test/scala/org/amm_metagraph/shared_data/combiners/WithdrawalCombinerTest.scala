@@ -19,7 +19,7 @@ import io.constellationnetwork.security._
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
-import eu.timepit.refined.types.numeric.PosInt
+import eu.timepit.refined.types.numeric._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -63,7 +63,8 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       rewardCalculationInterval = NonNegLong(100),
-      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
+      rewardTransactionsPerSnapshot = NonNegInt(100)
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((1 * 1e8).toLong),

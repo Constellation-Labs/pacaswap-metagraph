@@ -1,5 +1,6 @@
 package org.amm_metagraph.shared_data.types
 
+import cats.Show
 import cats.implicits._
 
 import scala.util.Try
@@ -46,6 +47,16 @@ object Rewards {
       tupleKeyDecoder[Address, RewardType].map[AddressAndRewardType](t => AddressAndRewardType(t._1, t._2))
   }
 
+  implicit def showIndexedSeqAsList[T: Show]: Show[IndexedSeq[T]] =
+    Show.show(_.toList.show)
+
+  @derive(encoder, decoder, show)
+  case class RewardsBuffer(data: IndexedSeq[(AddressAndRewardType, Amount)])
+
+  object RewardsBuffer {
+    val empty: RewardsBuffer = RewardsBuffer(IndexedSeq.empty)
+  }
+
   @derive(encoder, decoder, show)
   case class RewardInfo(info: Map[AddressAndRewardType, Amount]) {
     def addReward(
@@ -84,7 +95,10 @@ object Rewards {
     }
 
     def addRewards(that: RewardInfo): Either[BalanceArithmeticError, RewardInfo] =
-      that.info.foldLeft(this.asRight[BalanceArithmeticError]) {
+      addRewards(that.info)
+
+    def addRewards(that: Iterable[(AddressAndRewardType, Amount)]): Either[BalanceArithmeticError, RewardInfo] =
+      that.foldLeft(this.asRight[BalanceArithmeticError]) {
         case (acc, (AddressAndRewardType(address, rewardType), amount)) =>
           acc.flatMap(a => a.addReward(address, rewardType, amount))
       }
@@ -93,9 +107,13 @@ object Rewards {
   object RewardInfo {
     val empty: RewardInfo = RewardInfo(Map.empty)
 
+    def make(that: Iterable[(AddressAndRewardType, Amount)]): Either[BalanceArithmeticError, RewardInfo] = RewardInfo.empty.addRewards(that)
+
     def fromRewardDistribution(rewardDistribution: RewardDistribution): RewardInfo = {
-      val validator = rewardDistribution.validatorRewards.map { case (address, amount) => (address, RewardType.ValidatorConsensus, amount) }
-      val voting = rewardDistribution.votingRewards.map { case (address, amount) => (address, RewardType.ValidatorBoost, amount) }
+      val validator = rewardDistribution.nodeValidatorRewards.map {
+        case (address, amount) => (address, RewardType.ValidatorConsensus, amount)
+      }
+      val voting = rewardDistribution.voteBasedRewards.map { case (address, amount) => (address, RewardType.ValidatorBoost, amount) }
       val governance = rewardDistribution.governanceRewards.map { case (address, amount) => (address, RewardType.GovernanceVoting, amount) }
       val dao = {
         val (address, amount) = rewardDistribution.daoRewards

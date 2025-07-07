@@ -1,6 +1,6 @@
 package org.amm_metagraph.shared_data.validations
 
-import cats.data.{NonEmptyList, OptionT}
+import cats.data.NonEmptyList
 import cats.effect.kernel.Async
 import cats.syntax.all._
 
@@ -12,7 +12,6 @@ import io.constellationnetwork.security.signature.Signed
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
-import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.Errors.valid
 import org.amm_metagraph.shared_data.validations.SharedValidations.validateAmmMetagraphId
 

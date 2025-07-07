@@ -155,11 +155,13 @@ object GovernanceCombinerService {
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] =
           for {
+            approvedValidators <- EitherT.liftF(context.getMetagraphL0Seedlist.getOrElse(Set.empty).toList.traverse(_.peerId.toAddress))
             _ <- EitherT(
               governanceValidations.l0Validations(
                 signedUpdate,
                 oldState.calculated,
-                globalEpochProgress
+                globalEpochProgress,
+                approvedValidators
               )
             )
             result <- EitherT.liftF {
