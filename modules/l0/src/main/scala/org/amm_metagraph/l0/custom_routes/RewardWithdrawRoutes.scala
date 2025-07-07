@@ -9,14 +9,10 @@ import io.constellationnetwork.schema.balance.Amount
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import io.circe.generic.auto._
 import org.amm_metagraph.l0.custom_routes.Responses.SingleResponse
 import org.amm_metagraph.shared_data.calculated_state.{CalculatedState, CalculatedStateService}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
-import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardType}
-import org.amm_metagraph.shared_data.types.States.{OperationType, WithdrawalCalculatedState}
-import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalReference
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}

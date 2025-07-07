@@ -17,7 +17,7 @@ import io.constellationnetwork.security.signature.signature.{Signature, Signatur
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosDouble, PosLong}
-import eu.timepit.refined.types.numeric.PosInt
+import eu.timepit.refined.types.numeric._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -55,7 +55,8 @@ object Shared {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       rewardCalculationInterval = NonNegLong(100),
-      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
+      rewardTransactionsPerSnapshot = NonNegInt(100)
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),

@@ -28,7 +28,8 @@ trait GovernanceValidations[F[_]] {
   def l0Validations(
     rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
     state: AmmCalculatedState,
-    lastSyncGlobalSnapshotEpochProgress: EpochProgress
+    lastSyncGlobalSnapshotEpochProgress: EpochProgress,
+    approvedValidators: Seq[Address]
   )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]]
 }
 
@@ -37,15 +38,17 @@ object GovernanceValidations {
     applicationConfig: ApplicationConfig,
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): GovernanceValidations[F] = new GovernanceValidations[F] {
-    def l1Validations(
+    override def l1Validations(
       rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
     ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
       exceedingAllocationPercentage(rewardAllocationVoteUpdate)
     }
-    def l0Validations(
+
+    override def l0Validations(
       rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
       state: AmmCalculatedState,
-      lastSyncGlobalSnapshotEpochProgress: EpochProgress
+      lastSyncGlobalSnapshotEpochProgress: EpochProgress,
+      approvedValidators: Seq[Address]
     )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]] = {
       val lastAllocations = state.allocations
       val lastVotingWeights = state.votingWeights
@@ -68,7 +71,8 @@ object GovernanceValidations {
         isValidId = allocationIdValidation(
           applicationConfig,
           rewardAllocationVoteUpdate,
-          liquidityPools
+          liquidityPools,
+          approvedValidators
         )
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalSnapshotEpochProgress)
 
@@ -157,13 +161,17 @@ object GovernanceValidations {
     private def allocationIdValidation(
       applicationConfig: ApplicationConfig,
       rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
-      liquidityPools: LiquidityPoolCalculatedState
+      liquidityPools: LiquidityPoolCalculatedState,
+      approvedValidators: Seq[Address]
     ): DataApplicationValidationErrorOr[Unit] = {
       val allocationIds = rewardAllocationVoteUpdate.allocations.map { case (id, _) => id }
       val liquidityPoolIds = liquidityPools.confirmed.value.keySet
 
       InvalidAllocationId.whenA(
-        allocationIds.exists(id => !liquidityPoolIds.contains(id) && id != applicationConfig.nodeValidatorsGovernanceAllocationId)
+        allocationIds.exists(id =>
+          !liquidityPoolIds.contains(id) &&
+            (id != applicationConfig.nodeValidatorsGovernanceAllocationId || approvedValidators.map(_.value.value).contains(id))
+        )
       )
     }
   }

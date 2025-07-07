@@ -23,7 +23,7 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
-import eu.timepit.refined.types.numeric.{PosDouble, PosInt}
+import eu.timepit.refined.types.numeric._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.DummyL1Context.buildL1NodeContext
 import org.amm_metagraph.shared_data.FeeDistributor
@@ -66,7 +66,8 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       EpochProgress.MinValue,
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       rewardCalculationInterval = NonNegLong(100),
-      rewardWithdrawDelay = EpochProgress(NonNegLong(10L))
+      rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
+      rewardTransactionsPerSnapshot = NonNegInt(100)
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),

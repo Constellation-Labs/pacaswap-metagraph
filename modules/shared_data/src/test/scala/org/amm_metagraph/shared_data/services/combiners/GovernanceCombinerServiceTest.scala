@@ -55,7 +55,8 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
     override def l0Validations(
       rewardAllocationVoteUpdate: Signed[DataUpdates.RewardAllocationVoteUpdate],
       state: AmmCalculatedState,
-      lastSyncGlobalSnapshotEpochProgress: EpochProgress
+      lastSyncGlobalSnapshotEpochProgress: EpochProgress,
+      approvedValidators: Seq[Address]
     )(implicit sp: SecurityProvider[IO]): IO[Either[States.FailedCalculatedState, Signed[DataUpdates.RewardAllocationVoteUpdate]]] =
       rewardAllocationVoteUpdate.asRight.pure[IO]
   }

@@ -47,13 +47,14 @@ object ApplicationConfig {
   case class Rewards(
     totalAnnualTokens: Amount,
     governancePool: Amount,
-    validatorWeight: NonNegLong,
+    nodeValidatorWeight: NonNegLong,
     daoWeight: NonNegLong,
-    votingWeight: NonNegLong,
+    voteBasedWeight: NonNegLong,
     initialEpoch: EpochProgress,
     daoAddress: Address,
     rewardCalculationInterval: NonNegLong,
-    rewardWithdrawDelay: EpochProgress
+    rewardWithdrawDelay: EpochProgress,
+    rewardTransactionsPerSnapshot: NonNegInt
   )
 
   case class TokenLimits(
