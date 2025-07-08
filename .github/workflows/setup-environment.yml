@@ -59,6 +59,7 @@ jobs:
         with:
           path: ~/.m2
           key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/*.sbt', '**/project/build.properties') }}-${{ steps.setup-hypergraph.outputs.tessellation_version }}
+          save-always: true
 
       - name: Upload hypergraph artifacts to run CI tests
         uses: actions/upload-artifact@v4

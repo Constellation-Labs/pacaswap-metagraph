@@ -21,7 +21,7 @@ import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.rewards._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
-import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
+import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -136,7 +136,7 @@ object RewardsDistributionService {
           } yield state.focus(_.calculated.rewards.rewardsBuffer.data).modify(_ ++ distributionAsRewardInfo.info.toSeq)
 
         res.foldF(
-          error => logger.warn(show"Failed to distribute rewards $error") >> state.pure[F],
+          error => logger.error(show"Failed to distribute rewards $error") >> state.pure[F],
           _.pure[F]
         )
       }
@@ -154,7 +154,7 @@ object RewardsDistributionService {
           currentLiquidityPools.map { case (id, lp) => id -> lp.poolShares.addressShares }.toList
 
         logger
-          .debug(
+          .info(
             show"Start reward calculation with parameters: $currentEpoch, $validators, $frozenVotingWeights, $frozenGovernanceVotes, $lpShow, $approvedValidators"
           )
           .asRight[RewardDistributionError]
