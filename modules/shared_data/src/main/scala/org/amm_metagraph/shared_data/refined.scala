@@ -60,6 +60,7 @@ object refined {
     def halfUp: BigDecimal = bd.setScale(8, RoundingMode.HALF_UP)
 
     def toAmountUnsafe: Amount = Amount(NonNegLong.unsafeFrom(floor.toLong))
+    def toAmount = NonNegLong.from(floor.toLong)
   }
 
   implicit class BigIntOps(val bi: BigInt) extends AnyVal {

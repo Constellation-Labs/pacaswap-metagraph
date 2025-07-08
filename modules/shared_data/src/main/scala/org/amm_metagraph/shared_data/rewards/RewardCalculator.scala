@@ -24,7 +24,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 @derive(show)
 sealed trait RewardError extends Throwable
-case class NegativeValueError(value: Long) extends RewardError
+case class NegativeValueError(value: Long, description: String) extends RewardError
 case class InvalidMonthError(month: Int) extends RewardError
 
 case class RewardDistribution(
@@ -74,11 +74,11 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
     extends RewardCalculator[F] {
   def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
-  private def toAmount(value: Long): Either[RewardError, Amount] =
+  private def toAmount(value: BigDecimal, description: String): Either[RewardError, Amount] =
     NonNegLong
-      .from(value)
+      .from(value.floor.toLong)
       .bimap(
-        _ => NegativeValueError(value),
+        _ => NegativeValueError(value.floor.toLong, description),
         Amount(_)
       )
 
@@ -158,13 +158,13 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
     votingPowers: Seq[VotingPower],
     currentProgress: EpochProgress
   ): EitherT[F, RewardError, Map[Address, Amount]] = {
-    val basePerEpoch = rewardConfig.governancePool.value.value / epochData.epochProgress1Year
+    val basePerEpoch = BigDecimal(rewardConfig.governancePool.value.value / epochData.epochProgress1Year)
     val yearRemainder = if (isLastEpochInYear(currentProgress)) {
       rewardConfig.governancePool.value.value % epochData.epochProgress1Year
     } else 0L
-    val totalPower = votingPowers.map(_.power.total.value).sum
+    val totalPower = votingPowers.map(v => BigDecimal(v.power.total.value)).sum
 
-    if (votingPowers.isEmpty || totalPower === 0L) {
+    if (votingPowers.isEmpty || totalPower === BigDecimal(0L)) {
       EitherT.pure[F, RewardError](Map.empty[Address, Amount])
     } else {
       val totalForEpoch = basePerEpoch + yearRemainder
@@ -172,7 +172,7 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
       for {
         baseDistribution <- EitherT.fromEither[F](votingPowers.traverse { vote =>
           val share = (totalForEpoch * vote.power.total.value) / totalPower
-          toAmount(share).map(vote.address -> _)
+          toAmount(share, s"Share is negative: $totalForEpoch, ${vote.power.total.value}, $totalPower").map(vote.address -> _)
         }.map(_.toMap))
 
         distributedAmount = baseDistribution.values.map(_.value.value).sum
@@ -187,7 +187,7 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
               shuffled <- EitherT.liftF(random.shuffleList(highestPowerVoters.toList))
               luckyVoter = shuffled.head
               updatedAmount = baseDistribution(luckyVoter.address).value.value + remainder
-              finalAmount <- EitherT.fromEither[F](toAmount(updatedAmount))
+              finalAmount <- EitherT.fromEither[F](toAmount(updatedAmount, s"Final amount is negative: $totalForEpoch, $distributedAmount"))
             } yield baseDistribution.updated(luckyVoter.address, finalAmount)
           } else {
             EitherT.pure[F, RewardError](baseDistribution)
