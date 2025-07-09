@@ -77,6 +77,8 @@ object GovernanceCombinerService {
         tokenLock.unlockEpoch match {
           case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress2Years) <= unlockEpoch.value =>
             tokenLock.amount.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier
+          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress2Years) <= unlockEpoch.value =>
+            tokenLock.amount.value * votingWeightMultipliers.lockForOneAndHalfYearMultiplier
           case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress1Year) <= unlockEpoch.value =>
             tokenLock.amount.value * votingWeightMultipliers.lockForOneYearMultiplier
           case _ =>

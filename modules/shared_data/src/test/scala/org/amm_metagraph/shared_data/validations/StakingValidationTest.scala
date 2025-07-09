@@ -57,6 +57,7 @@ object StakingValidationTest extends MutableIOSuite {
       VotingWeightMultipliers(
         PosDouble.MinValue,
         PosDouble.MinValue,
+        PosDouble.MinValue,
         PosDouble.MinValue
       )
     ),

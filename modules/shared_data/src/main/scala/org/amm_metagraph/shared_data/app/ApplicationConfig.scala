@@ -37,6 +37,7 @@ object ApplicationConfig {
   case class VotingWeightMultipliers(
     lockForSixMonthsMultiplier: PosDouble,
     lockForOneYearMultiplier: PosDouble,
+    lockForOneAndHalfYearMultiplier: PosDouble,
     lockForTwoOrMoreYearsMultiplier: PosDouble
   )
 

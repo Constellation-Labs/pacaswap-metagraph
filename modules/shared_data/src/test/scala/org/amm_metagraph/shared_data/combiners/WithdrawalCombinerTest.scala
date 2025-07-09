@@ -51,6 +51,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       VotingWeightMultipliers(
         PosDouble.MinValue,
         PosDouble.MinValue,
+        PosDouble.MinValue,
         PosDouble.MinValue
       )
     ),

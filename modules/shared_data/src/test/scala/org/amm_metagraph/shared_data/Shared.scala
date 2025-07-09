@@ -43,6 +43,7 @@ object Shared {
       VotingWeightMultipliers(
         PosDouble.MinValue,
         PosDouble.MinValue,
+        PosDouble.MinValue,
         PosDouble.MinValue
       )
     ),

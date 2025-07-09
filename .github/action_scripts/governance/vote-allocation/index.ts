@@ -229,7 +229,7 @@ const voteAllocationTests = async (argsObject: object) => {
 
         log(`Governance voting shall appeared in frozen votes for ${address} as month pass`) 
         await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
-            await validateAllocationsRewards(config, address, 10000 * 1e8, logger)
+            await validateAllocationsRewards(config, address, 70000 * 1e8, logger)
         })
 
         log(`Governance voting shall disappeared in frozen votes for ${address} as month pass again`) 
