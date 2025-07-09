@@ -596,14 +596,14 @@ object PricingService {
             liquidityPool.poolFees
           )
 
-          val updateFeeShares = FeeDistributor.distributeProviderFees(
+          val newFeeShares = FeeDistributor.distributeProviderFees(
             fees.providers,
             fees.operators,
             liquidityPool.poolShares,
             metagraphId
           )
 
-          liquidityPool.poolShares.copy(pendingFeeShares = toPendingFeeShares(updateFeeShares, hashedSwapUpdate.hash))
+          liquidityPool.poolShares.copy(pendingFeeShares = toPendingFeeShares(newFeeShares, hashedSwapUpdate.hash))
         }
 
         val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
