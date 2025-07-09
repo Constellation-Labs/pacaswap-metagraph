@@ -59,6 +59,7 @@ object SwapValidationTest extends MutableIOSuite {
       VotingWeightMultipliers(
         PosDouble.MinValue,
         PosDouble.MinValue,
+        PosDouble.MinValue,
         PosDouble.MinValue
       )
     ),

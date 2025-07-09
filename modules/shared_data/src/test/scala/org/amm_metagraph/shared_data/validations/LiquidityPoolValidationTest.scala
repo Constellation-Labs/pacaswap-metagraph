@@ -54,6 +54,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       VotingWeightMultipliers(
         PosDouble.MinValue,
         PosDouble.MinValue,
+        PosDouble.MinValue,
         PosDouble.MinValue
       )
     ),
