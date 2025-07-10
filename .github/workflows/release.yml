@@ -44,6 +44,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           JAVA_VERSION: 11
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: "./.github/templates/actions/setup_java_and_scala"
 
       - name: Test
