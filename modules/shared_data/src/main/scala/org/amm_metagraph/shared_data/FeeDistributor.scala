@@ -73,14 +73,13 @@ object FeeDistributor {
     metagraphId: CurrencyId
   ): Map[Address, NonNegLong] = {
     val totalShares = poolShares.totalShares.value
-    val currentFeeShares = poolShares.feeShares
 
-    if (totalShares == 0) currentFeeShares
+    if (totalShares == 0) Map.empty[Address, NonNegLong]
     else {
       val providerDistribution = poolShares.addressShares.foldLeft(Map.empty[Address, Long]) {
         case (distributionMap, (address, shareAmount)) =>
           val sharePercentage = BigDecimal(shareAmount.value.value.value) / BigDecimal(totalShares)
-          val providerFeeShareAmount = (providerFeeAmount * sharePercentage)
+          val providerFeeShareAmount = (BigDecimal(providerFeeAmount) * sharePercentage)
             .setScale(0, RoundingMode.HALF_UP)
             .toLong
 
@@ -90,14 +89,14 @@ object FeeDistributor {
       val roundingDifference = providerFeeAmount - providerDistribution.values.sum
       val operatorDistribution = Map(metagraphId.value -> (operatorFeeAmount + roundingDifference))
 
-      val latestFeeShares = providerDistribution |+| operatorDistribution
-
-      latestFeeShares.foldLeft(currentFeeShares) {
-        case (acc, (address, amount)) =>
-          val current = acc.getOrElse(address, 0L.toNonNegLongUnsafe)
-          val updated = (current.value + amount).toNonNegLongUnsafe
-
-          acc + (address -> updated)
+      val allDistributions = operatorDistribution.foldLeft(providerDistribution) {
+        case (acc, (address, operatorAmount)) =>
+          val existingAmount = acc.getOrElse(address, 0L)
+          acc + (address -> (existingAmount + operatorAmount))
+      }
+      
+      allDistributions.map { case (address, amount) =>
+        address -> amount.toNonNegLongUnsafe
       }
     }
   }
