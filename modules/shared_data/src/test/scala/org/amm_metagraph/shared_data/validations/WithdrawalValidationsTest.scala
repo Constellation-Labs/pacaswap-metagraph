@@ -349,7 +349,7 @@ object WithdrawalValidationsTest extends MutableIOSuite {
         SortedMap(
           OperationType.LiquidityPool -> liquidityPoolCalculatedState,
           OperationType.Withdrawal -> WithdrawalCalculatedState.empty.copy(pending =
-            SortedSet(PendingAllowSpend(withdrawalUpdate, Hash.empty))
+            SortedSet(PendingAllowSpend(withdrawalUpdate, Hash.empty, withdrawalUpdate.maxValidGsEpochProgress))
           )
         )
       )

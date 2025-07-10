@@ -120,6 +120,7 @@ object LiquidityPool {
       PendingAllowSpend[AmmUpdate](
         pendingAllowSpend.update,
         pendingAllowSpend.updateHash,
+        pendingAllowSpend.expiringEpochProgress,
         pendingAllowSpend.pricingTokenInfo
       )
     }.toSortedSet
@@ -137,6 +138,7 @@ object LiquidityPool {
         pendingSpend.update,
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
+        pendingSpend.expiringEpochProgress,
         pendingSpend.pricingTokenInfo
       )
     }.toSortedSet

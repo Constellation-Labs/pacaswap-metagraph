@@ -153,8 +153,8 @@ object States {
 
     def getPendingUpdates: SortedSet[Signed[UpdateType]] =
       pending.collect {
-        case PendingAllowSpend(update, _, _)     => update
-        case PendingSpendAction(update, _, _, _) => update
+        case PendingAllowSpend(update, _, _, _)     => update
+        case PendingSpendAction(update, _, _, _, _) => update
       }
   }
 
@@ -275,6 +275,7 @@ object States {
   sealed trait PendingAction[A <: AmmUpdate] {
     val update: Signed[A]
     val updateHash: Hash
+    val expiringEpochProgress: EpochProgress
     val pricingTokenInfo: Option[PricingTokenInfo] = None
   }
 
@@ -290,6 +291,7 @@ object States {
   case class PendingAllowSpend[A <: AmmUpdate](
     update: Signed[A],
     updateHash: Hash,
+    expiringEpochProgress: EpochProgress,
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
 
@@ -306,6 +308,7 @@ object States {
     update: Signed[A],
     updateHash: Hash,
     generatedSpendAction: SpendAction,
+    expiringEpochProgress: EpochProgress,
     override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
 

@@ -161,7 +161,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          withdrawalUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          withdrawalUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -279,7 +285,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          withdrawalUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          withdrawalUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,
@@ -443,7 +455,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, pending.head.updateHash, spendActions.head),
+        PendingSpendAction(withdrawalUpdate, pending.head.updateHash, spendActions.head, withdrawalUpdate.maxValidGsEpochProgress),
         withdrawalResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -614,6 +626,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           withdrawalUpdate.copy(value = withdrawalUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
           pendingActions.head.updateHash,
           spendActions.head,
+          withdrawalUpdate.maxValidGsEpochProgress,
           pending.pricingTokenInfo
         ),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
@@ -719,7 +732,13 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
-        PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          withdrawalUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          withdrawalUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MinValue,
         spendActions,

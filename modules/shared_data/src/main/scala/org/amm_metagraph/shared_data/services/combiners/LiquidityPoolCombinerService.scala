@@ -129,8 +129,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                       => false
+          case PendingAllowSpend(update, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                          => false
         }
 
       private def removePendingSpendAction(
@@ -138,8 +138,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ) =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                           => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                              => false
         }
 
       def combineNew(
@@ -187,7 +187,8 @@ object LiquidityPoolCombinerService {
             case (None, _) | (_, None) =>
               val pendingAllowSpend = PendingAllowSpend(
                 signedUpdate,
-                updateHashed.hash
+                updateHashed.hash,
+                signedUpdate.maxValidGsEpochProgress
               )
 
               val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + pendingAllowSpend
@@ -218,7 +219,7 @@ object LiquidityPoolCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate, updateHashed.hash),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash, signedUpdate.maxValidGsEpochProgress),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -276,7 +277,8 @@ object LiquidityPoolCombinerService {
                 pendingSpendAction = PendingSpendAction(
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
-                  spendAction
+                  spendAction,
+                  pendingAllowSpendUpdate.expiringEpochProgress
                 )
 
                 updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + pendingSpendAction

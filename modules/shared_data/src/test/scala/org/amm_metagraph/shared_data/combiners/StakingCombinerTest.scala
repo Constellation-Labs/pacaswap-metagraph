@@ -160,7 +160,13 @@ object StakingCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head, pending.head.pricingTokenInfo),
+        PendingSpendAction(
+          stakingUpdate,
+          pending.head.updateHash,
+          spendActions.head,
+          stakingUpdate.maxValidGsEpochProgress,
+          pending.head.pricingTokenInfo
+        ),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -305,7 +311,13 @@ object StakingCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head, pending.head.pricingTokenInfo),
+        PendingSpendAction(
+          stakingUpdate,
+          pending.head.updateHash,
+          spendActions.head,
+          stakingUpdate.maxValidGsEpochProgress,
+          pending.head.pricingTokenInfo
+        ),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -931,7 +943,7 @@ object StakingCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head),
+        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head, stakingUpdate.maxValidGsEpochProgress),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,

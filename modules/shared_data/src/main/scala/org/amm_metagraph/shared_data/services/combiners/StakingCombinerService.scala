@@ -129,8 +129,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update, _, _) if update === signedStakingUpdate => true
-          case _                                                                 => false
+          case PendingAllowSpend(update, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                    => false
         }
 
       private def removePendingSpendAction(
@@ -138,8 +138,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ) =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                     => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                        => false
         }
 
       def combineNew(
@@ -189,6 +189,7 @@ object StakingCombinerService {
               val pendingAllowSpend = PendingAllowSpend(
                 signedUpdate,
                 updateHashed.hash,
+                signedUpdate.maxValidGsEpochProgress,
                 stakingTokenInfo.some
               )
 
@@ -221,7 +222,7 @@ object StakingCombinerService {
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate, updateHashed.hash, stakingTokenInfo.some),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash, signedUpdate.maxValidGsEpochProgress, stakingTokenInfo.some),
                   oldState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -303,6 +304,7 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
+                  pendingAllowSpendUpdate.expiringEpochProgress,
                   pendingAllowSpendUpdate.pricingTokenInfo
                 )
 

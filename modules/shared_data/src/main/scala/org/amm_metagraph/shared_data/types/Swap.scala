@@ -132,6 +132,7 @@ object Swap {
       PendingAllowSpend[AmmUpdate](
         pendingAllow.update,
         pendingAllow.updateHash,
+        pendingAllow.expiringEpochProgress,
         pendingAllow.pricingTokenInfo
       )
     }.toSortedSet
@@ -148,6 +149,7 @@ object Swap {
         pendingSpend.update,
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
+        pendingSpend.expiringEpochProgress,
         pendingSpend.pricingTokenInfo
       )
     }.toSortedSet

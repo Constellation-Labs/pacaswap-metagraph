@@ -105,7 +105,7 @@ object WithdrawalCombinerService {
         pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(
@@ -225,7 +225,13 @@ object WithdrawalCombinerService {
             .focus(_.confirmed.value)
             .modify(_.updated(poolId.value, updatedPool))
 
-          pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, withdrawalAmounts.some)
+          pendingAllowSpend = PendingSpendAction(
+            signedUpdate,
+            updateHashed.hash,
+            spendAction,
+            signedUpdate.maxValidGsEpochProgress,
+            withdrawalAmounts.some
+          )
 
           updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
             .focus(_.pending)

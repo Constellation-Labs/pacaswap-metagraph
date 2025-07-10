@@ -146,7 +146,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionLiquidityPoolUpdates(liquidityPoolPendingSpendActionResponse.calculated)
 
       liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
-        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head),
+        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head, liquidityPoolUpdate.maxValidGsEpochProgress),
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -268,7 +268,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
       poolId <- buildLiquidityPoolUniqueIdentifier(tokenAId, tokenBId)
 
       liquidityPoolConfirmedResponse <- liquidityPoolCombinerService.combinePendingSpendAction(
-        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head),
+        PendingSpendAction(liquidityPoolUpdate, pending.head.updateHash, spendActions.head, liquidityPoolUpdate.maxValidGsEpochProgress),
         liquidityPoolPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,

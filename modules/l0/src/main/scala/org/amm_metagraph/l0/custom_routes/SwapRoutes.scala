@@ -52,7 +52,7 @@ object SwapRoutes {
   object SwapStateResponse {
     def from(update: PendingAction[SwapUpdate], stateTransitionType: StateTransitionType): SwapStateResponse =
       update match {
-        case PendingAllowSpend(update, _, _) =>
+        case PendingAllowSpend(update, _, _, _) =>
           SwapStateResponse(
             update.source.some,
             update.swapFromPair,
@@ -65,7 +65,7 @@ object SwapRoutes {
             stateTransitionType
           )
 
-        case PendingSpendAction(update, _, _, Some(swapInfo: SwapTokenInfo)) =>
+        case PendingSpendAction(update, _, _, _, Some(swapInfo: SwapTokenInfo)) =>
           SwapStateResponse(
             update.source.some,
             update.swapFromPair,
@@ -78,7 +78,7 @@ object SwapRoutes {
             stateTransitionType
           )
 
-        case PendingSpendAction(update, _, _, _) =>
+        case PendingSpendAction(update, _, _, _, _) =>
           SwapStateResponse(
             update.source.some,
             update.swapFromPair,

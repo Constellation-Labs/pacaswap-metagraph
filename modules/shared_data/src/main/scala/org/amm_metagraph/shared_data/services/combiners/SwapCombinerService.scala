@@ -179,8 +179,8 @@ object SwapCombinerService {
         signedSwapUpdate: Signed[SwapUpdate]
       ) =
         swapCalculatedState.pending.filterNot {
-          case PendingAllowSpend(update, _, _) if update === signedSwapUpdate => true
-          case _                                                              => false
+          case PendingAllowSpend(update, _, _, _) if update === signedSwapUpdate => true
+          case _                                                                 => false
         }
 
       private def removePendingSpendAction(
@@ -188,8 +188,8 @@ object SwapCombinerService {
         signedSwapUpdate: Signed[SwapUpdate]
       ) =
         swapCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedSwapUpdate => true
-          case _                                                                  => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedSwapUpdate => true
+          case _                                                                     => false
         }
 
       def combineNew(
@@ -262,6 +262,7 @@ object SwapCombinerService {
               val pendingAllowSpend = PendingAllowSpend(
                 signedUpdate,
                 updateHashed.hash,
+                updateHashed.maxValidGsEpochProgress,
                 updatedTokenInformation.some
               )
 
@@ -295,7 +296,7 @@ object SwapCombinerService {
             case Some(_) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
                 combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate, updateHashed.hash, updatedTokenInformation.some),
+                  PendingAllowSpend(signedUpdate, updateHashed.hash, updateHashed.maxValidGsEpochProgress, updatedTokenInformation.some),
                   updatedLpState,
                   globalEpochProgress,
                   lastGlobalSnapshotsAllowSpends,
@@ -367,6 +368,7 @@ object SwapCombinerService {
                   pendingAllowSpend.update,
                   pendingAllowSpend.updateHash,
                   spendActionToken,
+                  pendingAllowSpend.expiringEpochProgress,
                   pendingAllowSpend.pricingTokenInfo
                 )
                 updatedPendingSpendActionCalculatedState =

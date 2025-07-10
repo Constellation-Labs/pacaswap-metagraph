@@ -100,6 +100,7 @@ object Withdrawal {
         pendingSpend.update,
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
+        pendingSpend.expiringEpochProgress,
         pendingSpend.pricingTokenInfo
       )
     }.toSortedSet

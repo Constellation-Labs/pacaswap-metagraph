@@ -142,7 +142,13 @@ object SwapCombinerTest extends MutableIOSuite {
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          swapUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          swapUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -273,6 +279,7 @@ object SwapCombinerTest extends MutableIOSuite {
           swapUpdate.copy(value = swapUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
           pendingActions.head.updateHash,
           spendActions.head,
+          swapUpdate.maxValidGsEpochProgress,
           pending.pricingTokenInfo
         ),
         swapPendingSpendActionResponse,
@@ -676,7 +683,13 @@ object SwapCombinerTest extends MutableIOSuite {
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          swapUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          swapUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,
@@ -849,7 +862,13 @@ object SwapCombinerTest extends MutableIOSuite {
         metagraphId <- context.getCurrencyId
 
         swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-          PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+          PendingSpendAction(
+            swapUpdate,
+            pendingActions.head.updateHash,
+            spendActions.head,
+            swapUpdate.maxValidGsEpochProgress,
+            pending.pricingTokenInfo
+          ),
           swapPendingSpendActionResponse,
           EpochProgress.MinValue,
           spendActions,
@@ -984,7 +1003,13 @@ object SwapCombinerTest extends MutableIOSuite {
         metagraphId <- context.getCurrencyId
 
         swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-          PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+          PendingSpendAction(
+            swapUpdate,
+            pendingActions.head.updateHash,
+            spendActions.head,
+            swapUpdate.maxValidGsEpochProgress,
+            pending.pricingTokenInfo
+          ),
           swapPendingSpendActionResponse,
           EpochProgress.MinValue,
           spendActions,
@@ -1132,7 +1157,13 @@ object SwapCombinerTest extends MutableIOSuite {
             if (spendActions.nonEmpty) {
               val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
               swapCombinerService.combinePendingSpendAction(
-                PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+                PendingSpendAction(
+                  swapUpdate,
+                  pendingActions.head.updateHash,
+                  spendActions.head,
+                  swapUpdate.maxValidGsEpochProgress,
+                  pending.pricingTokenInfo
+                ),
                 swapPendingSpendActionResponse,
                 EpochProgress.MinValue,
                 spendActions,
@@ -1302,7 +1333,13 @@ object SwapCombinerTest extends MutableIOSuite {
             if (spendActions.nonEmpty) {
               val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
               swapCombinerService.combinePendingSpendAction(
-                PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+                PendingSpendAction(
+                  swapUpdate,
+                  pendingActions.head.updateHash,
+                  spendActions.head,
+                  swapUpdate.maxValidGsEpochProgress,
+                  pending.pricingTokenInfo
+                ),
                 swapPendingSpendActionResponse,
                 EpochProgress.MinValue,
                 spendActions,
@@ -1454,7 +1491,13 @@ object SwapCombinerTest extends MutableIOSuite {
         if (spendActions.nonEmpty) {
           val pending = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).pending.head
           swapCombinerService.combinePendingSpendAction(
-            PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+            PendingSpendAction(
+              swapUpdate,
+              pendingActions.head.updateHash,
+              spendActions.head,
+              swapUpdate.maxValidGsEpochProgress,
+              pending.pricingTokenInfo
+            ),
             swapPendingSpendActionResponse,
             EpochProgress.MinValue,
             spendActions,
@@ -1601,7 +1644,13 @@ object SwapCombinerTest extends MutableIOSuite {
                       pendingActions = getPendingSpendActionSwapUpdates(swapPendingSpendActionResponse.calculated)
 
                       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-                        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+                        PendingSpendAction(
+                          swapUpdate,
+                          pendingActions.head.updateHash,
+                          spendActions.head,
+                          swapUpdate.maxValidGsEpochProgress,
+                          pending.pricingTokenInfo
+                        ),
                         swapPendingSpendActionResponse,
                         EpochProgress.MinValue,
                         spendActions,
@@ -1740,6 +1789,7 @@ object SwapCombinerTest extends MutableIOSuite {
           swapUpdate.copy(value = swapUpdate.value.copy(maxValidGsEpochProgress = EpochProgress.MinValue)),
           pendingActions.head.updateHash,
           spendActions.head,
+          swapUpdate.maxValidGsEpochProgress,
           pending.pricingTokenInfo
         ),
         swapPendingSpendActionResponse,
@@ -1900,7 +1950,13 @@ object SwapCombinerTest extends MutableIOSuite {
       metagraphId <- context.getCurrencyId
 
       swapConfirmedResponse <- swapCombinerService.combinePendingSpendAction(
-        PendingSpendAction(swapUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
+        PendingSpendAction(
+          swapUpdate,
+          pendingActions.head.updateHash,
+          spendActions.head,
+          swapUpdate.maxValidGsEpochProgress,
+          pending.pricingTokenInfo
+        ),
         swapPendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,

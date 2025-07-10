@@ -41,7 +41,7 @@ case class StakingRoutes[F[_]: Async](
   object StakingStateResponse {
     def from(pendingAction: PendingAction[StakingUpdate], stateTransitionType: StateTransitionType): StakingStateResponse =
       pendingAction match {
-        case PendingAllowSpend(update, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
+        case PendingAllowSpend(update, _, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,
@@ -50,7 +50,7 @@ case class StakingRoutes[F[_]: Async](
             stakingTokenInfo.incomingPairAmount.value.some,
             stateTransitionType
           )
-        case PendingSpendAction(update, _, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
+        case PendingSpendAction(update, _, _, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,
@@ -59,7 +59,7 @@ case class StakingRoutes[F[_]: Async](
             stakingTokenInfo.incomingPairAmount.value.some,
             stateTransitionType
           )
-        case PendingAllowSpend(update, _, _) =>
+        case PendingAllowSpend(update, _, _, _) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,
@@ -68,7 +68,7 @@ case class StakingRoutes[F[_]: Async](
             none,
             stateTransitionType
           )
-        case PendingSpendAction(update, _, _, _) =>
+        case PendingSpendAction(update, _, _, _, _) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,
