@@ -94,9 +94,10 @@ object FeeDistributor {
           val existingAmount = acc.getOrElse(address, 0L)
           acc + (address -> (existingAmount + operatorAmount))
       }
-      
-      allDistributions.map { case (address, amount) =>
-        address -> amount.toNonNegLongUnsafe
+
+      allDistributions.map {
+        case (address, amount) =>
+          address -> amount.toNonNegLongUnsafe
       }
     }
   }
