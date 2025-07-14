@@ -170,7 +170,8 @@ object PricingService {
           )
 
           newInputReserveBeforeFee = inputReserve + BigInt(amount.value.value)
-          newOutputReserveBeforeFee = pool.k / newInputReserveBeforeFee
+          k = BigInt(pool.tokenA.amount) * BigInt(pool.tokenB.amount)
+          newOutputReserveBeforeFee = k / newInputReserveBeforeFee
           estimatedReceivedBeforeFee = outputReserve - newOutputReserveBeforeFee
 
           fees = FeeDistributor.calculateFeeAmounts(estimatedReceivedBeforeFee, pool.poolFees)
@@ -608,6 +609,7 @@ object PricingService {
 
         val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
         val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
+        val k = BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value)
 
         Right(
           liquidityPool
@@ -615,6 +617,8 @@ object PricingService {
             .replace(tokenA)
             .focus(_.tokenB)
             .replace(tokenB)
+            .focus(_.k)
+            .replace(k)
             .focus(_.poolShares)
             .replace(distributeFees)
         )
