@@ -56,12 +56,7 @@ object SwapValidationTest extends MutableIOSuite {
     "NodeValidators",
     Dev,
     Governance(
-      VotingWeightMultipliers(
-        PosDouble.MinValue,
-        PosDouble.MinValue,
-        PosDouble.MinValue,
-        PosDouble.MinValue
-      )
+      VotingWeightMultipliers(Seq.empty)
     ),
     Rewards(
       Amount.empty,
