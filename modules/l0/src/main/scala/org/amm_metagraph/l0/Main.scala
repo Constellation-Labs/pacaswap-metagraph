@@ -26,6 +26,7 @@ import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonBinaryCodec, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations._
+import org.typelevel.log4cats.SelfAwareStructuredLogger
 
 object Main
     extends CurrencyL0App(
@@ -36,6 +37,7 @@ object Main
       metagraphVersion = MetagraphVersion.unsafeFrom(org.amm_metagraph.l0.BuildInfo.version)
     ) {
 
+  implicit val implicitLogger: SelfAwareStructuredLogger[IO] = logger
   override def dataApplication: Option[Resource[IO, BaseDataApplicationL0Service[IO]]] = (for {
     implicit0(sp: SecurityProvider[IO]) <- SecurityProvider.forAsync[IO]
     jsonBrotliBinaryCodec <- JsonBrotliBinaryCodec.forSync[IO].asResource
@@ -51,6 +53,7 @@ object Main
     }
     implicit0(hasherSelector: HasherSelector[IO]) = HasherSelector.forSync(hasherBrotli, hasherCurrent)
     config <- ApplicationConfigOps.readDefault[IO].asResource
+    _ <- logger.info(show"Start L0 with config: $config").asResource
     calculatedStateService <- CalculatedStateService.make[IO].asResource
     globalSnapshotsStorage: GlobalSnapshotsStorage[IO] <- GlobalSnapshotsStorage.make[IO].asResource
 

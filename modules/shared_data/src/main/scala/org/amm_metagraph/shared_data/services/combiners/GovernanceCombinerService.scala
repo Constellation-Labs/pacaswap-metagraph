@@ -285,7 +285,9 @@ object GovernanceCombinerService {
         val isExpired = currentMetagraphEpochProgress > monthlyReferenceParsed.lastEpochOfMonth
         if (!isExpired) {
           val epochsToEndOfMonth = monthlyReferenceParsed.lastEpochOfMonth.value.value - currentMetagraphEpochProgress.value.value
-          logger.debug(show"Month is not expired yet, need to wait additional $epochsToEndOfMonth epoch(s)") >>
+          logger.debug(
+            show"Month is not expired yet, need to wait additional $epochsToEndOfMonth epoch(s). Epoch length ${applicationConfig.epochInfo.oneEpochProgress}, Month length in epochs: ${applicationConfig.epochInfo.epochProgress1Month}"
+          ) >>
             stateParsed.pure[F]
         } else {
           val frozenVotes = freezeUserVotes(stateParsed, monthlyReferenceParsed)
