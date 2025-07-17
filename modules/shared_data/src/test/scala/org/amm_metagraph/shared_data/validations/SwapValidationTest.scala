@@ -111,9 +111,7 @@ object SwapValidationTest extends MutableIOSuite {
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
       PoolShares(
         1.toTokenAmountFormat.toPosLongUnsafe,
-        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong)))),
-        Map.empty,
-        Map(owner -> 0L.toNonNegLongUnsafe)
+        Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(1e8.toLong))))
       ),
       FeeDistributor.empty
     )

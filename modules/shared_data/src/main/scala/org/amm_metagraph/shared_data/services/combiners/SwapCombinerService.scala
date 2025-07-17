@@ -516,25 +516,9 @@ object SwapCombinerService {
             .focus(_.pending)
             .replace(updatedPendingCalculatedState)
 
-          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair))
-          liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
-          liquidityPoolUpdated <- EitherT.fromEither[F](
-            pricingService.getUpdatedLiquidityPoolDueConfirmedSwap(
-              pendingSpendAction.updateHash,
-              liquidityPool
-            )
-          )
-
-          newLiquidityPoolState =
-            liquidityPoolsCalculatedState
-              .focus(_.confirmed.value)
-              .modify(_.updated(poolId.value, liquidityPoolUpdated))
-
           updatedCalculatedState = oldState.calculated
             .focus(_.operations)
             .modify(_.updated(OperationType.Swap, newSwapState))
-            .focus(_.operations)
-            .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
         } yield
           oldState
             .focus(_.onChain.updatedStateDataUpdate)

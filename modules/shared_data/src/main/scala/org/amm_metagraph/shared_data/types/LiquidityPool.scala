@@ -16,7 +16,7 @@ import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import eu.timepit.refined.types.numeric.{NonNegLong, PosLong}
+import eu.timepit.refined.types.numeric.PosLong
 import io.circe.refined._
 import io.circe.{KeyDecoder, KeyEncoder}
 import io.estatico.newtype.macros.newtype
@@ -47,20 +47,12 @@ object LiquidityPool {
   @derive(encoder, decoder)
   case class PoolShares(
     totalShares: PosLong,
-    addressShares: Map[Address, ShareAmount],
-    pendingFeeShares: Map[Hash, Map[Address, NonNegLong]],
-    feeShares: Map[Address, NonNegLong]
+    addressShares: Map[Address, ShareAmount]
   )
 
   object PoolShares {
     implicit val keyEncoderHash: KeyEncoder[Hash] = KeyEncoder.encodeKeyString.contramap(_.toString)
     implicit val keyDecoderHash: KeyDecoder[Hash] = KeyDecoder.decodeKeyString.map(Hash(_))
-
-    def toPendingFeeShares(
-      feeShares: Map[Address, NonNegLong],
-      swapUpdateHash: Hash
-    ): Map[Hash, Map[Address, NonNegLong]] =
-      Map(swapUpdateHash -> feeShares)
   }
 
   @derive(encoder, decoder)

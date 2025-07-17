@@ -77,10 +77,6 @@ object Shared {
 
     val baseShares = Map(owner -> ShareAmount(Amount(PosLong.unsafeFrom(toFixedPoint(1.0)))))
     val shares = additionalProvider.fold(baseShares)(provider => baseShares + (provider._1 -> provider._2))
-    val feeShares = additionalProvider.foldLeft(Map(owner -> 0L.toNonNegLongUnsafe)) {
-      case (acc, (addr, _)) => acc + (addr -> 0L.toNonNegLongUnsafe)
-    }
-
     val totalShares = shares.values.map(_.value.value.value).sum.toPosLongUnsafe
 
     val liquidityPool = LiquidityPool(
@@ -90,7 +86,7 @@ object Shared {
       tokenB,
       owner,
       BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value),
-      PoolShares(totalShares, shares, Map.empty, feeShares),
+      PoolShares(totalShares, shares),
       fees
     )
     (
