@@ -24,7 +24,6 @@ import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool.PoolShares.toPendingFeeShares
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap.{ReverseSwapQuote, SwapQuote}
@@ -77,11 +76,6 @@ trait PricingService[F[_]] {
     toTokenInfo: TokenInformation,
     grossAmount: SwapAmount,
     metagraphId: CurrencyId
-  ): Either[FailedCalculatedState, LiquidityPool]
-
-  def getUpdatedLiquidityPoolDueConfirmedSwap(
-    updateHash: Hash,
-    liquidityPool: LiquidityPool
   ): Either[FailedCalculatedState, LiquidityPool]
 
   def getUpdatedLiquidityPoolDueNewWithdrawal(
@@ -576,9 +570,7 @@ object PricingService {
             .replace(
               PoolShares(
                 poolShares,
-                updatedAddressShares,
-                liquidityPool.poolShares.pendingFeeShares,
-                liquidityPool.poolShares.feeShares
+                updatedAddressShares
               )
             )
       }
@@ -591,22 +583,6 @@ object PricingService {
         grossAmount: SwapAmount,
         metagraphId: CurrencyId
       ): Either[FailedCalculatedState, LiquidityPool] = {
-        def distributeFees: PoolShares = {
-          val fees = FeeDistributor.calculateFeeAmounts(
-            BigInt(grossAmount.value.value),
-            liquidityPool.poolFees
-          )
-
-          val newFeeShares = FeeDistributor.distributeProviderFees(
-            fees.providers,
-            fees.operators,
-            liquidityPool.poolShares,
-            metagraphId
-          )
-
-          liquidityPool.poolShares.copy(pendingFeeShares = toPendingFeeShares(newFeeShares, hashedSwapUpdate.hash))
-        }
-
         val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
         val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
         val k = BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value)
@@ -619,37 +595,6 @@ object PricingService {
             .replace(tokenB)
             .focus(_.k)
             .replace(k)
-            .focus(_.poolShares)
-            .replace(distributeFees)
-        )
-      }
-
-      def getUpdatedLiquidityPoolDueConfirmedSwap(
-        updateHash: Hash,
-        liquidityPool: LiquidityPool
-      ): Either[FailedCalculatedState, LiquidityPool] = {
-        implicit val semigroupNonNegLong: Semigroup[NonNegLong] =
-          Semigroup.instance((a, b) => NonNegLong.unsafeFrom(a.value + b.value))
-
-        def applyPendingFees: PoolShares = {
-          val pendingFeesToConfirm =
-            liquidityPool.poolShares.pendingFeeShares.getOrElse(updateHash, Map.empty[Address, NonNegLong])
-
-          liquidityPool.poolShares
-            .focus(_.feeShares)
-            .modify { existing =>
-              existing |+| pendingFeesToConfirm
-            }
-            .focus(_.pendingFeeShares)
-            .modify { existing =>
-              existing.removed(updateHash)
-            }
-        }
-
-        Right(
-          liquidityPool
-            .focus(_.poolShares)
-            .replace(applyPendingFees)
         )
       }
 
@@ -724,9 +669,7 @@ object PricingService {
             k = k,
             poolShares = PoolShares(
               totalSharesAmount,
-              updatedAddressShares,
-              liquidityPool.poolShares.pendingFeeShares,
-              liquidityPool.poolShares.feeShares
+              updatedAddressShares
             )
           )
       }
@@ -863,10 +806,6 @@ object PricingService {
             .replace(newTokenA)
             .focus(_.tokenB)
             .replace(newTokenB)
-            .focus(_.poolShares.pendingFeeShares)
-            .modify { existing =>
-              existing.removed(updateHash)
-            }
       }
 
       def rollbackWithdrawalLiquidityPoolAmounts(
