@@ -6,9 +6,13 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
+import derevo.cats.show
+import derevo.derive
+import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric._
 import org.amm_metagraph.shared_data.app.ApplicationConfig.TokenLockLimitsConfig
 
+@derive(show)
 case class ApplicationConfig(
   expirationEpochProgresses: ApplicationConfig.ExpirationEpochProgresses,
   nodeValidatorsGovernanceAllocationId: String,
@@ -23,17 +27,20 @@ case class ApplicationConfig(
 
 object ApplicationConfig {
 
+  @derive(show)
   sealed trait Environment
   case object Dev extends Environment
   case object Testnet extends Environment
   case object Integrationnet extends Environment
   case object Mainnet extends Environment
 
+  @derive(show)
   case class ExpirationEpochProgresses(
     confirmedOperations: EpochProgress,
     failedOperations: EpochProgress
   )
 
+  @derive(show)
   case class VotingWeightMultipliers(
     lockForSixMonthsMultiplier: PosDouble,
     lockForOneYearMultiplier: PosDouble,
@@ -41,10 +48,12 @@ object ApplicationConfig {
     lockForTwoOrMoreYearsMultiplier: PosDouble
   )
 
+  @derive(show)
   case class Governance(
     votingWeightMultipliers: VotingWeightMultipliers
   )
 
+  @derive(show)
   case class Rewards(
     totalAnnualTokens: Amount,
     governancePool: Amount,
@@ -58,11 +67,13 @@ object ApplicationConfig {
     rewardTransactionsPerSnapshot: NonNegInt
   )
 
+  @derive(show)
   case class TokenLimits(
     minTokens: NonNegLong,
     maxTokens: NonNegLong
   )
 
+  @derive(show)
   case class EpochMetadata(oneEpochProgress: FiniteDuration, daysInMonth: Long) {
     val oneEpochProgressInSeconds: Long = oneEpochProgress.toSeconds
     val epochProgressOneDay: Long = (1.day / oneEpochProgress).toLong
@@ -72,6 +83,7 @@ object ApplicationConfig {
     val epochProgress2Years: Long = epochProgress1Year * 2
   }
 
+  @derive(show)
   case class TokenLockLimitsConfig(
     maxTokenLocksPerAddress: PosInt,
     minTokenLockAmount: PosLong
