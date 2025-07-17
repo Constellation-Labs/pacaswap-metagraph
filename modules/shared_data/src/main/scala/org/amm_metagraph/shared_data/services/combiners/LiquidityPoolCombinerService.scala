@@ -371,7 +371,6 @@ object LiquidityPoolCombinerService {
               val amountA = liquidityPoolUpdate.tokenAAmount.value
               val amountB = liquidityPoolUpdate.tokenBAmount.value
               val poolTotalShares: PosLong = 1.toTokenAmountFormat.toPosLongUnsafe
-              val initialFeeShares: NonNegLong = 0L.toNonNegLongUnsafe
 
               val liquidityPool = LiquidityPool(
                 pendingSpendAction.updateHash,
@@ -388,9 +387,7 @@ object LiquidityPoolCombinerService {
                 BigInt(amountA) * BigInt(amountB),
                 PoolShares(
                   poolTotalShares,
-                  Map(sourceAddress -> ShareAmount(Amount(poolTotalShares))),
-                  Map.empty,
-                  Map(sourceAddress -> initialFeeShares)
+                  Map(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
                 ),
                 fees
               )

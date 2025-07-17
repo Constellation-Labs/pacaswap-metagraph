@@ -18,9 +18,6 @@ import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, PoolSha
 
 object FeeDistributor {
 
-  def getFeeShare(feeShares: Map[Address, NonNegLong], address: Address): NonNegLong =
-    feeShares.getOrElse(address, 0L.toNonNegLongUnsafe)
-
   def standard: FeePercentages = FeePercentages(
     Percentage.unsafeFrom(0.3),
     Percentage.unsafeFrom(0.25),
@@ -63,42 +60,6 @@ object FeeDistributor {
       val operatorFeeAmount = totalFeeAmount - providerFeeAmount
 
       FeeAmounts(totalFeeAmount, providerFeeAmount, operatorFeeAmount)
-    }
-  }
-
-  def distributeProviderFees(
-    providerFeeAmount: Long,
-    operatorFeeAmount: Long,
-    poolShares: PoolShares,
-    metagraphId: CurrencyId
-  ): Map[Address, NonNegLong] = {
-    val totalShares = poolShares.totalShares.value
-
-    if (totalShares == 0) Map.empty[Address, NonNegLong]
-    else {
-      val providerDistribution = poolShares.addressShares.foldLeft(Map.empty[Address, Long]) {
-        case (distributionMap, (address, shareAmount)) =>
-          val sharePercentage = BigDecimal(shareAmount.value.value.value) / BigDecimal(totalShares)
-          val providerFeeShareAmount = (BigDecimal(providerFeeAmount) * sharePercentage)
-            .setScale(0, RoundingMode.HALF_UP)
-            .toLong
-
-          distributionMap + (address -> providerFeeShareAmount)
-      }
-
-      val roundingDifference = providerFeeAmount - providerDistribution.values.sum
-      val operatorDistribution = Map(metagraphId.value -> (operatorFeeAmount + roundingDifference))
-
-      val allDistributions = operatorDistribution.foldLeft(providerDistribution) {
-        case (acc, (address, operatorAmount)) =>
-          val existingAmount = acc.getOrElse(address, 0L)
-          acc + (address -> (existingAmount + operatorAmount))
-      }
-
-      allDistributions.map {
-        case (address, amount) =>
-          address -> amount.toNonNegLongUnsafe
-      }
     }
   }
 }

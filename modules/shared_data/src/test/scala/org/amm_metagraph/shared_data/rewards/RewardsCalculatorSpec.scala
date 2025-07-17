@@ -115,9 +115,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   def createLp(id: String, addressShares: Map[Address, Long]): (String, LiquidityPool) = {
     val poolShares = PoolShares(
       totalShares = PosLong.unsafeFrom(addressShares.values.sum),
-      addressShares = addressShares.view.mapValues(v => ShareAmount(Amount(NonNegLong.unsafeFrom(v)))).toMap,
-      pendingFeeShares = Map.empty,
-      feeShares = Map.empty
+      addressShares = addressShares.view.mapValues(v => ShareAmount(Amount(NonNegLong.unsafeFrom(v)))).toMap
     )
 
     val lp = LiquidityPool(
