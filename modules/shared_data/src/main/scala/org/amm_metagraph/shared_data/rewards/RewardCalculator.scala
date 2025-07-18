@@ -16,8 +16,8 @@ import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
-import org.amm_metagraph.shared_data.app.ApplicationConfig.{LpRewardInfo, TokenPairStrings}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{LpRewardInfo, TokenPairStrings}
 import org.amm_metagraph.shared_data.refined.{BigDecimalOps, Percentage}
 import org.amm_metagraph.shared_data.rewards.LiquidityPoolRewardConfiguration._
 import org.amm_metagraph.shared_data.types.Governance._
