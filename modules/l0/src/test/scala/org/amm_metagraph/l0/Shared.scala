@@ -50,7 +50,8 @@ object Shared {
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       NonNegLong(100L),
       EpochProgress(NonNegLong(10L)),
-      NonNegInt(100)
+      NonNegInt(100),
+      nodeValidatorConfig = NodeValidatorConfig(Seq.empty)
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),

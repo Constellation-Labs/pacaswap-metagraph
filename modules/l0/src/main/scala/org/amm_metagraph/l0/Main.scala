@@ -79,7 +79,7 @@ object Main
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
     withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
-    rewardsCalculator = RewardCalculator.make[IO](config.rewards, config.epochInfo)
+    rewardsCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo).toResource
     rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards)
     rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations, jsonBase64BinaryCodec)
 

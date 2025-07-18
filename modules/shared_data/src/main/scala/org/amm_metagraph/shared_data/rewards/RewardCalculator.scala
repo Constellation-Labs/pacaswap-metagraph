@@ -6,21 +6,24 @@ import cats.effect.std.Random
 import cats.syntax.all._
 
 import io.constellationnetwork.schema.AmountOps.AmountOps
-import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.CurrencyId
 
 import derevo.cats.show
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
 import eu.timepit.refined.types.numeric.NonNegLong
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{LpRewardInfo, TokenPairStrings}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
-import org.amm_metagraph.shared_data.refined.{BigDecimalOps, LongOps, Percentage}
+import org.amm_metagraph.shared_data.refined.{BigDecimalOps, Percentage}
+import org.amm_metagraph.shared_data.rewards.LiquidityPoolRewardConfiguration._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
-import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+import org.typelevel.log4cats.{Logger, SelfAwareStructuredLogger}
 
 @derive(show)
 sealed trait RewardError extends Throwable
@@ -66,13 +69,25 @@ trait RewardCalculator[F[_]] {
 }
 
 object RewardCalculator {
-  def make[F[_]: Async](config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): RewardCalculator[F] =
-    new RewardCalculatorImpl(config, epochData)
+  def make[F[_]: Async: Logger](config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): F[RewardCalculator[F]] =
+    EitherT
+      .fromEither[F](config.nodeValidatorConfig.LiquidityPoolsConfig.parsed)
+      .valueOrF { error =>
+        implicitly[Logger[F]].error(
+          show"Failed to parse voted based liquidity pool config due: $error. Empty config will be used instead!"
+        ) >>
+          LiquidityPoolRewardConfiguration.empty.pure[F]
+      }
+      .map(lpConfig => new RewardCalculatorImpl(config, epochData, lpConfig): RewardCalculator[F])
 }
 
-class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata)
-    extends RewardCalculator[F] {
-  def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
+class RewardCalculatorImpl[F[_]: Async](
+  rewardConfig: ApplicationConfig.Rewards,
+  epochData: ApplicationConfig.EpochMetadata,
+  voteBasedLpConfig: LiquidityPoolRewardConfiguration
+) extends RewardCalculator[F] {
+
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
   private def toAmount(value: BigDecimal, description: String): Either[RewardError, Amount] =
     NonNegLong
@@ -94,14 +109,21 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
 
   private def calculateNodeValidatorShare(
     perEpoch: BigDecimal,
-    validators: Seq[Address]
-  ): Either[RewardError, Map[Address, Amount]] =
-    if (validators.isEmpty) {
+    validators: Seq[Address],
+    currentEpoch: EpochProgress,
+    addressToLpInfo: Map[Address, Seq[LpInfo]]
+  ): Either[RewardError, Map[Address, Amount]] = {
+    def isLPConfigured(address: Address): Boolean =
+      voteBasedLpConfig.contains(currentEpoch, addressToLpInfo.getOrElse(address, Seq.empty))
+
+    val eligibleValidators = validators.filter(isLPConfigured)
+    if (eligibleValidators.isEmpty) {
       Map.empty[Address, Amount].asRight
     } else {
-      val share = (perEpoch / validators.length).toAmountUnsafe
-      validators.map(_ -> share).toMap.asRight
+      val share = (perEpoch / eligibleValidators.length).toAmountUnsafe
+      eligibleValidators.map(_ -> share).toMap.asRight
     }
+  }
 
   private def calculateVoteBasedShare(
     perEpoch: BigDecimal,
@@ -114,7 +136,9 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
     }
 
     val voteBasedLpRewards = calculateLiquidityPoolsRewards(epochRewardsForAllocation, currentLiquidityPools)
-    val voteBasedValidatorRewards = calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
+
+    val voteBasedValidatorRewards =
+      calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
 
     val unifiedRewards = (voteBasedLpRewards.toList ++ voteBasedValidatorRewards.toList).groupMapReduce(_._1)(_._2)(_ + _).filter(_._2 > 0)
     val refinedRewards: Map[Address, Amount] =
@@ -122,6 +146,17 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
         case (address, reward) => address -> reward.toAmountUnsafe // only positive here because it was checked on previous step
       }
     refinedRewards.asRight
+  }
+
+  private def buildAddressToLP(currentLiquidityPools: Map[String, LiquidityPool]): Map[Address, Seq[LpInfo]] = {
+    val addressToLpInfo: Seq[(Address, LpInfo)] = currentLiquidityPools.values.flatMap { lp =>
+      val tokenA = lp.tokenA.identifier
+      val tokenB = lp.tokenB.identifier
+
+      lp.poolShares.addressShares.map { case (address, shareAmount) => address -> LpInfo(shareAmount.value, tokenA, tokenB) }
+    }.toSeq
+
+    addressToLpInfo.groupMapReduce(_._1)(e => Seq(e._2))(_ ++ _)
   }
 
   private def calculateLiquidityPoolsRewards(
@@ -219,7 +254,10 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
         logger.info(s"Going to distribute $totalEpochTokens as rewards for epoch $currentProgress in month $currentMonth").asRight
       )
 
-      nodeValidatorDistribution <- EitherT.fromEither[F](calculateNodeValidatorShare(nodeValidatorsPerEpoch, validators))
+      addressToLpInfo = buildAddressToLP(currentLiquidityPools)
+      nodeValidatorDistribution <- EitherT.fromEither[F](
+        calculateNodeValidatorShare(nodeValidatorsPerEpoch, validators, currentProgress, addressToLpInfo)
+      )
       nodeValidatorDistributed = nodeValidatorDistribution.map(_._2.toBigDecimal).sum
 
       voteBasedDistribution <- EitherT.fromEither[F](
@@ -245,4 +283,83 @@ class RewardCalculatorImpl[F[_]: Async](rewardConfig: ApplicationConfig.Rewards,
         voteBasedRewards = voteBasedDistribution,
         governanceRewards = governanceDistribution
       )).value
+}
+
+case class LpInfo(shareMount: Amount, tokenA: Option[CurrencyId], tokenB: Option[CurrencyId])
+
+case class LiquidityPoolRewardConfiguration(configurations: Seq[ParsedLpConfig]) {
+  def contains(epoch: EpochProgress, lpInfo: Seq[LpInfo]): Boolean =
+    lpInfo.exists(contains(epoch, _))
+
+  def contains(epoch: EpochProgress, lpInfo: LpInfo): Boolean =
+    configurations.exists { config =>
+      config.tokenPairs.exists(_.contains(lpInfo.tokenA, lpInfo.tokenB)) &&
+      config.start <= epoch &&
+      config.end >= epoch &&
+      config.minimumShares <= lpInfo.shareMount
+    }
+}
+
+object LiquidityPoolRewardConfiguration {
+  val empty: LiquidityPoolRewardConfiguration = LiquidityPoolRewardConfiguration(Seq.empty)
+
+  sealed trait ParsedToken
+  case class ParsedTokenReal(token: CurrencyId) extends ParsedToken
+  case object ParsedTokenDag extends ParsedToken
+  case object ParsedTokenAny extends ParsedToken
+
+  case class ParsedTokenPair(tokenA: ParsedToken, tokenB: ParsedToken) {
+    def contains(rightCurrencyOpt: Option[CurrencyId], leftCurrencyOpt: Option[CurrencyId]): Boolean = {
+      def matches(currencyOpt: Option[CurrencyId], parsed: ParsedToken): Boolean =
+        (currencyOpt, parsed) match {
+          case (_, ParsedTokenAny)                 => true
+          case (None, ParsedTokenDag)              => true
+          case (Some(id), ParsedTokenReal(realId)) => id == realId
+          case _                                   => false
+        }
+
+      (matches(rightCurrencyOpt, tokenA) && matches(leftCurrencyOpt, tokenB)) ||
+      (matches(rightCurrencyOpt, tokenB) && matches(leftCurrencyOpt, tokenA))
+    }
+  }
+
+  implicit class TokenPairOps(tokenPair: TokenPairStrings) {
+    private val DagLiteral: String = "DAG"
+    private val AnyLiteral: String = "*"
+
+    private def parseToken(tokenString: String): Either[String, ParsedToken] =
+      tokenString match {
+        case DagLiteral => ParsedTokenDag.asRight
+        case AnyLiteral => ParsedTokenAny.asRight
+        case _          => refineV[DAGAddressRefined](tokenString).map(address => ParsedTokenReal(CurrencyId(Address(address))))
+      }
+
+    def parsed: Either[String, ParsedTokenPair] = {
+      val parsedA = parseToken(tokenPair.tokenA)
+      val parsedB = parseToken(tokenPair.tokenB)
+
+      (parsedA, parsedB).mapN { case (idA, idB) => ParsedTokenPair(idA, idB) }
+    }
+  }
+
+  case class ParsedLpConfig(start: EpochProgress, end: EpochProgress, minimumShares: Amount, tokenPairs: Seq[ParsedTokenPair])
+
+  implicit class LpRewardInfoOps(lpRewardInfo: LpRewardInfo) {
+    def parsed: Either[String, ParsedLpConfig] =
+      lpRewardInfo.tokenPairs.toList.traverse(token => token.parsed).map { parsedTokens =>
+        ParsedLpConfig(
+          lpRewardInfo.startEpoch,
+          lpRewardInfo.endEpoch.getOrElse(EpochProgress.MaxValue),
+          lpRewardInfo.minimumShares,
+          parsedTokens
+        )
+      }
+  }
+
+  implicit class LpRewardConfigOps(configs: Seq[LpRewardInfo]) {
+    def parsed: Either[String, LiquidityPoolRewardConfiguration] =
+      configs.toList.traverse(c => c.parsed).map { parsedConfig =>
+        LiquidityPoolRewardConfiguration(parsedConfig)
+      }
+  }
 }

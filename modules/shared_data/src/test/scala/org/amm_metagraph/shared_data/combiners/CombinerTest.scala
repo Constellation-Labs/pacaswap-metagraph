@@ -31,11 +31,14 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations._
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import weaver.MutableIOSuite
 
 object CombinerTest extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
 
+  implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLoggerFromName[IO](this.getClass.getName)
   override def sharedResource: Resource[IO, Res] = for {
     sp <- SecurityProvider.forAsync[IO]
     implicit0(j: JsonSerializer[IO]) <- JsonSerializer.forSync[IO].asResource
@@ -143,8 +146,8 @@ object CombinerTest extends MutableIOSuite {
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
-      rewardsCombinerService = RewardsDistributionService
-        .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
+      rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -292,8 +295,8 @@ object CombinerTest extends MutableIOSuite {
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
-      rewardsCombinerService = RewardsDistributionService
-        .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
+      rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -449,8 +452,8 @@ object CombinerTest extends MutableIOSuite {
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
-      rewardsCombinerService = RewardsDistributionService
-        .make[IO](RewardCalculator.make[IO](config.rewards, config.epochInfo), config.rewards)
+      rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
