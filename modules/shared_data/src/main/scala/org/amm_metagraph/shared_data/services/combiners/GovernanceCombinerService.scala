@@ -4,7 +4,7 @@ import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.collection.immutable.{SortedMap, SortedSet, TreeMap}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
@@ -61,6 +61,8 @@ object GovernanceCombinerService {
   ): GovernanceCombinerService[F] =
     new GovernanceCombinerService[F] {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
+      val tokensMultipliers: TokenLocksMultiplier =
+        TokenLocksMultiplier.make(applicationConfig.governance.votingWeightMultipliers)
 
       private def handleFailedUpdate(
         acc: DataState[AmmOnChainState, AmmCalculatedState],
@@ -73,17 +75,14 @@ object GovernanceCombinerService {
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
       ): Double = {
         val syncEpochProgressValue = lastSyncGlobalSnapshotEpochProgress.value.value
-        val votingWeightMultipliers = applicationConfig.governance.votingWeightMultipliers
-        tokenLock.unlockEpoch match {
-          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress2Years) <= unlockEpoch.value =>
-            tokenLock.amount.value * votingWeightMultipliers.lockForTwoOrMoreYearsMultiplier
-          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress2Years) <= unlockEpoch.value =>
-            tokenLock.amount.value * votingWeightMultipliers.lockForOneAndHalfYearMultiplier
-          case Some(unlockEpoch) if (syncEpochProgressValue + applicationConfig.epochInfo.epochProgress1Year) <= unlockEpoch.value =>
-            tokenLock.amount.value * votingWeightMultipliers.lockForOneYearMultiplier
-          case _ =>
-            tokenLock.amount.value * votingWeightMultipliers.lockForSixMonthsMultiplier
-        }
+        val lockPeriodInMonths =
+          tokenLock.unlockEpoch.map { unlockEpoch =>
+            val diff = unlockEpoch.value.value - syncEpochProgressValue
+            diff / applicationConfig.epochInfo.epochProgress1Month
+          }.getOrElse(Long.MaxValue)
+
+        val multiplier = tokensMultipliers.getMultiplier(lockPeriodInMonths)
+        tokenLock.amount.value * multiplier
       }
 
       private def freezeUserVotes(
@@ -316,4 +315,19 @@ object GovernanceCombinerService {
 
   private def isFirstProcessedMonth(monthlyReference: MonthlyReference): Boolean =
     monthlyReference.lastEpochOfMonth == EpochProgress(NonNegLong.MinValue)
+}
+
+class TokenLocksMultiplier(locks: TreeMap[Long, Double]) {
+  def getMultiplier(durationInMonths: Long): Double =
+    locks
+      .get(durationInMonths)
+      .orElse(locks.maxBefore(durationInMonths).map(_._2))
+      .getOrElse(0.0)
+}
+
+object TokenLocksMultiplier {
+  def make(locks: ApplicationConfig.VotingWeightMultipliers): TokenLocksMultiplier = {
+    val locksData = locks.locksConfig.map(lm => lm.durationInMonths.value -> lm.multiplier.value)
+    new TokenLocksMultiplier(TreeMap.from(locksData))
+  }
 }

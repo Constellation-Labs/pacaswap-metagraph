@@ -41,12 +41,10 @@ object ApplicationConfig {
   )
 
   @derive(show)
-  case class VotingWeightMultipliers(
-    lockForSixMonthsMultiplier: PosDouble,
-    lockForOneYearMultiplier: PosDouble,
-    lockForOneAndHalfYearMultiplier: PosDouble,
-    lockForTwoOrMoreYearsMultiplier: PosDouble
-  )
+  case class LockMultiplier(durationInMonths: NonNegLong, multiplier: PosDouble)
+
+  @derive(show)
+  case class VotingWeightMultipliers(locksConfig: Seq[LockMultiplier])
 
   @derive(show)
   case class Governance(
@@ -64,8 +62,23 @@ object ApplicationConfig {
     daoAddress: Address,
     rewardCalculationInterval: NonNegLong,
     rewardWithdrawDelay: EpochProgress,
-    rewardTransactionsPerSnapshot: NonNegInt
+    rewardTransactionsPerSnapshot: NonNegInt,
+    nodeValidatorConfig: NodeValidatorConfig
   )
+
+  @derive(show)
+  case class NodeValidatorConfig(LiquidityPoolsConfig: Seq[LpRewardInfo])
+
+  @derive(show)
+  case class LpRewardInfo(
+    startEpoch: EpochProgress,
+    endEpoch: Option[EpochProgress],
+    minimumShares: Amount,
+    tokenPairs: Seq[TokenPairStrings]
+  )
+
+  @derive(show)
+  case class TokenPairStrings(tokenA: String, tokenB: String)
 
   @derive(show)
   case class TokenLimits(

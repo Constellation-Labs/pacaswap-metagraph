@@ -28,15 +28,20 @@ object ApplicationConfigOps {
   def readDefault[F[_]: Sync]: F[ApplicationConfig] =
     ConfigSource.default
       .loadF[F, ApplicationConfig]()
+
 }
 
 object ConfigReaders {
   implicit val epochProgressReader: ConfigReader[EpochProgress] = ConfigReader[NonNegLong].map(EpochProgress(_))
 
   implicit val votingWeightMultipliersConfigReader: ConfigReader[ApplicationConfig.VotingWeightMultipliers] = deriveReader
+  implicit val lockMultiplierConfigReader: ConfigReader[ApplicationConfig.LockMultiplier] = deriveReader
   implicit val expirationEpochProgressesConfigReader: ConfigReader[ApplicationConfig.ExpirationEpochProgresses] = deriveReader
   implicit val tokenLimitsConfigReader: ConfigReader[ApplicationConfig.TokenLimits] = deriveReader
   implicit val governanceConfigReader: ConfigReader[ApplicationConfig.Governance] = deriveReader
+  implicit val voteBasedConfigReader: ConfigReader[ApplicationConfig.NodeValidatorConfig] = deriveReader
+  implicit val lpRewardInfoReader: ConfigReader[ApplicationConfig.LpRewardInfo] = deriveReader
+  implicit val tokenPairReader: ConfigReader[ApplicationConfig.TokenPairStrings] = deriveReader
   implicit val rewardsConfigReader: ConfigReader[ApplicationConfig.Rewards] = deriveReader[ApplicationConfig.Rewards].emap { _cfg =>
     val cfg = Rewards(
       totalAnnualTokens = Amount(65000000_00000000L),
@@ -48,7 +53,8 @@ object ConfigReaders {
       daoAddress = _cfg.daoAddress,
       rewardCalculationInterval = _cfg.rewardCalculationInterval,
       rewardWithdrawDelay = _cfg.rewardWithdrawDelay,
-      rewardTransactionsPerSnapshot = _cfg.rewardTransactionsPerSnapshot
+      rewardTransactionsPerSnapshot = _cfg.rewardTransactionsPerSnapshot,
+      nodeValidatorConfig = _cfg.nodeValidatorConfig
     )
 
     Either.cond(

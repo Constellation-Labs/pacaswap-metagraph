@@ -12,6 +12,7 @@ import io.constellationnetwork.schema.AmountOps.AmountOps
 import io.constellationnetwork.schema.address.{Address, DAGAddressRefined}
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
+import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.schema.tokenLock._
 import io.constellationnetwork.security.hash.Hash
 
@@ -20,9 +21,12 @@ import eu.timepit.refined.types.all.NonNegLong
 import eu.timepit.refined.types.numeric.{NonNegInt, PosLong}
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.app.ApplicationConfig.{LpRewardInfo, NodeValidatorConfig, TokenPairStrings}
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import weaver._
 
 object RewardsCalculatorSpec extends SimpleIOSuite {
@@ -40,9 +44,14 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       case Left(error)  => failure(s"Expected Right, but got Left: $error")
     }
 
-  val validatorProportion = NonNegLong(5L)
-  val daoProportion = NonNegLong(20L)
-  val votingProportion = NonNegLong(75L)
+  implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLoggerFromName[IO](this.getClass.getName)
+
+  val validatorProportion: NonNegLong = NonNegLong(5L)
+  val daoProportion: NonNegLong = NonNegLong(20L)
+  val votingProportion: NonNegLong = NonNegLong(75L)
+
+  val lp1TokenA = "DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"
+  val lp1TokenB = "DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ"
 
   val rewardsConfig: ApplicationConfig.Rewards =
     ApplicationConfig.Rewards(
@@ -55,7 +64,17 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       daoAddress = address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU"),
       rewardCalculationInterval = NonNegLong(100L),
       rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
-      rewardTransactionsPerSnapshot = NonNegInt(100)
+      rewardTransactionsPerSnapshot = NonNegInt(100),
+      nodeValidatorConfig = NodeValidatorConfig(
+        Seq(
+          LpRewardInfo(
+            EpochProgress.MinValue,
+            None,
+            Amount(NonNegLong.unsafeFrom(1)),
+            Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+          )
+        )
+      )
     )
 
   val epochData: ApplicationConfig.EpochMetadata = ApplicationConfig.EpochMetadata(1.day, 10L)
@@ -101,8 +120,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   )
 
   val currentLiquidityPools: Map[String, LiquidityPool] = Map(
-    createLp(lp1Id, lp1Shares),
-    createLp(lp2Id, lp2Shares)
+    createLp(lp1Id, lp1Shares, lp1TokenA.some, lp1TokenB.some),
+    createLp(lp2Id, lp2Shares, lp1TokenB.some, lp1TokenA.some)
   )
 
   val frozenGovernanceVotes: Map[AllocationId, Percentage] = Map(
@@ -112,17 +131,23 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     AllocationId(validatorD.value.value, AllocationCategory.NodeOperator) -> Percentage.unsafeFrom(0.05)
   )
 
-  def createLp(id: String, addressShares: Map[Address, Long]): (String, LiquidityPool) = {
+  def toCurrency(token: Option[String]) =
+    token.flatMap(tokenString => refineV[DAGAddressRefined](tokenString).map(address => CurrencyId(Address(address))).toOption)
+
+  def createLp(id: String, addressShares: Map[Address, Long], tokenA: Option[String], tokenB: Option[String]): (String, LiquidityPool) = {
     val poolShares = PoolShares(
       totalShares = PosLong.unsafeFrom(addressShares.values.sum),
       addressShares = addressShares.view.mapValues(v => ShareAmount(Amount(NonNegLong.unsafeFrom(v)))).toMap
     )
 
+    val tokenACurrency = toCurrency(tokenA)
+    val tokenBCurrency = toCurrency(tokenB)
+
     val lp = LiquidityPool(
       updateHash = Hash.empty,
       poolId = PoolId(id),
-      tokenA = TokenInformation(None, PosLong(1)),
-      tokenB = TokenInformation(None, PosLong(1)),
+      tokenA = TokenInformation(tokenACurrency, PosLong(1)),
+      tokenB = TokenInformation(tokenBCurrency, PosLong(1)),
       owner = addressShares.head._1,
       k = BigInt(0),
       poolShares = poolShares,
@@ -153,7 +178,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     voterB -> VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress)))
   )
 
-  def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): RewardCalculator[IO] =
+  def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): IO[RewardCalculator[IO]] =
     RewardCalculator.make(config, epochData)
 
   def approximatelyEqual(a: Double, b: Double, percentTolerance: Double): Boolean = {
@@ -164,14 +189,16 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("total rewards per epoch should match configuration") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result = EitherT {
-      createCalculator().calculateEpochRewards(
-        currentProgress,
-        validators,
-        frozenVotingPowers(currentProgress),
-        frozenGovernanceVotes,
-        currentLiquidityPools,
-        approvedValidators
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
       )
     }
 
@@ -190,14 +217,16 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("Total distribution proportions shall be according config file") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result = EitherT {
-      createCalculator().calculateEpochRewards(
-        currentProgress,
-        validators,
-        frozenVotingPowers(currentProgress),
-        frozenGovernanceVotes,
-        currentLiquidityPools,
-        approvedValidators
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
       )
     }
 
@@ -220,33 +249,307 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("validator rewards should be distributed equally") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result = EitherT {
-      createCalculator().calculateEpochRewards(
-        currentProgress,
-        validators,
-        frozenVotingPowers(currentProgress),
-        frozenGovernanceVotes,
-        currentLiquidityPools,
-        approvedValidators
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
       )
     }
 
     whenSuccessF(result.value) { rewards =>
-      expect(rewards.nodeValidatorRewards.values.map(_.toBigDecimal).toSet.size == 1)
+      expect(
+        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).toSet.size == 1 &&
+          rewards.nodeValidatorRewards.values.size > 1
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools if config have ANY for tokenA literal") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          None,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings("*", lp1TokenB))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools if config have ANY for tokenB literal") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          None,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, "*"))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools min epoch configuration") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress(NonNegLong.unsafeFrom(currentProgress.value.value + 1)),
+          None,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.isEmpty
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools max epoch configuration") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          EpochProgress(NonNegLong.unsafeFrom(currentProgress.value.value - 1)).some,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.isEmpty
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools max epoch as none configuration") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          None,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account liquidity pools amount configuration") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          None,
+          Amount(NonNegLong.unsafeFrom(lpParticipant2Lp1Share)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        )
+      )
+    )
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant2)
+      )
+    }
+  }
+
+  test("Node validator rewards should be distributed taking into account many liquidity pools configuration") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+    val nodeValidatorConfig = NodeValidatorConfig(
+      Seq(
+        LpRewardInfo(
+          EpochProgress.MaxValue,
+          EpochProgress.MaxValue.some,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        ),
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          EpochProgress.MinValue.some,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings(lp1TokenA, lp1TokenB))
+        ),
+        LpRewardInfo(
+          EpochProgress.MinValue,
+          EpochProgress.MaxValue.some,
+          Amount(NonNegLong.unsafeFrom(1)),
+          Seq(TokenPairStrings("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ", lp1TokenB), TokenPairStrings(lp1TokenB, lp1TokenA))
+        )
+      )
+    )
+
+    val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator(config).flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      expect(
+        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+      )
     }
   }
 
   test("Voting rewards as expected") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result = EitherT {
-      createCalculator().calculateEpochRewards(
-        currentProgress,
-        validators,
-        frozenVotingPowers(currentProgress),
-        frozenGovernanceVotes,
-        currentLiquidityPools,
-        approvedValidators
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
       )
     }
 
@@ -270,14 +573,16 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("when no voters, their share should go to DAO") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result = EitherT {
-      createCalculator().calculateEpochRewards(
-        currentProgress,
-        validators,
-        frozenVotingPowers(currentProgress),
-        Map.empty,
-        currentLiquidityPools,
-        approvedValidators
+    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          Map.empty,
+          currentLiquidityPools,
+          approvedValidators
+        )
       )
     }
 
@@ -309,14 +614,16 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     val result = (0L until epochData.epochProgress1Year).toList.traverse { offset =>
       val epochNumber = initialEpoch.value.value + offset
       val progress = EpochProgress(NonNegLong.unsafeFrom(epochNumber))
-      EitherT {
-        createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch)).calculateEpochRewards(
-          progress,
-          validators,
-          frozenVotingPowers(progress),
-          frozenGovernanceVotes,
-          currentLiquidityPools,
-          approvedValidators
+      EitherT[IO, RewardError, RewardDistribution] {
+        createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch)).flatMap(
+          _.calculateEpochRewards(
+            progress,
+            validators,
+            frozenVotingPowers(progress),
+            frozenGovernanceVotes,
+            currentLiquidityPools,
+            approvedValidators
+          )
         )
       }
     }

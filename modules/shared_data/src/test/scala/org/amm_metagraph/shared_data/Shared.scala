@@ -40,12 +40,7 @@ object Shared {
     "NodeValidators",
     Dev,
     Governance(
-      VotingWeightMultipliers(
-        PosDouble.MinValue,
-        PosDouble.MinValue,
-        PosDouble.MinValue,
-        PosDouble.MinValue
-      )
+      VotingWeightMultipliers(Seq.empty)
     ),
     Rewards(
       Amount.empty,
@@ -57,7 +52,8 @@ object Shared {
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       rewardCalculationInterval = NonNegLong(100),
       rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
-      rewardTransactionsPerSnapshot = NonNegInt(100)
+      rewardTransactionsPerSnapshot = NonNegInt(100),
+      nodeValidatorConfig = NodeValidatorConfig(Seq.empty)
     ),
     TokenLimits(
       NonNegLong.unsafeFrom((100 * 1e8).toLong),
