@@ -30,8 +30,3 @@ runs:
         sudo curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x99E82A75642AC823" | sudo apt-key add -
         sudo apt-get update
         sudo apt-get install -y sbt scala
-
-    - name: Build tessellation dependencies
-      with:
-        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
-      uses: "./.github/templates/actions/build_tessellation"
