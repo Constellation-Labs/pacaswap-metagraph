@@ -3,6 +3,8 @@ name: Setup Java and Scala
 inputs:
   JAVA_VERSION:
     required: true
+  GITHUB_TOKEN:
+    required: true
 
 runs:
   using: "composite"
