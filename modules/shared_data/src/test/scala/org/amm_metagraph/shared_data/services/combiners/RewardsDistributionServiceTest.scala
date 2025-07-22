@@ -183,13 +183,13 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       )
 
       expectedMap: Map[AddressAndRewardType, Amount] = Map(
-        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
-        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
       )
       expectedRewards = RewardsState(
         withdraws = RewardWithdrawCalculatedState.empty,
@@ -239,7 +239,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardTransactionsPerSnapshot = 3
-      config = Shared.config.rewards.copy(rewardTransactionsPerSnapshot = NonNegInt.unsafeFrom(rewardTransactionsPerSnapshot))
+      config = Shared.config.rewards.copy(availableRewardsPerSnapshot = NonNegInt.unsafeFrom(rewardTransactionsPerSnapshot))
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, config).pure[IO]
       newState1 <- rewardService.updateRewardsDistribution(
         snapShotWithVoters,
@@ -257,13 +257,13 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
         currentEpoch
       )
       expectedMap: Map[AddressAndRewardType, Amount] = Map(
-        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
-        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
       )
       totalRewardsSize = expectedMap.size
 
@@ -328,7 +328,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardTransactionsPerSnapshot = 0
-      config = Shared.config.rewards.copy(rewardTransactionsPerSnapshot = NonNegInt.unsafeFrom(rewardTransactionsPerSnapshot))
+      config = Shared.config.rewards.copy(availableRewardsPerSnapshot = NonNegInt.unsafeFrom(rewardTransactionsPerSnapshot))
       rewardService <- RewardsDistributionService.make(rewardDistributionCalculator, config).pure[IO]
       newState1 <- rewardService.updateRewardsDistribution(
         snapShotWithVoters,
@@ -342,13 +342,13 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       )
 
       expectedMap: Map[AddressAndRewardType, Amount] = Map(
-        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
-        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
       )
 
     } yield
@@ -412,13 +412,13 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       )
 
       expectedOnChainMap: Map[AddressAndRewardType, Amount] = Map(
-        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
-        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
       )
       expectedMap = expectedOnChainMap.map { case (k, v) => k -> Amount(NonNegLong.unsafeFrom(v.value.value * 2)) }
 
@@ -490,13 +490,13 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       )
 
       expectedOnChainMap: Map[AddressAndRewardType, Amount] = Map(
-        AddressAndRewardType(a1, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a2, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(a3, ValidatorConsensus) -> distributedReward(nodeValidatorReward),
-        AddressAndRewardType(ownerAddress, LpBoost) -> distributedReward(daoReward),
-        AddressAndRewardType(a3, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(a4, ValidatorBoost) -> distributedReward(voteBasedReward),
-        AddressAndRewardType(ownerAddress, GovernanceVoting) -> distributedReward(governanceReward)
+        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
+        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
+        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
+        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
       )
       expectedMap = expectedOnChainMap.map { case (k, v) => k -> Amount(NonNegLong.unsafeFrom(v.value.value * 2)) }
 

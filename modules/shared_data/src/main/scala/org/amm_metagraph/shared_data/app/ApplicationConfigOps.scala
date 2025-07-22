@@ -53,7 +53,7 @@ object ConfigReaders {
       daoAddress = _cfg.daoAddress,
       rewardCalculationInterval = _cfg.rewardCalculationInterval,
       rewardWithdrawDelay = _cfg.rewardWithdrawDelay,
-      rewardTransactionsPerSnapshot = _cfg.rewardTransactionsPerSnapshot,
+      availableRewardsPerSnapshot = _cfg.availableRewardsPerSnapshot,
       nodeValidatorConfig = _cfg.nodeValidatorConfig
     )
 

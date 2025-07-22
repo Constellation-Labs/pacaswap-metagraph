@@ -24,10 +24,10 @@ object Rewards {
   object RewardType extends Enum[RewardType] with RewardTypeCodecs {
     val values: IndexedSeq[RewardType] = findValues
 
-    case object ValidatorConsensus extends RewardType
-    case object ValidatorBoost extends RewardType
-    case object LpBoost extends RewardType
-    case object GovernanceVoting extends RewardType
+    case object NodeValidator extends RewardType
+    case object VoteBased extends RewardType
+    case object Dao extends RewardType
+    case object Governance extends RewardType
   }
 
   trait RewardTypeCodecs {
@@ -111,13 +111,13 @@ object Rewards {
 
     def fromRewardDistribution(rewardDistribution: RewardDistribution): RewardInfo = {
       val validator = rewardDistribution.nodeValidatorRewards.map {
-        case (address, amount) => (address, RewardType.ValidatorConsensus, amount)
+        case (address, amount) => (address, RewardType.NodeValidator, amount)
       }
-      val voting = rewardDistribution.voteBasedRewards.map { case (address, amount) => (address, RewardType.ValidatorBoost, amount) }
-      val governance = rewardDistribution.governanceRewards.map { case (address, amount) => (address, RewardType.GovernanceVoting, amount) }
+      val voting = rewardDistribution.voteBasedRewards.map { case (address, amount) => (address, RewardType.VoteBased, amount) }
+      val governance = rewardDistribution.governanceRewards.map { case (address, amount) => (address, RewardType.Governance, amount) }
       val dao = {
         val (address, amount) = rewardDistribution.daoRewards
-        List((address, RewardType.LpBoost, amount))
+        List((address, RewardType.Dao, amount))
       }
 
       val allNewRewards = validator ++ voting ++ governance ++ dao

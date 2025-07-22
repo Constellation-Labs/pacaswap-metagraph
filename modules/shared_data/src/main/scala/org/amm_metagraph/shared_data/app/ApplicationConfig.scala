@@ -62,7 +62,7 @@ object ApplicationConfig {
     daoAddress: Address,
     rewardCalculationInterval: NonNegLong,
     rewardWithdrawDelay: EpochProgress,
-    rewardTransactionsPerSnapshot: NonNegInt,
+    availableRewardsPerSnapshot: NonNegInt,
     nodeValidatorConfig: NodeValidatorConfig
   )
 
