@@ -236,7 +236,7 @@ const voteAllocationTests = async (argsObject: object) => {
         await retry(`Validate allocations rewards for`, { delayMs: 5000, maxAttempts: 50 })(async (logger) => {
             await validateAllocationsRewards(config, address, 0, logger)
         })
-        const govRewardType = "GovernanceVoting"
+        const govRewardType = "Governance"
       
         const initialBalance = await getSnapshotBalanceForAddress(address, config.gl0Url, "", config.metagraphId);
         const initialAvailableRewards = await getAvaialbleRewardsForAddress(address, govRewardType, config.ammMl0Url, "");

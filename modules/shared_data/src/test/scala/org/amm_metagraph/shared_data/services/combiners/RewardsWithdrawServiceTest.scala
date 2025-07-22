@@ -75,7 +75,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
           CurrencyId(ownerAddress),
           a1,
           RewardWithdrawReference.empty,
-          GovernanceVoting,
+          Governance,
           Amount(NonNegLong(100L))
         )
       )
@@ -87,8 +87,8 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
   test("Fail to withdraw from empty / non-existing balance because of reward type") { implicit res =>
     implicit val (h, hs, sp) = res
     val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
-    val actualRewardType = LpBoost
-    val requestedRewardType = GovernanceVoting
+    val actualRewardType = Dao
+    val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
     val existReward = AddressAndRewardType(a1, actualRewardType) -> requestAmount
     val ammCalculatedState = AmmCalculatedState().focus(_.rewards.availableRewards.info).modify(_ + existReward)
@@ -123,7 +123,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
   test("Successfully withdraw from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
     val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
-    val requestedRewardType = GovernanceVoting
+    val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val existReward = AddressAndRewardType(ownerAddress, requestedRewardType) -> requestAmount
@@ -171,7 +171,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
   test("Successfully withdraw twice from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
     val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
-    val requestedRewardType = GovernanceVoting
+    val requestedRewardType = Governance
     val firstRequest = Amount(NonNegLong(20L))
     val secondRequest = Amount(NonNegLong(80L))
     val fullAmount = Amount(NonNegLong.unsafeFrom(firstRequest.value + secondRequest.value))

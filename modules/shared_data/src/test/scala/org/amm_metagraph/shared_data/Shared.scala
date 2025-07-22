@@ -52,7 +52,7 @@ object Shared {
       Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
       rewardCalculationInterval = NonNegLong(100),
       rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
-      rewardTransactionsPerSnapshot = NonNegInt(100),
+      availableRewardsPerSnapshot = NonNegInt(100),
       nodeValidatorConfig = NodeValidatorConfig(Seq.empty)
     ),
     TokenLimits(

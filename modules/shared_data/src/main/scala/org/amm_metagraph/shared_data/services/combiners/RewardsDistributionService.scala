@@ -64,7 +64,7 @@ object RewardsDistributionService {
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val rewardsBuffer = state.calculated.rewards.rewardsBuffer
 
-        val rewardsTransactionCount = rewardsConfig.rewardTransactionsPerSnapshot.value
+        val rewardsTransactionCount = rewardsConfig.availableRewardsPerSnapshot.value
 
         val (rewardsToDistribute, rewardsToStay) = rewardsBuffer.data.splitAt(rewardsTransactionCount)
         val res = for {

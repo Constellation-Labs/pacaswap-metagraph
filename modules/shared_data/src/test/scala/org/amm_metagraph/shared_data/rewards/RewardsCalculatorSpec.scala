@@ -64,7 +64,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       daoAddress = address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU"),
       rewardCalculationInterval = NonNegLong(100L),
       rewardWithdrawDelay = EpochProgress(NonNegLong(10L)),
-      rewardTransactionsPerSnapshot = NonNegInt(100),
+      availableRewardsPerSnapshot = NonNegInt(100),
       nodeValidatorConfig = NodeValidatorConfig(
         Seq(
           LpRewardInfo(
