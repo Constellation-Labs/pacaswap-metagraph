@@ -1,0 +1,82 @@
+name: Deploy
+
+inputs:
+  SSH_NODE_1_HOST:
+    required: true
+  SSH_NODE_2_HOST:
+    required: true
+  SSH_NODE_3_HOST:
+    required: true
+  SSH_NODE_1_USER:
+    required: true
+  SSH_NODE_2_USER:
+    required: true
+  SSH_NODE_3_USER:
+    required: true
+  SSH_HOST_MONITORING:
+    required: true
+  SSH_USER_MONITORING:
+    required: true
+  MONITORING_PROJECT_DIRECTORY:
+    required: true
+  SSH_PRIVATE_KEY:
+    required: true
+  DEPLOYED_VERSION:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ inputs.SSH_PRIVATE_KEY }}
+
+    - name: Download JAR artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: jar-files
+        path: ./jar-files
+
+    - name: Move JARs to service
+      run: |
+        mkdir -p validator-node-docker/jars
+        mv jar-files/metagraph-l0.jar ./metagraph-l0.jar
+        mv jar-files/currency-l1.jar ./currency-l1.jar
+        mv jar-files/data-l1.jar ./data-l1.jar
+
+    - name: Copy Metagraph L0 to all nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        scp -o StrictHostKeyChecking=no metagraph-l0.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/metagraph-l0/metagraph-l0.jar &
+        wait
+
+    - name: Copy Currency L1 to all nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/currency-l1/currency-l1.jar &
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/currency-l1/currency-l1.jar &
+        scp -o StrictHostKeyChecking=no currency-l1.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/currency-l1/currency-l1.jar &
+        wait
+
+    - name: Copy Data L1 to all nodes
+      shell: bash
+      run: |
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_1_USER }}@${{ inputs.SSH_NODE_1_HOST }}:code/data-l1/data-l1.jar &
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_2_USER }}@${{ inputs.SSH_NODE_2_HOST }}:code/data-l1/data-l1.jar &
+        scp -o StrictHostKeyChecking=no data-l1.jar ${{ inputs.SSH_NODE_3_USER }}@${{ inputs.SSH_NODE_3_HOST }}:code/data-l1/data-l1.jar &
+        wait
+
+    - name: Stopping execution in monitoring
+      shell: bash
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn kill"
+
+    - name: Forcing metagraph restart
+      shell: bash
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn restart-notifying --force_restart --notification_message ${{ inputs.DEPLOYED_VERSION }}"
