@@ -18,6 +18,8 @@ tags:
     description: Manages staking operations
   - name: Withdrawals
     description: Manages withdrawal operations and references
+  - name: Health Check
+    description: Get information about the healthiness of the node
 paths:
   /swap/quote:
     post:
@@ -435,3 +437,19 @@ paths:
                     $ref: './components.yml#/components/schemas/StakingStateResponse'
         404:
           description: Staking not found
+
+  /health-check/last-global-snapshot-sync:
+    get:
+      tags:
+        - Health Check
+      summary: Get last global snapshot sync by node
+      description: Get last global snapshot sync by node
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: './components.yml#/components/schemas/LastSyncGlobalSnapshot'
+        500:
+          description: Internal server error
