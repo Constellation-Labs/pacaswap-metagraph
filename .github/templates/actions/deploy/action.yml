@@ -41,6 +41,7 @@ runs:
         path: ./jar-files
 
     - name: Move JARs to service
+      shell: bash
       run: |
         mkdir -p validator-node-docker/jars
         mv jar-files/metagraph-l0.jar ./metagraph-l0.jar
