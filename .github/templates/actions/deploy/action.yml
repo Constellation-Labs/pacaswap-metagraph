@@ -79,4 +79,4 @@ runs:
     - name: Forcing metagraph restart
       shell: bash
       run: |
-        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn restart-notifying --notification_message ${{ inputs.DEPLOYED_VERSION }}"
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn restart-notifying --force_restart --notification_message ${{ inputs.DEPLOYED_VERSION }}"
