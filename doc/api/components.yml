@@ -534,3 +534,11 @@ components:
         hasMore:
           type: boolean
           description: Whether there are more items available
+
+    LastSyncGlobalSnapshot:
+      type: object
+      description: Last sync global snapshot of node
+      properties:
+        lastSyncGlobalSnapshotOrdinal:
+          type: integer
+          description: Last sync global snapshot ordinal
