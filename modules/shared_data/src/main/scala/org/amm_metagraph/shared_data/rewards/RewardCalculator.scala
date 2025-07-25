@@ -182,12 +182,18 @@ class RewardCalculatorImpl[F[_]: Async](
   private def calculateValidatorsRewards(
     epochRewardsForAllocation: Map[AllocationId, BigDecimal],
     approvedValidators: Seq[Address]
-  ): Map[Address, BigDecimal] =
-    approvedValidators.map { address =>
-      val allocationId = AllocationId(address.value.value, AllocationCategory.NodeOperator)
-      val reward = epochRewardsForAllocation.getOrElse(allocationId, BigDecimal(0))
-      address -> reward
-    }.toMap
+  ): Map[Address, BigDecimal] = {
+    val validatorsTotalReward = epochRewardsForAllocation.collect {
+      case (AllocationId(_, AllocationCategory.NodeOperator), value) => value
+    }.sum
+
+    approvedValidators match {
+      case Nil => Map.empty
+      case nonEmptyValidatorsList =>
+        val rewardPerValidator = validatorsTotalReward / nonEmptyValidatorsList.size
+        nonEmptyValidatorsList.map(_ -> rewardPerValidator).toMap
+    }
+  }
 
   private def calculateGovernanceRewards(
     votingPowers: Seq[VotingPower],

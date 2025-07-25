@@ -28,8 +28,7 @@ trait GovernanceValidations[F[_]] {
   def l0Validations(
     rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
     state: AmmCalculatedState,
-    lastSyncGlobalSnapshotEpochProgress: EpochProgress,
-    approvedValidators: Seq[Address]
+    lastSyncGlobalSnapshotEpochProgress: EpochProgress
   )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]]
 }
 
@@ -47,8 +46,7 @@ object GovernanceValidations {
     override def l0Validations(
       rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
       state: AmmCalculatedState,
-      lastSyncGlobalSnapshotEpochProgress: EpochProgress,
-      approvedValidators: Seq[Address]
+      lastSyncGlobalSnapshotEpochProgress: EpochProgress
     )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]] = {
       val lastAllocations = state.allocations
       val lastVotingWeights = state.votingWeights
@@ -71,8 +69,7 @@ object GovernanceValidations {
         isValidId = allocationIdValidation(
           applicationConfig,
           rewardAllocationVoteUpdate,
-          liquidityPools,
-          approvedValidators
+          liquidityPools
         )
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalSnapshotEpochProgress)
 
@@ -161,8 +158,7 @@ object GovernanceValidations {
     private def allocationIdValidation(
       applicationConfig: ApplicationConfig,
       rewardAllocationVoteUpdate: Signed[RewardAllocationVoteUpdate],
-      liquidityPools: LiquidityPoolCalculatedState,
-      approvedValidators: Seq[Address]
+      liquidityPools: LiquidityPoolCalculatedState
     ): DataApplicationValidationErrorOr[Unit] = {
       val allocationIds = rewardAllocationVoteUpdate.allocations.map { case (id, _) => id }
       val liquidityPoolIds = liquidityPools.confirmed.value.keySet
@@ -170,7 +166,7 @@ object GovernanceValidations {
       InvalidAllocationId.whenA(
         allocationIds.exists(id =>
           !liquidityPoolIds.contains(id) &&
-            (id != applicationConfig.nodeValidatorsGovernanceAllocationId || approvedValidators.map(_.value.value).contains(id))
+            (id != applicationConfig.nodeValidatorsGovernanceAllocationId)
         )
       )
     }
