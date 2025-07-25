@@ -19,6 +19,7 @@ import io.constellationnetwork.security.{Hashed, SecurityProvider}
 import eu.timepit.refined.auto._
 import io.circe.{Decoder, Encoder}
 import org.amm_metagraph.l0.custom_routes.CustomRoutes
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.combiners.L0CombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
@@ -40,7 +41,8 @@ object MetagraphL0Service {
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
     jsonSerializer: JsonSerializer[F],
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
-    pricingService: PricingService[F]
+    pricingService: PricingService[F],
+    config: ApplicationConfig
   ): BaseDataApplicationL0Service[F] =
     makeBaseDataApplicationL0Service(
       calculatedStateService,
@@ -49,7 +51,8 @@ object MetagraphL0Service {
       dataUpdateCodec,
       jsonSerializer,
       globalSnapshotsStorage,
-      pricingService
+      pricingService,
+      config
     )
 
   private def makeBaseDataApplicationL0Service[F[+_]: Async: HasherSelector](
@@ -59,7 +62,8 @@ object MetagraphL0Service {
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
     jsonSerializer: JsonSerializer[F],
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
-    pricingService: PricingService[F]
+    pricingService: PricingService[F],
+    config: ApplicationConfig
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
@@ -138,7 +142,7 @@ object MetagraphL0Service {
 
       override def routes(implicit context: L0NodeContext[F]): HttpRoutes[F] = {
         implicit val sp: SecurityProvider[F] = context.securityProvider
-        CustomRoutes[F](calculatedStateService, pricingService, dataUpdateCodec).public
+        CustomRoutes[F](calculatedStateService, pricingService, dataUpdateCodec, config).public
       }
 
       override def serializeCalculatedState(

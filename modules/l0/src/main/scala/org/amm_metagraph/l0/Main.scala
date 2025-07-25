@@ -103,7 +103,8 @@ object Main
         jsonBase64BinaryCodec,
         jsonBinaryCodec,
         globalSnapshotsStorage,
-        pricingService
+        pricingService,
+        config
       )
 
   } yield l0Service).some

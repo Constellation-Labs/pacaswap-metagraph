@@ -10,6 +10,7 @@ import io.constellationnetwork.schema.balance.Amount
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import org.amm_metagraph.l0.custom_routes.Responses.SingleResponse
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.{CalculatedState, CalculatedStateService}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardType}
@@ -18,7 +19,8 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 
 case class RewardWithdrawRoutes[F[_]: Async](
-  calculatedStateService: CalculatedStateService[F]
+  calculatedStateService: CalculatedStateService[F],
+  config: ApplicationConfig
 ) extends Http4sDsl[F] {
   private def getLastRewardWithdrawalReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
@@ -40,12 +42,17 @@ case class RewardWithdrawRoutes[F[_]: Async](
       Ok(SingleResponse(rewardInfos))
     }
 
+  private def getLiquidityPoolConfig: F[Response[F]] =
+    Ok(config.rewards.nodeValidatorConfig.LiquidityPoolsConfig)
+
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "rewards" / AddressVar(address) / "withdrawals" / "last-reference" =>
       getLastRewardWithdrawalReference(address)
 
     case GET -> Root / "rewards" / AddressVar(address) =>
       getRewardForAddress(address)
+
+    case GET -> Root / "rewards" / "config" / "node-validator" / "liquidity-pools" => getLiquidityPoolConfig
   }
 
 }
