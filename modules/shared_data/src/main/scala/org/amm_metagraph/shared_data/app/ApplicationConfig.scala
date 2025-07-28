@@ -7,6 +7,7 @@ import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 
 import derevo.cats.show
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric._
@@ -66,10 +67,10 @@ object ApplicationConfig {
     nodeValidatorConfig: NodeValidatorConfig
   )
 
-  @derive(show)
+  @derive(show, decoder, encoder)
   case class NodeValidatorConfig(LiquidityPoolsConfig: Seq[LpRewardInfo])
 
-  @derive(show)
+  @derive(show, decoder, encoder)
   case class LpRewardInfo(
     startEpoch: EpochProgress,
     endEpoch: Option[EpochProgress],
@@ -77,7 +78,7 @@ object ApplicationConfig {
     tokenPairs: Seq[TokenPairStrings]
   )
 
-  @derive(show)
+  @derive(show, decoder, encoder)
   case class TokenPairStrings(tokenA: String, tokenB: String)
 
   @derive(show)

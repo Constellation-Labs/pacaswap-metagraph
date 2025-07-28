@@ -9,6 +9,7 @@ import io.constellationnetwork.security.SecurityProvider
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
+import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
@@ -22,7 +23,8 @@ import org.http4s.{HttpRoutes, Response}
 case class CustomRoutes[F[_]: Async: HasherSelector: SecurityProvider](
   calculatedStateService: CalculatedStateService[F],
   pricingService: PricingService[F],
-  dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
+  dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+  config: ApplicationConfig
 ) extends Http4sDsl[F]
     with PublicRoutes[F] {
 
@@ -47,7 +49,7 @@ case class CustomRoutes[F[_]: Async: HasherSelector: SecurityProvider](
     val voteRoutes = VoteRoutes(calculatedStateService)
     val stakingRoutes = StakingRoutes(calculatedStateService)
     val withdrawalRoutes = WithdrawalRoutes(calculatedStateService)
-    val rewardWithdrawRoutes = RewardWithdrawRoutes(calculatedStateService)
+    val rewardWithdrawRoutes = RewardWithdrawRoutes(calculatedStateService, config)
     val healthCheckRoutes = HealthCheckRoutes(calculatedStateService)
 
     CORS.policy
