@@ -127,8 +127,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   val frozenGovernanceVotes: Map[AllocationId, Percentage] = Map(
     AllocationId(lp1Id, AllocationCategory.LiquidityPool) -> Percentage.unsafeFrom(0.1),
     AllocationId(lp2Id, AllocationCategory.LiquidityPool) -> Percentage.unsafeFrom(0.7),
-    AllocationId(validatorC.value.value, AllocationCategory.NodeOperator) -> Percentage.unsafeFrom(0.15),
-    AllocationId(validatorD.value.value, AllocationCategory.NodeOperator) -> Percentage.unsafeFrom(0.05)
+    AllocationId("NodeValidator", AllocationCategory.NodeOperator) -> Percentage.unsafeFrom(0.2)
   )
 
   def toCurrency(token: Option[String]) =
@@ -558,11 +557,12 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       expect(totalVotingRewards == BigDecimal(75000000000000L))
       val percentageMap =
         rewards.voteBasedRewards.map { case (address, reward) => address -> reward.toBigDecimal / totalVotingRewards }
+      println(percentageMap)
       val expectedPercentage = Map(
         address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU") -> 0.01666666666666666666666666666666667,
-        address("DAG0y4eLqhhXUafeE3mgBstezPTnr8L3tZjAtMWB") -> 0.3833333333333333333333333333333333,
-        address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb") -> 0.3333333333333333333333333333333333,
-        address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ") -> 0.15,
+        address("DAG0y4eLqhhXUafeE3mgBstezPTnr8L3tZjAtMWB") -> 0.45,
+        address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb") -> 0.35,
+        address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ") -> 0.0666666666666666666666666666666667,
         address("DAG6kfTqFxLLPLopHqR43CeQrcvJ5k3eXgYSeELt") -> 0.1166666666666666666666666666666667
       )
 
