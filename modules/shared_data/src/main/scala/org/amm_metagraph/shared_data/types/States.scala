@@ -24,7 +24,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
-import org.amm_metagraph.shared_data.types.Rewards.{RewardInfo, RewardsBuffer}
+import org.amm_metagraph.shared_data.types.Rewards.{DistributedRewards, RewardInfo, RewardsBuffer}
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
@@ -339,7 +339,8 @@ object States {
     withdraws: RewardWithdrawCalculatedState = RewardWithdrawCalculatedState.empty,
     availableRewards: RewardInfo = RewardInfo.empty,
     lastProcessedEpoch: EpochProgress = EpochProgress.MinValue,
-    rewardsBuffer: RewardsBuffer = RewardsBuffer.empty
+    rewardsBuffer: RewardsBuffer = RewardsBuffer.empty,
+    distributedRewards: SortedMap[MonthlyReference, DistributedRewards] = SortedMap.empty
   )
 
   @derive(encoder, decoder)
@@ -351,6 +352,6 @@ object States {
     rewards: RewardsState = RewardsState()
   ) extends DataCalculatedState
 
-  implicit val keyEncode: KeyEncoder[EpochProgress] = nonNegLongKeyEncoder.contramap(_.value)
-  implicit val keyDecode: KeyDecoder[EpochProgress] = nonNegLongKeyDecoder.map(EpochProgress(_))
+  implicit val epochProgressKeyEncode: KeyEncoder[EpochProgress] = nonNegLongKeyEncoder.contramap(_.value)
+  implicit val epochProgressKeyDecode: KeyDecoder[EpochProgress] = nonNegLongKeyDecoder.map(EpochProgress(_))
 }

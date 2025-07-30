@@ -41,10 +41,10 @@ case class RewardWithdrawRoutes[F[_]: Async](
     }
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "rewards" / AddressVar(address) / "withdrawals" / "last-reference" =>
+    case GET -> Root / "addresses" / AddressVar(address) / "withdrawals" / "last-reference" =>
       getLastRewardWithdrawalReference(address)
 
-    case GET -> Root / "rewards" / AddressVar(address) =>
+    case GET -> Root / "addresses" / AddressVar(address) / "rewards-balance" =>
       getRewardForAddress(address)
   }
 

@@ -4,6 +4,8 @@ import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedMap
+
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencyIncrementalSnapshot
 import io.constellationnetwork.schema.address.Address
@@ -21,7 +23,7 @@ import org.amm_metagraph.shared_data.refined.Percentage._
 import org.amm_metagraph.shared_data.rewards._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
-import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
+import org.amm_metagraph.shared_data.types.Rewards.{DistributedRewards, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -37,7 +39,8 @@ trait RewardsDistributionService[F[_]] {
 object RewardsDistributionService {
   def make[F[_]: Async: SecurityProvider](
     rewardCalculator: RewardCalculator[F],
-    rewardsConfig: ApplicationConfig.Rewards
+    rewardsConfig: ApplicationConfig.Rewards,
+    epochInfoConfig: ApplicationConfig.EpochMetadata
   ): RewardsDistributionService[F] =
     new RewardsDistributionService[F] {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -133,7 +136,22 @@ object RewardsDistributionService {
 
             distributionAsRewardInfo = RewardInfo.fromRewardDistribution(multipliedRewards)
             _ <- EitherT.liftF(logger.info(show"Calculated rewards for epoch ${currentEpoch.value.value} is $distributionAsRewardInfo"))
-          } yield state.focus(_.calculated.rewards.rewardsBuffer.data).modify(_ ++ distributionAsRewardInfo.info.toSeq)
+
+            currentMonthReference = MonthlyReference.getMonthlyReference(currentEpoch, epochInfoConfig.epochProgress1Month)
+            distributedRewards = calculatedState.rewards.distributedRewards.getOrElse(currentMonthReference, DistributedRewards.empty)
+            updatedDistributedRewards <- EitherT.fromEither[F](
+              distributedRewards
+                .addRewards(distributionAsRewardInfo)
+                .leftMap(e => RewardDistributionCalculationError(e): RewardDistributionError)
+            )
+            newDistributedMap: SortedMap[MonthlyReference, DistributedRewards] =
+              calculatedState.rewards.distributedRewards + (currentMonthReference -> updatedDistributedRewards)
+          } yield
+            state
+              .focus(_.calculated.rewards.rewardsBuffer.data)
+              .modify(_ ++ distributionAsRewardInfo.info.toSeq)
+              .focus(_.calculated.rewards.distributedRewards)
+              .replace(newDistributedMap)
 
         res.foldF(
           error => logger.error(show"Failed to distribute rewards $error") >> state.pure[F],
@@ -176,5 +194,5 @@ object RewardsDistributionService {
   sealed trait RewardDistributionError
   case class RewardCalculationError(error: RewardError) extends RewardDistributionError
   case class RewardMergingError(error: BalanceArithmeticError) extends RewardDistributionError
-
+  case class RewardDistributionCalculationError(error: BalanceArithmeticError) extends RewardDistributionError
 }
