@@ -49,8 +49,8 @@ case class VoteRoutes[F[_]: Async](
 
   private def getAddressVoteWeight(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      calculatedState.state.votingWeights.get(address).fold(NotFound()) { addressVotingWeights =>
-        Ok(SingleResponse(addressVotingWeights))
+      calculatedState.state.votingPowers.get(address).fold(NotFound()) { addressVotingPowers =>
+        Ok(SingleResponse(addressVotingPowers))
       }
     }
 

@@ -346,7 +346,7 @@ object States {
   @derive(encoder, decoder)
   case class AmmCalculatedState(
     operations: SortedMap[OperationType, AmmOffChainState] = SortedMap.empty[OperationType, AmmOffChainState],
-    votingWeights: SortedMap[Address, VotingWeight] = SortedMap.empty[Address, VotingWeight],
+    votingPowers: SortedMap[Address, VotingPower] = SortedMap.empty[Address, VotingPower],
     allocations: Allocations = Allocations.empty,
     lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue,
     rewards: RewardsState = RewardsState()

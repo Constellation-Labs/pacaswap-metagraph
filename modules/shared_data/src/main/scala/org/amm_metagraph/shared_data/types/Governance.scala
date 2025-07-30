@@ -64,28 +64,28 @@ object Governance {
   }
 
   @derive(encoder, decoder, show)
-  case class VotingWeightInfo(
-    weight: NonNegLong, // Voting power for that locked token
+  case class VotingPowerInfo(
+    votingPower: NonNegLong,
     tokenLock: TokenLock,
     votedAtEpochProgress: EpochProgress
   )
 
-  object VotingWeightInfo {
-    implicit val order: Order[VotingWeightInfo] = Order.by(_.votedAtEpochProgress)
-    implicit val ordering: Ordering[VotingWeightInfo] = order.toOrdering
+  object VotingPowerInfo {
+    implicit val order: Order[VotingPowerInfo] = Order.by(_.votedAtEpochProgress)
+    implicit val ordering: Ordering[VotingPowerInfo] = order.toOrdering
   }
 
   @derive(encoder, decoder, show)
-  case class VotingWeight(
+  case class VotingPower(
     total: NonNegLong,
-    info: SortedSet[VotingWeightInfo]
+    info: SortedSet[VotingPowerInfo]
   )
 
-  object VotingWeight {
-    def empty: VotingWeight = VotingWeight(NonNegLong.MinValue, SortedSet.empty)
+  object VotingPower {
+    def empty: VotingPower = VotingPower(NonNegLong.MinValue, SortedSet.empty)
 
-    implicit val order: Order[VotingWeight] = Order.by(_.total)
-    implicit val ordering: Ordering[VotingWeight] = order.toOrdering
+    implicit val order: Order[VotingPower] = Order.by(_.total)
+    implicit val ordering: Ordering[VotingPower] = order.toOrdering
   }
 
   @derive(show)
@@ -173,7 +173,7 @@ object Governance {
   @derive(encoder, decoder, order, ordering, show)
   case class FrozenAddressesVotes(
     monthlyReference: MonthlyReference,
-    votes: SortedMap[Address, VotingWeight],
+    votes: SortedMap[Address, VotingPower],
     allocationVotes: SortedMap[AllocationId, Percentage]
   )
   object FrozenAddressesVotes {

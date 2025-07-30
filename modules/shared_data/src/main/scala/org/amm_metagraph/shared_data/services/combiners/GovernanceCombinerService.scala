@@ -44,11 +44,11 @@ trait GovernanceCombinerService[F[_]] {
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
-  def updateVotingWeights(
+  def updateVotingPowers(
     currentCalculatedState: AmmCalculatedState,
     lastCurrencySnapshotInfo: CurrencySnapshotInfo,
     lastSyncGlobalSnapshotEpochProgress: EpochProgress
-  ): SortedMap[Address, VotingWeight]
+  ): SortedMap[Address, VotingPower]
 
   def handleMonthExpiration(
     state: DataState[AmmOnChainState, AmmCalculatedState],
@@ -64,7 +64,7 @@ object GovernanceCombinerService {
     new GovernanceCombinerService[F] {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
       val tokensMultipliers: TokenLocksMultiplier =
-        TokenLocksMultiplier.make(applicationConfig.governance.votingWeightMultipliers)
+        TokenLocksMultiplier.make(applicationConfig.governance.votingPowerMultipliers)
 
       // We store information about total amount of distributed rewards per type for epochs
       // that parameter define for how many previous epochs we would like to save that information
@@ -76,7 +76,7 @@ object GovernanceCombinerService {
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         logger.warn(s"Received incorrect Governance update $failedCalculatedState") >> acc.pure[F]
 
-      private def calculateWeight(
+      private def calculatePower(
         tokenLock: TokenLock,
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
       ): Double = {
@@ -95,18 +95,18 @@ object GovernanceCombinerService {
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         monthlyReference: MonthlyReference
       ): FrozenAddressesVotes = {
-        val votingWeights = acc.calculated.votingWeights
+        val votingPowers = acc.calculated.votingPowers
 
-        val allocationsAndVotes: Map[Address, (SortedSet[Allocation], VotingWeight)] = acc.calculated.allocations.usersAllocations
+        val allocationsAndVotes: Map[Address, (SortedSet[Allocation], VotingPower)] = acc.calculated.allocations.usersAllocations
           .withFilter(_._2.allocationEpochProgress >= monthlyReference.firstEpochOfMonth)
           .withFilter(_._2.allocationEpochProgress <= monthlyReference.lastEpochOfMonth)
           .flatMap {
             case (address, allocations) =>
-              votingWeights.get(address).map(voteWeights => address -> (allocations.allocations, voteWeights))
+              votingPowers.get(address).map(voteWeights => address -> (allocations.allocations, voteWeights))
           }
 
         val totalVotes =
-          allocationsAndVotes.values.map { case (_, votingWeight) => BigDecimal(votingWeight.total.value) }.sum
+          allocationsAndVotes.values.map { case (_, votingPower) => BigDecimal(votingPower.total.value) }.sum
 
         val allocationsToGlobalPercent: Seq[(AllocationId, Percentage)] = allocationsAndVotes.toSeq.flatMap {
           case (_, (allocations, weight)) =>
@@ -127,23 +127,23 @@ object GovernanceCombinerService {
               .mapValues(v => Percentage.unsafeFrom(v))
           )
 
-        val frozenVotes: SortedMap[Address, VotingWeight] =
-          SortedMap.from(allocationsAndVotes.map { case (address, (_, votingWeight)) => address -> votingWeight })
+        val frozenVotes: SortedMap[Address, VotingPower] =
+          SortedMap.from(allocationsAndVotes.map { case (address, (_, votingPower)) => address -> votingPower })
 
         FrozenAddressesVotes(monthlyReference, frozenVotes, resAllocations)
       }
 
-      private def updateVotingWeightInfo(
-        currentVotingWeightInfo: SortedSet[VotingWeightInfo],
+      private def updateVotingPowerInfo(
+        currentVotingPowerInfo: SortedSet[VotingPowerInfo],
         addedTokenLocks: SortedSet[TokenLock],
         removedTokenLocks: SortedSet[TokenLock],
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
-      ): SortedSet[VotingWeightInfo] = {
-        val filteredInfo = currentVotingWeightInfo.filterNot(info => removedTokenLocks.contains(info.tokenLock))
+      ): SortedSet[VotingPowerInfo] = {
+        val filteredInfo = currentVotingPowerInfo.filterNot(info => removedTokenLocks.contains(info.tokenLock))
 
         val newInfo = addedTokenLocks.toList.map { lock =>
-          val weight = calculateWeight(lock, lastSyncGlobalSnapshotEpochProgress)
-          VotingWeightInfo(weight.toLong.toNonNegLongUnsafe, lock, lastSyncGlobalSnapshotEpochProgress)
+          val weight = calculatePower(lock, lastSyncGlobalSnapshotEpochProgress)
+          VotingPowerInfo(weight.toLong.toNonNegLongUnsafe, lock, lastSyncGlobalSnapshotEpochProgress)
         }
 
         filteredInfo ++ newInfo
@@ -177,14 +177,14 @@ object GovernanceCombinerService {
 
                 val allocationsUpdate = signedUpdate.allocations.map {
                   case (key, weight) =>
-                    val votingWeight = weight.value / allocationsSum.toDouble
+                    val votingPower = weight.value / allocationsSum.toDouble
                     val category = if (liquidityPools.contains(key)) {
                       AllocationCategory.LiquidityPool
                     } else {
                       AllocationCategory.NodeOperator
                     }
 
-                    Allocation(AllocationId(key, category), Percentage.unsafeFrom(votingWeight))
+                    Allocation(AllocationId(key, category), Percentage.unsafeFrom(votingPower))
                 }.toSortedSet
 
                 oldState.calculated.allocations.usersAllocations
@@ -235,40 +235,40 @@ object GovernanceCombinerService {
         }
       }
 
-      override def updateVotingWeights(
+      override def updateVotingPowers(
         currentCalculatedState: AmmCalculatedState,
         lastCurrencySnapshotInfo: CurrencySnapshotInfo,
         lastSyncGlobalSnapshotEpochProgress: EpochProgress
-      ): SortedMap[Address, VotingWeight] = {
-        val currentVotingWeights = currentCalculatedState.votingWeights
+      ): SortedMap[Address, VotingPower] = {
+        val currentVotingPowers = currentCalculatedState.votingPowers
 
         lastCurrencySnapshotInfo.activeTokenLocks.map { activeTokenLocks =>
-          activeTokenLocks.foldLeft(currentVotingWeights) { (acc, tokenLocksInfo) =>
+          activeTokenLocks.foldLeft(currentVotingPowers) { (acc, tokenLocksInfo) =>
             val (address, tokenLocks) = tokenLocksInfo
-            val currentAddressVotingWeight = acc.getOrElse(address, VotingWeight.empty)
+            val currentAddressVotingPower = acc.getOrElse(address, VotingPower.empty)
 
-            val currentTokenLocks = currentAddressVotingWeight.info.map(_.tokenLock)
+            val currentTokenLocks = currentAddressVotingPower.info.map(_.tokenLock)
             val fetchedTokenLocks = tokenLocks.map(_.value)
 
             val removedTokenLocks = currentTokenLocks.diff(fetchedTokenLocks)
             val addedTokenLocks = fetchedTokenLocks.diff(currentTokenLocks)
 
             val updatedInfo =
-              updateVotingWeightInfo(
-                currentAddressVotingWeight.info,
+              updateVotingPowerInfo(
+                currentAddressVotingPower.info,
                 addedTokenLocks,
                 removedTokenLocks,
                 lastSyncGlobalSnapshotEpochProgress
               )
             if (updatedInfo.nonEmpty) {
-              val updatedWeight = updatedInfo.map(_.weight.value).sum
-              acc.updated(address, VotingWeight(updatedWeight.toNonNegLongUnsafe, updatedInfo))
+              val updatedWeight = updatedInfo.map(_.votingPower.value).sum
+              acc.updated(address, VotingPower(updatedWeight.toNonNegLongUnsafe, updatedInfo))
             } else {
               acc.removed(address)
             }
           }
         }
-          .getOrElse(currentVotingWeights)
+          .getOrElse(currentVotingPowers)
       }
 
       override def handleMonthExpiration(
@@ -336,7 +336,7 @@ class TokenLocksMultiplier(locks: TreeMap[Long, Double]) {
 }
 
 object TokenLocksMultiplier {
-  def make(locks: ApplicationConfig.VotingWeightMultipliers): TokenLocksMultiplier = {
+  def make(locks: ApplicationConfig.VotingPowerMultipliers): TokenLocksMultiplier = {
     val locksData = locks.locksConfig.map(lm => lm.durationInMonths.value -> lm.multiplier.value)
     new TokenLocksMultiplier(TreeMap.from(locksData))
   }

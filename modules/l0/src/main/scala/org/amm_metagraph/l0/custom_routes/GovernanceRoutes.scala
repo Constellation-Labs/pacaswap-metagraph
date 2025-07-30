@@ -12,7 +12,7 @@ import derevo.derive
 import io.circe.generic.auto._
 import org.amm_metagraph.l0.custom_routes.Responses.SingleResponse
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.types.Governance.{Allocation, UserAllocations, VotingWeight}
+import org.amm_metagraph.shared_data.types.Governance.{Allocation, UserAllocations, VotingPower}
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -27,14 +27,14 @@ case class GovernanceRoutes[F[_]: Async](
 
   private def getAllocationStats: F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      val totalVpIssued = calculatedState.state.votingWeights.values.map(v => BigDecimal(v.total.value)).sum
+      val totalVpIssued = calculatedState.state.votingPowers.values.map(v => BigDecimal(v.total.value)).sum
 
-      val allocatedAddresses = calculatedState.state.votingWeights.keySet -- calculatedState.state.allocations.usersAllocations.keySet
+      val allocatedAddresses = calculatedState.state.votingPowers.keySet -- calculatedState.state.allocations.usersAllocations.keySet
       val totalVpAllocated =
-        calculatedState.state.votingWeights.filter(vw => allocatedAddresses.contains(vw._1)).values.map(v => BigDecimal(v.total.value)).sum
+        calculatedState.state.votingPowers.filter(vw => allocatedAddresses.contains(vw._1)).values.map(v => BigDecimal(v.total.value)).sum
 
       val totalTokenLocked =
-        calculatedState.state.votingWeights.flatMap(_._2.info).map(vw => BigDecimal(vw.tokenLock.amount.value.value)).sum
+        calculatedState.state.votingPowers.flatMap(_._2.info).map(vw => BigDecimal(vw.tokenLock.amount.value.value)).sum
 
       Ok(AllocationStats(totalVpIssued, totalVpAllocated, totalTokenLocked))
     }
@@ -55,7 +55,7 @@ case class GovernanceRoutes[F[_]: Async](
     calculatedStateService.get.flatMap { calculatedState =>
       val res = calculatedState.state.allocations.usersAllocations.map {
         case (address, UserAllocations(_, _, _, allocations: SortedSet[Allocation])) =>
-          val votingPower = calculatedState.state.votingWeights.getOrElse(address, VotingWeight.empty)
+          val votingPower = calculatedState.state.votingPowers.getOrElse(address, VotingPower.empty)
           CurrentAllocationsForAddress(address, CurrentAllocations(allocations.toList, votingPower))
       }
 
@@ -78,4 +78,4 @@ case class AllocationStats(totalVpIssued: BigDecimal, totalVpAllocated: BigDecim
 case class CurrentAllocationsForAddress(address: Address, allocation: CurrentAllocations)
 
 @derive(encoder, decoder)
-case class CurrentAllocations(allocations: List[Allocation], votingPower: VotingWeight)
+case class CurrentAllocations(allocations: List[Allocation], votingPower: VotingPower)

@@ -48,7 +48,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
     "NodeValidators",
     Dev,
     Governance(
-      VotingWeightMultipliers(Seq.empty)
+      VotingPowerMultipliers(Seq.empty)
     ),
     Rewards(
       Amount.empty,

@@ -45,11 +45,11 @@ object ApplicationConfig {
   case class LockMultiplier(durationInMonths: NonNegLong, multiplier: PosDouble)
 
   @derive(show)
-  case class VotingWeightMultipliers(locksConfig: Seq[LockMultiplier])
+  case class VotingPowerMultipliers(locksConfig: Seq[LockMultiplier])
 
   @derive(show)
   case class Governance(
-    votingWeightMultipliers: VotingWeightMultipliers
+    votingPowerMultipliers: VotingPowerMultipliers
   )
 
   @derive(show)
