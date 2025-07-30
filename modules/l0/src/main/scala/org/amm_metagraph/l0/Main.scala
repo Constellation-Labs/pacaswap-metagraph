@@ -80,7 +80,7 @@ object Main
     swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
     withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
     rewardsCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo).toResource
-    rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards)
+    rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards, config.epochInfo)
     rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations, jsonBase64BinaryCodec)
 
     combinerService = L0CombinerService

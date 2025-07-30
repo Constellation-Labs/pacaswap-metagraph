@@ -29,6 +29,8 @@ import io.circe.refined._
 import io.estatico.newtype.macros.newtype
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdate
+import org.amm_metagraph.shared_data.types.States.{epochProgressKeyDecode, epochProgressKeyEncode}
+
 object Governance {
   val maxCredits = 50.0
 
@@ -63,7 +65,7 @@ object Governance {
 
   @derive(encoder, decoder, show)
   case class VotingWeightInfo(
-    weight: NonNegLong,
+    weight: NonNegLong, // Voting power for that locked token
     tokenLock: TokenLock,
     votedAtEpochProgress: EpochProgress
   )
@@ -111,6 +113,7 @@ object Governance {
     percentage: Percentage
   )
 
+  // latest epoch shall be bigger than early epochs by order / ordering type classes
   @derive(encoder, decoder, order, ordering, show)
   case class MonthlyReference(
     firstEpochOfMonth: EpochProgress,
@@ -136,7 +139,36 @@ object Governance {
         NonNegLong.unsafeFrom(monthNumber)
       )
     }
+
+    implicit val keyEncoder: KeyEncoder[MonthlyReference] =
+      tuple3KeyEncoder[String, String, String]
+        .contramap(mr =>
+          (
+            epochProgressKeyEncode.apply(mr.firstEpochOfMonth),
+            epochProgressKeyEncode.apply(mr.lastEpochOfMonth),
+            implicitly[KeyEncoder[NonNegLong]].apply(mr.monthReference)
+          )
+        )
+
+    implicit val keyDecoder: KeyDecoder[MonthlyReference] =
+      tuple3KeyDecoder[EpochProgress, EpochProgress, NonNegLong].map {
+        case (firstEpoch, lastEpoch, monthReference) => MonthlyReference(firstEpoch, lastEpoch, monthReference)
+      }
   }
+
+  implicit def tuple3KeyEncoder[A, B, C](implicit A: KeyEncoder[A], B: KeyEncoder[B], C: KeyEncoder[C]): KeyEncoder[(A, B, C)] =
+    KeyEncoder.instance[(A, B, C)] { case (a, b, c) => A(a) + ":" + B(b) + ":" + C(c) }
+
+  implicit def tuple3KeyDecoder[A, B, C](implicit A: KeyDecoder[A], B: KeyDecoder[B], C: KeyDecoder[C]): KeyDecoder[(A, B, C)] =
+    KeyDecoder.instance[(A, B, C)] {
+      case s"$as:$bs:$cs" =>
+        for {
+          a <- A(as)
+          b <- B(bs)
+          c <- C(cs)
+        } yield (a, b, c)
+      case _ => None
+    }
 
   @derive(encoder, decoder, order, ordering, show)
   case class FrozenAddressesVotes(
@@ -159,6 +191,17 @@ object Governance {
     def empty: Allocations = Allocations(MonthlyReference.empty, SortedMap.empty, FrozenAddressesVotes.empty)
   }
 
+  /** User allocations / votes for some address
+    * @param credits
+    *   internal usage, used for preventing vote allocation spam
+    * @param reference
+    *   reference for previous voting
+    * @param allocationEpochProgress
+    *   when allocation had been made
+    * @param allocations
+    *   voting itself in form: votedId -> percentage_of_voting_power therefore allocations.map(allocation => allocation.percentage).sum ===
+    *   100.0
+    */
   @derive(encoder, decoder, order, ordering, show)
   case class UserAllocations(
     credits: Double,

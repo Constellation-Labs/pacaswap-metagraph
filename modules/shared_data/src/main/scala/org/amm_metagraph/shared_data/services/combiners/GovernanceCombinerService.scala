@@ -17,6 +17,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.syntax.sortedCollection.sortedSetSyntax
 
 import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.NonNegInt
 import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
@@ -26,6 +27,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.RewardAllocationVoteUpdat
 import org.amm_metagraph.shared_data.types.Governance.MonthlyReference.getMonthlyReference
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
+import org.amm_metagraph.shared_data.types.Rewards.DistributedRewards
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState, FailedCalculatedState}
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.validations.GovernanceValidations
@@ -63,6 +65,10 @@ object GovernanceCombinerService {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
       val tokensMultipliers: TokenLocksMultiplier =
         TokenLocksMultiplier.make(applicationConfig.governance.votingWeightMultipliers)
+
+      // We store information about total amount of distributed rewards per type for epochs
+      // that parameter define for how many previous epochs we would like to save that information
+      private val distributedRewardsCacheSize = NonNegInt(5)
 
       private def handleFailedUpdate(
         acc: DataState[AmmOnChainState, AmmCalculatedState],
@@ -296,6 +302,10 @@ object GovernanceCombinerService {
           val updatedMonthlyReference =
             getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
 
+          val updatedDistributedInfo: SortedMap[MonthlyReference, DistributedRewards] =
+            stateParsed.calculated.rewards.distributedRewards
+              .takeRight(distributedRewardsCacheSize.value) + (updatedMonthlyReference -> DistributedRewards.empty)
+
           logger.info(
             show"Month is expired, freeze user allocations: $frozenVotes, new user allocations are ${clearedAllocations.toList}, new month reference is $updatedMonthlyReference"
           ) >>
@@ -306,6 +316,8 @@ object GovernanceCombinerService {
               .replace(frozenVotes)
               .focus(_.calculated.allocations.monthlyReference)
               .replace(updatedMonthlyReference)
+              .focus(_.calculated.rewards.distributedRewards)
+              .replace(updatedDistributedInfo)
               .pure[F]
         }
       }
