@@ -34,7 +34,7 @@ import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.app.ApplicationConfig.EpochMetadata
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.rewards._
-import org.amm_metagraph.shared_data.types.Governance.{AllocationId, MonthlyReference, VotingWeight}
+import org.amm_metagraph.shared_data.types.Governance.{AllocationId, MonthlyReference, VotingPower}
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards._
@@ -54,7 +54,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     override def calculateEpochRewards(
       currentProgress: EpochProgress,
       validators: Seq[Address],
-      frozenVotingPowers: Map[Address, VotingWeight],
+      frozenVotingPowers: Map[Address, VotingPower],
       frozenGovernanceVotes: Map[AllocationId, Percentage],
       currentLiquidityPools: Map[String, LiquidityPool],
       approvedValidators: Seq[Address]
@@ -118,8 +118,8 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
-      stateWithVotingPowers = state.focus(_.calculated.votingWeights).replace(votingPowers)
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      stateWithVotingPowers = state.focus(_.calculated.votingPowers).replace(votingPowers)
 
       rewardService <- RewardsDistributionService
         .make(rewardDistributionCalculator, Shared.config.rewards, Shared.config.epochInfo)
@@ -185,7 +185,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService
@@ -254,7 +254,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardTransactionsPerSnapshot = 3
@@ -345,7 +345,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardTransactionsPerSnapshot = 0
@@ -417,7 +417,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService
@@ -497,7 +497,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService
@@ -592,7 +592,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       currencyIncrementalSnapshot: Signed[currency.CurrencyIncrementalSnapshot] <- context.getLastCurrencySnapshot.map(_.get.signed)
       snapShotWithVoters = currencyIncrementalSnapshot.copy(proofs = voters)
 
-      votingPowers = List(a3, a4).map(_ -> VotingWeight(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
+      votingPowers = List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap
       stateWithVotingPowers = state.focus(_.calculated.allocations.frozenUsedUserVotes.votes).replace(votingPowers)
 
       rewardService <- RewardsDistributionService

@@ -369,16 +369,16 @@ components:
                 description: Allocation percentage
                 example: 33.33
 
-    VotingWeight:
+    VotingPower:
       type: object
-      description: Voting weight information
+      description: Voting power information
       properties:
         total:
           type: integer
-          description: Total voting weight
+          description: Total voting power
         info:
           type: array
-          description: Detailed weight information
+          description: Detailed power information
           items:
             type: object
             properties:

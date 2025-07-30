@@ -52,16 +52,16 @@ case class RewardDistribution(
   }
 }
 
-case class VotingPower(
+case class VotingPowerForAddress(
   address: Address,
-  power: VotingWeight
+  power: VotingPower
 )
 
 trait RewardCalculator[F[_]] {
   def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: Seq[Address],
-    frozenVotingPowers: Map[Address, VotingWeight],
+    frozenVotingPowers: Map[Address, VotingPower],
     frozenGovernanceVotes: Map[AllocationId, Percentage],
     currentLiquidityPools: Map[String, LiquidityPool],
     approvedValidators: Seq[Address]
@@ -196,7 +196,7 @@ class RewardCalculatorImpl[F[_]: Async](
   }
 
   private def calculateGovernanceRewards(
-    votingPowers: Seq[VotingPower],
+    votingPowers: Seq[VotingPowerForAddress],
     currentProgress: EpochProgress
   ): EitherT[F, RewardError, Map[Address, Amount]] = {
     val basePerEpoch = BigDecimal(rewardConfig.governancePool.value.value / epochData.epochProgress1Year)
@@ -240,7 +240,7 @@ class RewardCalculatorImpl[F[_]: Async](
   override def calculateEpochRewards(
     currentProgress: EpochProgress,
     validators: Seq[Address],
-    frozenVotingPowers: Map[Address, VotingWeight],
+    frozenVotingPowers: Map[Address, VotingPower],
     frozenGovernanceVotes: Map[AllocationId, Percentage],
     currentLiquidityPools: Map[String, LiquidityPool],
     approvedValidators: Seq[Address]
@@ -280,7 +280,7 @@ class RewardCalculatorImpl[F[_]: Async](
           .asRight
       )
 
-      governanceVotingPowers = frozenVotingPowers.map { case (address, vote) => VotingPower(address, vote) }.toList
+      governanceVotingPowers = frozenVotingPowers.map { case (address, vote) => VotingPowerForAddress(address, vote) }.toList
       governanceDistribution <- calculateGovernanceRewards(governanceVotingPowers, currentProgress)
     } yield
       RewardDistribution(

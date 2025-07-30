@@ -322,7 +322,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: './components.yml#/components/schemas/VotingWeight'
+                    $ref: './components.yml#/components/schemas/VotingPower'
         404:
           description: Address not found
   /addresses/{address}/withdrawals/last-reference:

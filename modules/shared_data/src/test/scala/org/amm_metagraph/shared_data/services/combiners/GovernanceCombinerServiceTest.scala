@@ -108,16 +108,16 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
     }
 
     // addresses are participated in voting
-    val actualVotingWeights: SortedMap[Address, VotingWeight] = SortedMap(
-      addr1 -> VotingWeight(NonNegLong.unsafeFrom(1000), SortedSet.empty[VotingWeightInfo]),
-      addr2 -> VotingWeight(NonNegLong.unsafeFrom(4000), SortedSet.empty[VotingWeightInfo])
+    val actualVotingWeights: SortedMap[Address, VotingPower] = SortedMap(
+      addr1 -> VotingPower(NonNegLong.unsafeFrom(1000), SortedSet.empty[VotingPowerInfo]),
+      addr2 -> VotingPower(NonNegLong.unsafeFrom(4000), SortedSet.empty[VotingPowerInfo])
     )
 
     // addr3 doesn't participate in voting in past month thus shall not be frozen and taken into account at all
     val votingWeights = actualVotingWeights ++
       Map(
-        addr3 -> VotingWeight(NonNegLong.unsafeFrom(5000), SortedSet.empty[VotingWeightInfo]),
-        addr4 -> VotingWeight(NonNegLong.unsafeFrom(5000), SortedSet.empty[VotingWeightInfo])
+        addr3 -> VotingPower(NonNegLong.unsafeFrom(5000), SortedSet.empty[VotingPowerInfo]),
+        addr4 -> VotingPower(NonNegLong.unsafeFrom(5000), SortedSet.empty[VotingPowerInfo])
       )
 
     val currentAllocations = Allocations(currentMonthReference, userAllocations, FrozenAddressesVotes.empty)
@@ -126,7 +126,7 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
       DataState(ammOnChainState, ammCalculatedState)
         .focus(_.calculated.allocations)
         .replace(currentAllocations)
-        .focus(_.calculated.votingWeights)
+        .focus(_.calculated.votingPowers)
         .replace(votingWeights)
 
     for {

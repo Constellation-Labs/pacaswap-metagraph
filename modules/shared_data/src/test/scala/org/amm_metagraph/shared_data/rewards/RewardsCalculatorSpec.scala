@@ -155,11 +155,11 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     id -> lp
   }
 
-  def frozenVotingPowers(epochProgress: EpochProgress): Map[Address, VotingWeight] =
+  def frozenVotingPowers(epochProgress: EpochProgress): Map[Address, VotingPower] =
     createVotingPowers(epochProgress)
 
-  def createVotingWeightInfo(epochProgress: EpochProgress): VotingWeightInfo =
-    VotingWeightInfo(
+  def createVotingWeightInfo(epochProgress: EpochProgress): VotingPowerInfo =
+    VotingPowerInfo(
       NonNegLong(1000L),
       TokenLock(
         source = voterA,
@@ -172,9 +172,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       epochProgress
     )
 
-  def createVotingPowers(currentProgress: EpochProgress): Map[Address, VotingWeight] = Map(
-    voterA -> VotingWeight(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress))),
-    voterB -> VotingWeight(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress)))
+  def createVotingPowers(currentProgress: EpochProgress): Map[Address, VotingPower] = Map(
+    voterA -> VotingPower(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress))),
+    voterB -> VotingPower(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress)))
   )
 
   def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): IO[RewardCalculator[IO]] =
