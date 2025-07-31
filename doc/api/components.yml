@@ -369,16 +369,16 @@ components:
                 description: Allocation percentage
                 example: 33.33
 
-    VotingWeight:
+    VotingPower:
       type: object
-      description: Voting weight information
+      description: Voting power information
       properties:
         total:
           type: integer
-          description: Total voting weight
+          description: Total voting power
         info:
           type: array
-          description: Detailed weight information
+          description: Detailed power information
           items:
             type: object
             properties:
@@ -419,23 +419,49 @@ components:
           type: integer
           description: Global epochProgress when tokens unlock
 
-    GovAllocationRewards:
+    FrozenAddressesVotes:
       type: object
-      description: Governance allocation rewards information
+      description: Governance active allocation, i.e. last month allocations
       properties:
         monthReference:
-          type: integer
-          description: Reference to reward month
-        epochprogressToReward:
-          type: integer
-          description: Epoch progress for rewards
-        rewardsInfo:
           type: object
-          description: Reward allocations by category
-          example:
-            DAG/DOR: 12
-            DAG/PACA: 75
-            NodeOperators: 13
+          description: Reference to reward month
+        votes:
+          type: object
+          description: Map with voting powers
+        allocationVotes:
+          type: object
+          description: Allocation done per address
+
+    DistributionReward:
+      type: object
+      description: Reward distribution per type
+      properties:
+        rewards:
+          type: object
+          description: Map of distributed rewards
+
+    CurrentAllocationsForAddress:
+      type: object
+      description: Current voting status for address
+      properties:
+        address:
+          type: object
+          description: Address
+        allocation:
+          $ref: '#/components/schemas/CurrentAllocation'
+
+    CurrentAllocations:
+      type: object
+      description: Current voting status
+      properties:
+        allocations:
+          type: object
+          description: List of current allocations
+        votingPower:
+          type: object
+          description: Voting power for current address
+
 
     SwapQuoteRequest:
       type: object

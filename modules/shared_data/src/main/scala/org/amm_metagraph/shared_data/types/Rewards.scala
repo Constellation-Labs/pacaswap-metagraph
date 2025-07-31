@@ -3,22 +3,25 @@ package org.amm_metagraph.shared_data.types
 import cats.Show
 import cats.implicits._
 
+import scala.collection.immutable.SortedMap
 import scala.util.Try
 
+import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.{Amount, BalanceArithmeticError}
+import io.constellationnetwork.schema.balance.{Amount, AmountOverflow, BalanceArithmeticError}
 import io.constellationnetwork.schema.{tupleKeyDecoder, tupleKeyEncoder}
 
-import derevo.cats.{eqv, show}
+import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.{Enum, EnumEntry}
 import io.circe._
 import org.amm_metagraph.shared_data.rewards.RewardDistribution
+import org.amm_metagraph.shared_data.types.Governance.MonthlyReference
 
 object Rewards {
 
-  @derive(eqv, show)
+  @derive(eqv, show, order, ordering)
   sealed trait RewardType extends EnumEntry
 
   object RewardType extends Enum[RewardType] with RewardTypeCodecs {
@@ -128,4 +131,38 @@ object Rewards {
       RewardInfo(rewardsMap)
     }
   }
+
+  @derive(encoder, decoder, show)
+  case class DistributedRewards(rewards: SortedMap[RewardType, Amount]) {
+    def addRewards(rewardsInfo: RewardInfo): Either[BalanceArithmeticError, DistributedRewards] = {
+      val newRewards: Seq[(RewardType, Amount)] =
+        rewardsInfo.info.toSeq.map { case (AddressAndRewardType(_, rewardType), amount) => rewardType -> amount }
+      combineAmounts(rewards.toSeq ++ newRewards).map(merged => DistributedRewards(SortedMap.from(merged)))
+    }
+  }
+  object DistributedRewards {
+    val empty: DistributedRewards = DistributedRewards(SortedMap.empty[RewardType, Amount])
+
+  }
+
+  private def combineAmounts[K: Ordering](data: Seq[(K, Amount)]): Either[BalanceArithmeticError, Map[K, Amount]] =
+    data
+      .groupBy(_._1) // Map[K, Seq[(K, Amount)]]
+      .toList
+      .foldLeft(Right(Map.empty): Either[BalanceArithmeticError, Map[K, Amount]]) {
+        case (accEither, (key, entries)) =>
+          for {
+            acc <- accEither
+            sum <- entries
+              .map(_._2)
+              .reduceLeftOption { (a, b) =>
+                a.plus(b) match {
+                  case Right(res) => res
+                  case Left(err)  => return Left(err)
+                }
+              }
+              .map(Right(_))
+              .getOrElse(Left(AmountOverflow))
+          } yield acc + (key -> sum)
+      }
 }

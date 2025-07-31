@@ -16,7 +16,7 @@ import derevo.derive
 import eu.timepit.refined.types.numeric.PosLong
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.refined.Percentage._
-import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference, VotingWeightInfo}
+import org.amm_metagraph.shared_data.types.Governance.{RewardAllocationVoteOrdinal, RewardAllocationVoteReference, VotingPowerInfo}
 import org.amm_metagraph.shared_data.types.LiquidityPool.ShareAmount
 import org.amm_metagraph.shared_data.types.RewardWithdraw.{RewardWithdrawOrdinal, RewardWithdrawReference}
 import org.amm_metagraph.shared_data.types.Rewards.RewardType

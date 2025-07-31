@@ -147,7 +147,7 @@ object CombinerTest extends MutableIOSuite {
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -296,7 +296,7 @@ object CombinerTest extends MutableIOSuite {
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -453,7 +453,7 @@ object CombinerTest extends MutableIOSuite {
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService

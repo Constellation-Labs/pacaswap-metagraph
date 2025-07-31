@@ -51,7 +51,7 @@ object Errors {
     val message = "Has no matching parent"
   }
 
-  case object MissingVotingWeight extends DataApplicationValidationError {
+  case object MissingVotingPower extends DataApplicationValidationError {
     val message = "Missing voting weight"
   }
 
@@ -204,7 +204,7 @@ object Errors {
   case class WithdrawalAllLPSharesError() extends FailedCalculatedStateReason
   case class WithdrawalNotPendingError() extends FailedCalculatedStateReason
   case class GovernanceDailyLimitAllocation(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class GovernanceWalletWithNoVotingWeight(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class GovernanceWalletWithNoVotingPower(update: AmmUpdate) extends FailedCalculatedStateReason
   case class GovernanceInvalidVoteId(update: AmmUpdate) extends FailedCalculatedStateReason
   case class InvalidWithdrawalAmount(update: AmmUpdate) extends FailedCalculatedStateReason
   case class DuplicatedUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
