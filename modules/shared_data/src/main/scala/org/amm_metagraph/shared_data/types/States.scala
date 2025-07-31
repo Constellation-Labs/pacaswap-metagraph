@@ -34,7 +34,8 @@ object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
     updatedStateDataUpdate: SortedSet[UpdatedStateDataUpdate],
-    rewardsUpdate: Option[RewardInfo]
+    rewardsUpdate: Option[RewardInfo],
+    governanceVotingResult: Option[GovernanceVotingResult]
   ) extends DataOnChainState
 
   @derive(encoder, decoder, order, ordering)

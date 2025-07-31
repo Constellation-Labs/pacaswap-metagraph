@@ -375,7 +375,7 @@ paths:
         404:
           description: Withdrawal not found
 
-  /governance-rounds/last/frozen-allocations:
+  /governance-rounds/last/voting-result:
     get:
       tags:
         - Governance Rounds
