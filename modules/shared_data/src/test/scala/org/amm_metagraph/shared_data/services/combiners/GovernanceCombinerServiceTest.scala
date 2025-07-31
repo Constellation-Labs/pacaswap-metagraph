@@ -86,7 +86,7 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
 
   test("Votes shall be frozen at the end of the month") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, None, None)
     val ammCalculatedState = AmmCalculatedState()
     val nextMonthEpochNumber = config.epochInfo.epochProgress1Month + 1
     val nextMonthEpoch = EpochProgress(NonNegLong.unsafeFrom(nextMonthEpochNumber))
@@ -120,7 +120,7 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
         addr4 -> VotingPower(NonNegLong.unsafeFrom(5000), SortedSet.empty[VotingPowerInfo])
       )
 
-    val currentAllocations = Allocations(currentMonthReference, userAllocations, FrozenAddressesVotes.empty)
+    val currentAllocations = Allocations(currentMonthReference, userAllocations, GovernanceVotingResult.empty)
 
     val state =
       DataState(ammOnChainState, ammCalculatedState)
@@ -150,10 +150,13 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
         AllocationId("lp2", LiquidityPool) -> Percentage.unsafeFrom(0.3),
         AllocationId("lp3", LiquidityPool) -> Percentage.unsafeFrom(0.56)
       )
+
+      voteResult = GovernanceVotingResult(currentMonthReference, actualVotingWeights, expectedAllocations)
     } yield
       expect(res.calculated.allocations.usersAllocations == clearedUserAllocations) &&
         expect(res.calculated.allocations.frozenUsedUserVotes.monthlyReference == currentMonthReference) &&
-        expect(res.calculated.allocations.frozenUsedUserVotes.allocationVotes == expectedAllocations) &&
-        expect(res.calculated.allocations.frozenUsedUserVotes.votes == actualVotingWeights)
+        expect(res.calculated.allocations.frozenUsedUserVotes.votes == expectedAllocations) &&
+        expect(res.calculated.allocations.frozenUsedUserVotes.votingPowerForAddresses == actualVotingWeights) &&
+        expect(res.onChain.governanceVotingResult == voteResult.some)
   }
 }

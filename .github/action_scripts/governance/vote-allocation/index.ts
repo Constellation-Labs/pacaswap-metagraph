@@ -136,10 +136,10 @@ const validateAllocationsRewards = async (
 ) => {
     const { ammMl0Url } = config;
 
-    const { data: lastRewards } = await axios.get(`${ammMl0Url}/v1/governance-rounds/last/frozen-allocations`);
+    const { data: lastRewards } = await axios.get(`${ammMl0Url}/v1/governance-rounds/last/voting-result`);
     console.log(JSON.stringify(lastRewards.data, null, 2));
 
-    const total = lastRewards.data.votes?.[address]?.total;
+    const total = lastRewards.data.votingPowerForAddresses?.[address]?.total;
 
     logger(`Check frozen governance votes ${total}`);
 

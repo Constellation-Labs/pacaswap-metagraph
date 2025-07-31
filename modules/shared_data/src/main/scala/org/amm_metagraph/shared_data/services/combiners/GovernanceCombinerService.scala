@@ -91,10 +91,10 @@ object GovernanceCombinerService {
         tokenLock.amount.value * multiplier
       }
 
-      private def freezeUserVotes(
+      private def buildGovernanceVotingResult(
         acc: DataState[AmmOnChainState, AmmCalculatedState],
         monthlyReference: MonthlyReference
-      ): FrozenAddressesVotes = {
+      ): GovernanceVotingResult = {
         val votingPowers = acc.calculated.votingPowers
 
         val allocationsAndVotes: Map[Address, (SortedSet[Allocation], VotingPower)] = acc.calculated.allocations.usersAllocations
@@ -130,7 +130,7 @@ object GovernanceCombinerService {
         val frozenVotes: SortedMap[Address, VotingPower] =
           SortedMap.from(allocationsAndVotes.map { case (address, (_, votingPower)) => address -> votingPower })
 
-        FrozenAddressesVotes(monthlyReference, frozenVotes, resAllocations)
+        GovernanceVotingResult(monthlyReference, frozenVotes, resAllocations)
       }
 
       private def updateVotingPowerInfo(
@@ -278,48 +278,62 @@ object GovernanceCombinerService {
         val monthlyReference = state.calculated.allocations.monthlyReference
 
         val (monthlyReferenceParsed, stateParsed) = if (isFirstProcessedMonth(monthlyReference)) {
-          val monthlyRef =
-            getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
+          val monthlyRef = getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
           (monthlyRef, state.focus(_.calculated.allocations.monthlyReference).replace(monthlyRef))
         } else {
           (monthlyReference, state)
         }
 
+        // clear possible governanceVotingResult which is set if month had been expired in previous epoch
+        val stateWithClearedOnChain = stateParsed.focus(_.onChain.governanceVotingResult).replace(None)
+
         val isExpired = currentMetagraphEpochProgress > monthlyReferenceParsed.lastEpochOfMonth
         if (!isExpired) {
           val epochsToEndOfMonth = monthlyReferenceParsed.lastEpochOfMonth.value.value - currentMetagraphEpochProgress.value.value
-          logger.debug(
-            show"Month is not expired yet, need to wait additional $epochsToEndOfMonth epoch(s). Epoch length ${applicationConfig.epochInfo.oneEpochProgress}, Month length in epochs: ${applicationConfig.epochInfo.epochProgress1Month}"
-          ) >>
-            stateParsed.pure[F]
+          val logString =
+            show"Month is not expired yet, need to wait additional $epochsToEndOfMonth epoch(s). " +
+              show"Epoch length ${applicationConfig.epochInfo.oneEpochProgress}, " +
+              show"Month length in epochs: ${applicationConfig.epochInfo.epochProgress1Month}"
+
+          logger.debug(logString) >> stateWithClearedOnChain.pure[F]
         } else {
-          val frozenVotes = freezeUserVotes(stateParsed, monthlyReferenceParsed)
-
-          val clearedAllocations = stateParsed.calculated.allocations.usersAllocations.map {
-            case (address, allocations) => address -> allocations.copy(allocations = SortedSet.empty)
-          }
-
-          val updatedMonthlyReference =
-            getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
-
-          val updatedDistributedInfo: SortedMap[MonthlyReference, DistributedRewards] =
-            stateParsed.calculated.rewards.distributedRewards
-              .takeRight(distributedRewardsCacheSize.value) + (updatedMonthlyReference -> DistributedRewards.empty)
-
-          logger.info(
-            show"Month is expired, freeze user allocations: $frozenVotes, new user allocations are ${clearedAllocations.toList}, new month reference is $updatedMonthlyReference"
-          ) >>
-            stateParsed
-              .focus(_.calculated.allocations.usersAllocations)
-              .replace(clearedAllocations)
-              .focus(_.calculated.allocations.frozenUsedUserVotes)
-              .replace(frozenVotes)
-              .focus(_.calculated.allocations.monthlyReference)
-              .replace(updatedMonthlyReference)
-              .focus(_.calculated.rewards.distributedRewards)
-              .replace(updatedDistributedInfo)
-              .pure[F]
+          processMonthExpiration(stateWithClearedOnChain, monthlyReferenceParsed, currentMetagraphEpochProgress)
         }
+      }
+
+      private def processMonthExpiration(
+        state: DataState[AmmOnChainState, AmmCalculatedState],
+        monthlyReference: MonthlyReference,
+        currentMetagraphEpochProgress: EpochProgress
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
+        val governanceVotingResult = buildGovernanceVotingResult(state, monthlyReference)
+
+        val clearedAllocations = state.calculated.allocations.usersAllocations.map {
+          case (address, allocations) => address -> allocations.copy(allocations = SortedSet.empty)
+        }
+
+        val updatedMonthlyReference =
+          getMonthlyReference(currentMetagraphEpochProgress, applicationConfig.epochInfo.epochProgress1Month)
+
+        val updatedDistributedInfo: SortedMap[MonthlyReference, DistributedRewards] =
+          state.calculated.rewards.distributedRewards
+            .takeRight(distributedRewardsCacheSize.value) + (updatedMonthlyReference -> DistributedRewards.empty)
+
+        logger.info(
+          show"Month is expired, freeze user allocations: $governanceVotingResult, new user allocations are ${clearedAllocations.toList}, new month reference is $updatedMonthlyReference"
+        ) >>
+          state
+            .focus(_.calculated.allocations.usersAllocations)
+            .replace(clearedAllocations)
+            .focus(_.calculated.allocations.frozenUsedUserVotes)
+            .replace(governanceVotingResult)
+            .focus(_.calculated.allocations.monthlyReference)
+            .replace(updatedMonthlyReference)
+            .focus(_.calculated.rewards.distributedRewards)
+            .replace(updatedDistributedInfo)
+            .focus(_.onChain.governanceVotingResult)
+            .replace(governanceVotingResult.some)
+            .pure[F]
       }
     }
 

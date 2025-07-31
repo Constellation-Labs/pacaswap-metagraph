@@ -165,8 +165,8 @@ object RewardsDistributionService {
         validators: Seq[Address],
         state: AmmCalculatedState
       ): EitherT[F, RewardDistributionError, RewardDistribution] = {
-        val frozenVotingPowers = state.allocations.frozenUsedUserVotes.votes
-        val frozenGovernanceVotes = state.allocations.frozenUsedUserVotes.allocationVotes
+        val frozenVotingPowers = state.allocations.frozenUsedUserVotes.votingPowerForAddresses
+        val frozenGovernanceVotes = state.allocations.frozenUsedUserVotes.votes
         val currentLiquidityPools = getLiquidityPoolCalculatedState(state).confirmed.value
         def lpShow =
           currentLiquidityPools.map { case (id, lp) => id -> lp.poolShares.addressShares }.toList
