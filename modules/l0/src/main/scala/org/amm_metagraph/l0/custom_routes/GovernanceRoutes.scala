@@ -64,7 +64,7 @@ case class GovernanceRoutes[F[_]: Async](
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "governance" / "stats"                                  => getAllocationStats
-    case GET -> Root / "governance-rounds" / "last" / "frozen-allocations"     => getAllocationsRewards
+    case GET -> Root / "governance-rounds" / "last" / "voting-result"          => getAllocationsRewards
     case GET -> Root / "governance-rounds" / "last" / "distributed-rewards"    => getPreLastDistributedRewards
     case GET -> Root / "governance-rounds" / "current" / "distributed-rewards" => getLastDistributedRewards
     case GET -> Root / "governance-rounds" / "current" / "allocations"         => getCurrentAllocations
