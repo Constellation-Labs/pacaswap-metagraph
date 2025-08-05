@@ -40,8 +40,8 @@ const getSignedRewardWithdraw = async (config, { privateKey, publicKey, address 
     log("Generating reward withdraw request...");
     const { ammMl0Url } = config;
 
-    log(`Fetching last reference for wallet: ${address} ${`${ammMl0Url}/v1/addresses/${address}/withdrawals/last-reference`}`);
-    const { data: lastRef } = await axios.get(`${ammMl0Url}/v1/addresses/${address}/withdrawals/last-reference`);
+    log(`Fetching last reference for wallet: ${address} ${`${ammMl0Url}/v1/addresses/${address}/rewards/withdrawals/last-reference`}`);
+    const { data: lastRef } = await axios.get(`${ammMl0Url}/v1/addresses/${address}/rewards/withdrawals/last-reference`);
     const { hash, ordinal } = lastRef.data;
 
     const body = {
