@@ -54,7 +54,7 @@ object RewardsDistributionService {
         for {
           approvedValidators <- context.getMetagraphL0Seedlist.getOrElse(Set.empty).toList.traverse(_.peerId.toAddress)
 
-          clearedOnChain <- state.focus(_.onChain.rewardsUpdate).replace(None).pure[F]
+          clearedOnChain <- state.focus(_.onChain.rewardsUpdate).replace(Seq.empty).pure[F]
           withUpdateBuffer <- tryToUpdateRewardBuffer(lastArtifact, clearedOnChain, currentEpoch, approvedValidators)
           clearedEpoch <- withUpdateBuffer.focus(_.calculated.rewards.lastProcessedEpoch).replace(currentEpoch).pure[F]
 
@@ -71,7 +71,7 @@ object RewardsDistributionService {
 
         val (rewardsToDistribute, rewardsToStay) = rewardsBuffer.data.splitAt(rewardsTransactionCount)
         val res = for {
-          distributionInfo <- RewardInfo.make(rewardsToDistribute)
+          distributionInfo <- RewardInfo.fromChunks(rewardsToDistribute)
           mergedRewards <- state.calculated.rewards.availableRewards.addRewards(distributionInfo)
         } yield
           state
@@ -80,7 +80,7 @@ object RewardsDistributionService {
             .focus(_.calculated.rewards.availableRewards)
             .replace(mergedRewards)
             .focus(_.onChain.rewardsUpdate)
-            .replace(Option.when(distributionInfo.info.nonEmpty)(distributionInfo))
+            .replace(rewardsToDistribute)
 
         EitherT
           .fromEither(res.leftMap(RewardMergingError))
@@ -134,14 +134,13 @@ object RewardsDistributionService {
             updateRewardFun = (v: NonNegLong) => NonNegLong.from(v.value * rewardsMultiplier).getOrElse(v)
             multipliedRewards = distribution.updateAllRewards(updateRewardFun)
 
-            distributionAsRewardInfo = RewardInfo.fromRewardDistribution(multipliedRewards)
-            _ <- EitherT.liftF(logger.info(show"Calculated rewards for epoch ${currentEpoch.value.value} is $distributionAsRewardInfo"))
+            _ <- EitherT.liftF(logger.info(show"Calculated rewards for epoch ${currentEpoch.value.value} is $multipliedRewards"))
 
             currentMonthReference = MonthlyReference.getMonthlyReference(currentEpoch, epochInfoConfig.epochProgress1Month)
             distributedRewards = calculatedState.rewards.distributedRewards.getOrElse(currentMonthReference, DistributedRewards.empty)
             updatedDistributedRewards <- EitherT.fromEither[F](
               distributedRewards
-                .addRewards(distributionAsRewardInfo)
+                .addRewards(multipliedRewards)
                 .leftMap(e => RewardDistributionCalculationError(e): RewardDistributionError)
             )
             newDistributedMap: SortedMap[MonthlyReference, DistributedRewards] =
@@ -149,7 +148,7 @@ object RewardsDistributionService {
           } yield
             state
               .focus(_.calculated.rewards.rewardsBuffer.data)
-              .modify(_ ++ distributionAsRewardInfo.info.toSeq)
+              .modify(_ ++ multipliedRewards.rewards)
               .focus(_.calculated.rewards.distributedRewards)
               .replace(newDistributedMap)
 
@@ -164,7 +163,7 @@ object RewardsDistributionService {
         approvedValidators: Seq[Address],
         validators: Seq[Address],
         state: AmmCalculatedState
-      ): EitherT[F, RewardDistributionError, RewardDistribution] = {
+      ): EitherT[F, RewardDistributionError, RewardsDistribution] = {
         val frozenVotingPowers = state.allocations.frozenUsedUserVotes.votingPowerForAddresses
         val frozenGovernanceVotes = state.allocations.frozenUsedUserVotes.votes
         val currentLiquidityPools = getLiquidityPoolCalculatedState(state).confirmed.value

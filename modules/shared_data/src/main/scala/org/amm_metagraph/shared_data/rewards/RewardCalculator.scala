@@ -12,6 +12,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 
 import derevo.cats.show
+import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import eu.timepit.refined.auto._
 import eu.timepit.refined.refineV
@@ -22,6 +23,8 @@ import org.amm_metagraph.shared_data.refined.{BigDecimalOps, Percentage}
 import org.amm_metagraph.shared_data.rewards.LiquidityPoolRewardConfiguration._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
+import org.amm_metagraph.shared_data.types.Rewards.RewardTypeExtended
+import org.amm_metagraph.shared_data.types.Rewards.RewardTypeExtended._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, SelfAwareStructuredLogger}
 
@@ -30,32 +33,28 @@ sealed trait RewardError extends Throwable
 case class NegativeValueError(value: Long, description: String) extends RewardError
 case class InvalidMonthError(month: Int) extends RewardError
 
-case class RewardDistribution(
-  nodeValidatorRewards: Map[Address, Amount],
-  daoRewards: (Address, Amount),
-  voteBasedRewards: Map[Address, Amount],
-  governanceRewards: Map[Address, Amount]
-) {
-  def updateAllRewards(updateFun: NonNegLong => NonNegLong): RewardDistribution = {
-    def updateEntry[T](keyValue: (T, Amount)) = keyValue._1 -> Amount(updateFun(keyValue._2.value))
+@derive(show, encoder, decoder)
+case class RewardDistributionChunk(receiver: Address, rewardType: RewardTypeExtended, amount: Amount)
 
-    val newNodeValidatorRewards = nodeValidatorRewards.map(updateEntry)
-    val newDaoRewards = updateEntry(daoRewards)
-    val newVoteBasedRewards = voteBasedRewards.map(updateEntry)
-    val newGovernanceRewards = governanceRewards.map(updateEntry)
-    this.copy(
-      nodeValidatorRewards = newNodeValidatorRewards,
-      daoRewards = newDaoRewards,
-      voteBasedRewards = newVoteBasedRewards,
-      governanceRewards = newGovernanceRewards
-    )
+@derive(show)
+case class RewardsDistribution(rewards: Seq[RewardDistributionChunk]) {
+  def sum: BigDecimal = rewards.map(_.amount.toBigDecimal).sum
+  def ++(other: RewardsDistribution): RewardsDistribution = RewardsDistribution(rewards ++ other.rewards)
+  def updateAllRewards(updateFun: NonNegLong => NonNegLong): RewardsDistribution = {
+    val newRewards = rewards.map {
+      case RewardDistributionChunk(address, rewardType, amount) =>
+        val newAmount = Amount(updateFun(amount.value))
+        RewardDistributionChunk(address, rewardType, newAmount)
+    }
+    RewardsDistribution(newRewards)
   }
 }
 
-case class VotingPowerForAddress(
-  address: Address,
-  power: VotingPower
-)
+object RewardsDistribution {
+  val empty: RewardsDistribution = RewardsDistribution(Seq.empty)
+}
+
+case class VotingPowerForAddress(address: Address, power: VotingPower)
 
 trait RewardCalculator[F[_]] {
   def calculateEpochRewards(
@@ -65,11 +64,14 @@ trait RewardCalculator[F[_]] {
     frozenGovernanceVotes: Map[AllocationId, Percentage],
     currentLiquidityPools: Map[String, LiquidityPool],
     approvedValidators: Seq[Address]
-  ): F[Either[RewardError, RewardDistribution]]
+  ): F[Either[RewardError, RewardsDistribution]]
 }
 
 object RewardCalculator {
-  def make[F[_]: Async: Logger](config: ApplicationConfig.Rewards, epochData: ApplicationConfig.EpochMetadata): F[RewardCalculator[F]] =
+  def make[F[_]: Async: Logger](
+    config: ApplicationConfig.Rewards,
+    epochData: ApplicationConfig.EpochMetadata
+  ): F[RewardCalculator[F]] =
     EitherT
       .fromEither[F](config.nodeValidatorConfig.LiquidityPoolsConfig.parsed)
       .valueOrF { error =>
@@ -112,16 +114,17 @@ class RewardCalculatorImpl[F[_]: Async](
     validators: Seq[Address],
     currentEpoch: EpochProgress,
     addressToLpInfo: Map[Address, Seq[LpInfo]]
-  ): Either[RewardError, Map[Address, Amount]] = {
+  ): Either[RewardError, RewardsDistribution] = {
     def isLPConfigured(address: Address): Boolean =
       voteBasedLpConfig.contains(currentEpoch, addressToLpInfo.getOrElse(address, Seq.empty))
 
     val eligibleValidators = validators.filter(isLPConfigured)
     if (eligibleValidators.isEmpty) {
-      Map.empty[Address, Amount].asRight
+      RewardsDistribution.empty.asRight
     } else {
       val share = (perEpoch / eligibleValidators.length).toAmountUnsafe
-      eligibleValidators.map(_ -> share).toMap.asRight
+      val rewards = eligibleValidators.map(address => RewardDistributionChunk(address, NodeValidator, share))
+      RewardsDistribution(rewards).asRight
     }
   }
 
@@ -130,22 +133,17 @@ class RewardCalculatorImpl[F[_]: Async](
     approvedValidators: Seq[Address],
     frozenGovernanceVotes: Map[AllocationId, Percentage],
     currentLiquidityPools: Map[String, LiquidityPool]
-  ): Either[RewardError, Map[Address, Amount]] = {
+  ): Either[RewardError, RewardsDistribution] = {
     val epochRewardsForAllocation = frozenGovernanceVotes.map {
       case (allocation, percentage) => allocation -> (percentage * perEpoch)
     }
 
     val voteBasedLpRewards = calculateLiquidityPoolsRewards(epochRewardsForAllocation, currentLiquidityPools)
 
-    val voteBasedValidatorRewards =
-      calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
+    val voteBasedValidatorRewards = calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
 
-    val unifiedRewards = (voteBasedLpRewards.toList ++ voteBasedValidatorRewards.toList).groupMapReduce(_._1)(_._2)(_ + _).filter(_._2 > 0)
-    val refinedRewards: Map[Address, Amount] =
-      unifiedRewards.map {
-        case (address, reward) => address -> reward.toAmountUnsafe // only positive here because it was checked on previous step
-      }
-    refinedRewards.asRight
+    val unifiedRewards = (voteBasedLpRewards ++ voteBasedValidatorRewards).filter(_.amount.value.value > 0)
+    RewardsDistribution(unifiedRewards).asRight
   }
 
   private def buildAddressToLP(currentLiquidityPools: Map[String, LiquidityPool]): Map[Address, Seq[LpInfo]] = {
@@ -162,8 +160,8 @@ class RewardCalculatorImpl[F[_]: Async](
   private def calculateLiquidityPoolsRewards(
     epochRewardsForAllocation: Map[AllocationId, BigDecimal],
     currentLiquidityPools: Map[String, LiquidityPool]
-  ): Map[Address, BigDecimal] = {
-    val liquidityPoolAddressesRewards: Seq[(Address, BigDecimal)] =
+  ): Seq[RewardDistributionChunk] = {
+    val liquidityPoolAddressesRewards: Seq[RewardDistributionChunk] =
       currentLiquidityPools.toSeq.flatMap {
         case (stringId, liquidityPool) =>
           val id = AllocationId(stringId, AllocationCategory.LiquidityPool)
@@ -171,34 +169,34 @@ class RewardCalculatorImpl[F[_]: Async](
           val totalInLp = liquidityPool.poolShares.totalShares
           liquidityPool.poolShares.addressShares.toSeq.map {
             case (address, shareAmount) =>
-              val globalPercentage = shareAmount.value.toBigDecimal / totalInLp.value * totalRewardForLiquidityPool
-              address -> globalPercentage
+              val amount = shareAmount.value.toBigDecimal / totalInLp.value * totalRewardForLiquidityPool
+              RewardDistributionChunk(address, VoteBasedLiquidityPool(stringId), amount.toAmountUnsafe)
           }
       }
-
-    liquidityPoolAddressesRewards.groupMapReduce(_._1)(_._2)(_ + _)
+    liquidityPoolAddressesRewards
   }
 
   private def calculateValidatorsRewards(
     epochRewardsForAllocation: Map[AllocationId, BigDecimal],
     approvedValidators: Seq[Address]
-  ): Map[Address, BigDecimal] = {
+  ): Seq[RewardDistributionChunk] = {
     val validatorsTotalReward = epochRewardsForAllocation.collect {
       case (AllocationId(_, AllocationCategory.NodeOperator), value) => value
     }.sum
 
     approvedValidators match {
-      case Nil => Map.empty
+      case Nil => Seq.empty
       case nonEmptyValidatorsList =>
-        val rewardPerValidator = validatorsTotalReward / nonEmptyValidatorsList.size
-        nonEmptyValidatorsList.map(_ -> rewardPerValidator).toMap
+        val rewardPerValidator = (validatorsTotalReward / nonEmptyValidatorsList.size).toAmountUnsafe
+        val chunks = nonEmptyValidatorsList.map(a => RewardDistributionChunk(a, VoteBasedValidator, rewardPerValidator))
+        chunks
     }
   }
 
   private def calculateGovernanceRewards(
     votingPowers: Seq[VotingPowerForAddress],
     currentProgress: EpochProgress
-  ): EitherT[F, RewardError, Map[Address, Amount]] = {
+  ): EitherT[F, RewardError, RewardsDistribution] = {
     val basePerEpoch = BigDecimal(rewardConfig.governancePool.value.value / epochData.epochProgress1Year)
     val yearRemainder = if (isLastEpochInYear(currentProgress)) {
       rewardConfig.governancePool.value.value % epochData.epochProgress1Year
@@ -206,7 +204,7 @@ class RewardCalculatorImpl[F[_]: Async](
     val totalPower = votingPowers.map(v => BigDecimal(v.power.total.value)).sum
 
     if (votingPowers.isEmpty || totalPower === BigDecimal(0L)) {
-      EitherT.pure[F, RewardError](Map.empty[Address, Amount])
+      EitherT.pure[F, RewardError](RewardsDistribution.empty)
     } else {
       val totalForEpoch = basePerEpoch + yearRemainder
 
@@ -233,7 +231,9 @@ class RewardCalculatorImpl[F[_]: Async](
           } else {
             EitherT.pure[F, RewardError](baseDistribution)
           }
-      } yield finalDistribution
+
+        result = finalDistribution.toSeq.map { case (address, amount) => RewardDistributionChunk(address, Governance, amount) }
+      } yield RewardsDistribution(result)
     }
   }
 
@@ -244,7 +244,7 @@ class RewardCalculatorImpl[F[_]: Async](
     frozenGovernanceVotes: Map[AllocationId, Percentage],
     currentLiquidityPools: Map[String, LiquidityPool],
     approvedValidators: Seq[Address]
-  ): F[Either[RewardError, RewardDistribution]] =
+  ): F[Either[RewardError, RewardsDistribution]] =
     (for {
       currentMonth <- EitherT.fromEither[F](epochProgressToMonth(currentProgress))
 
@@ -261,34 +261,29 @@ class RewardCalculatorImpl[F[_]: Async](
       )
 
       addressToLpInfo = buildAddressToLP(currentLiquidityPools)
-      nodeValidatorDistribution <- EitherT.fromEither[F](
-        calculateNodeValidatorShare(nodeValidatorsPerEpoch, validators, currentProgress, addressToLpInfo)
-      )
-      nodeValidatorDistributed = nodeValidatorDistribution.map(_._2.toBigDecimal).sum
+      nodeValidatorDistribution <-
+        calculateNodeValidatorShare(nodeValidatorsPerEpoch, validators, currentProgress, addressToLpInfo).toEitherT
+      nodeValidatorDistributed = nodeValidatorDistribution.sum
 
-      voteBasedDistribution <- EitherT.fromEither[F](
-        calculateVoteBasedShare(voteBasedPerEpoch, approvedValidators, frozenGovernanceVotes, currentLiquidityPools)
-      )
-      voteBasedDistributed = voteBasedDistribution.map(_._2.toBigDecimal).sum
+      voteBasedDistribution <-
+        calculateVoteBasedShare(voteBasedPerEpoch, approvedValidators, frozenGovernanceVotes, currentLiquidityPools).toEitherT
+      voteBasedDistributed = voteBasedDistribution.sum
 
       allRemainders = totalEpochTokens - (nodeValidatorDistributed + daoPerEpoch + voteBasedDistributed)
 
-      daoReward = (daoPerEpoch + allRemainders).toAmountUnsafe
+      daoRewardAmount = (daoPerEpoch + allRemainders).toAmountUnsafe
       _ <- EitherT.fromEither[F](
         logger
-          .info(s"Incentive distribution for epoch $currentProgress is: $nodeValidatorDistributed, $voteBasedDistribution, $daoReward")
+          .info(
+            s"Incentive distribution for epoch $currentProgress is: $nodeValidatorDistributed, $voteBasedDistribution, $daoRewardAmount"
+          )
           .asRight
       )
+      daoReward = RewardsDistribution(Seq(RewardDistributionChunk(rewardConfig.daoAddress, RewardTypeExtended.Dao, daoRewardAmount)))
 
       governanceVotingPowers = frozenVotingPowers.map { case (address, vote) => VotingPowerForAddress(address, vote) }.toList
       governanceDistribution <- calculateGovernanceRewards(governanceVotingPowers, currentProgress)
-    } yield
-      RewardDistribution(
-        nodeValidatorRewards = nodeValidatorDistribution,
-        daoRewards = rewardConfig.daoAddress -> daoReward,
-        voteBasedRewards = voteBasedDistribution,
-        governanceRewards = governanceDistribution
-      )).value
+    } yield nodeValidatorDistribution ++ daoReward ++ voteBasedDistribution ++ governanceDistribution).value
 }
 
 case class LpInfo(shareMount: Amount, tokenA: Option[CurrencyId], tokenB: Option[CurrencyId])
