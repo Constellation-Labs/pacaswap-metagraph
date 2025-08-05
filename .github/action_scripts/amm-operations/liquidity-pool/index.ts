@@ -150,7 +150,7 @@ const processLiquidityPoolCreation = async (
         await validateIfSyncedToGlobalOrdinal(config.ammMl0Url, globalOrdinal, logger);
     });
 
-    const maxAttempts = tokenA.tokenId === tokenB.tokenId ? 1 : 60;
+    const maxAttempts = tokenA.tokenId === tokenB.tokenId ? 1 : 90;
 
     await retry('Validate if liquidity pool created', { maxAttempts, delayMs: 5000 })(async (logger) => {
         await validateLiquidityPoolCreated(config.ammMl0Url, tokenA.tokenId, tokenB.tokenId, logger);
