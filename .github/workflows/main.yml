@@ -7,7 +7,7 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      tessellation_commit_hash: "9ee5bc7b43e30fa2815136a0f89ea900afab1b98"
+      # tessellation_commit_hash: "9003e0eef8fcbc7b74d9983db5111963900f0c0a"
       use_merge_commit: true
     secrets: inherit
 
