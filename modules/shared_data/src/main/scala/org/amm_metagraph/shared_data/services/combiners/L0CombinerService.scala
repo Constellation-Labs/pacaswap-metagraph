@@ -337,6 +337,7 @@ object L0CombinerService {
           }
 
           _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: ${lastSyncGlobalEpochProgress}")
+          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT ORDINAL: ${lastSyncGlobalOrdinal}")
           currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
           currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
 
