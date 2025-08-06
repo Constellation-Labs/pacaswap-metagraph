@@ -86,7 +86,7 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
 
   test("Votes shall be frozen at the end of the month") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val nextMonthEpochNumber = config.epochInfo.epochProgress1Month + 1
     val nextMonthEpoch = EpochProgress(NonNegLong.unsafeFrom(nextMonthEpochNumber))

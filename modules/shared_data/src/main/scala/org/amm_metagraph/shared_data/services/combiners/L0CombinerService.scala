@@ -354,7 +354,7 @@ object L0CombinerService {
             .focus(_.onChain.updatedStateDataUpdate)
             .replace(SortedSet.empty)
             .focus(_.onChain.rewardsUpdate)
-            .replace(None)
+            .replace(Seq.empty)
             .focus(_.sharedArtifacts)
             .replace(SortedSet.empty)
 

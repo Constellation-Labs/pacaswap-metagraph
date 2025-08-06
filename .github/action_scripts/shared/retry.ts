@@ -11,8 +11,8 @@ type RetryConfig = {
 }
 
 const defaultRetryConfig: Required<Omit<RetryConfig, 'retryUntil'>> = {
-    maxAttempts: 60,
-    delayMs: 1000
+    maxAttempts: 90,
+    delayMs: 1200
 }
 
 const retry = <T>(context: string, config: Partial<RetryConfig> = defaultRetryConfig) => async (fn: RetryFunction<T>): Promise<T> => {

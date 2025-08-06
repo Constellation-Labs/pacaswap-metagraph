@@ -22,9 +22,11 @@ import eu.timepit.refined.types.numeric.{NonNegInt, PosLong}
 import org.amm_metagraph.shared_data.FeeDistributor.FeePercentages
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.{LpRewardInfo, NodeValidatorConfig, TokenPairStrings}
-import org.amm_metagraph.shared_data.refined.Percentage
+import org.amm_metagraph.shared_data.refined.{BigDecimalOps, Percentage}
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Rewards.RewardTypeExtended.{VoteBasedLiquidityPool, VoteBasedValidator}
+import org.amm_metagraph.shared_data.types.Rewards.{DistributedRewards, RewardInfo, RewardType}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import weaver._
@@ -32,6 +34,23 @@ import weaver._
 object RewardsCalculatorSpec extends SimpleIOSuite {
   private def toAmount(value: Long): Amount = Amount(NonNegLong.unsafeFrom(value))
   private def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+
+  implicit class RewardsDistributionOps(rewards: RewardsDistribution) {
+    def getByType(rewardType: RewardType): Seq[RewardDistributionChunk] =
+      rewards.rewards.filter {
+        case RewardDistributionChunk(_, rewardTypeExt, _) =>
+          RewardType.fromExtended(rewardTypeExt) == rewardType
+      }
+
+    def getValidator: Seq[RewardDistributionChunk] = getByType(RewardType.NodeValidator)
+    def getVoteBased: Seq[RewardDistributionChunk] = getByType(RewardType.VoteBased)
+    def getDao: Seq[RewardDistributionChunk] = getByType(RewardType.Dao)
+    def getGovernance: Seq[RewardDistributionChunk] = getByType(RewardType.Governance)
+  }
+
+  implicit class RewardDistributionChunkSeqOps(rewards: Seq[RewardDistributionChunk]) {
+    def getSum: BigDecimal = rewards.map(_.amount.toBigDecimal).sum
+  }
 
   def whenSuccessF[F[_], E, A](
     fa: F[Either[E, A]]
@@ -130,7 +149,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     AllocationId("NodeValidator", AllocationCategory.NodeOperator) -> Percentage.unsafeFrom(0.2)
   )
 
-  def toCurrency(token: Option[String]) =
+  def toCurrency(token: Option[String]): Option[CurrencyId] =
     token.flatMap(tokenString => refineV[DAGAddressRefined](tokenString).map(address => CurrencyId(Address(address))).toOption)
 
   def createLp(id: String, addressShares: Map[Address, Long], tokenA: Option[String], tokenB: Option[String]): (String, LiquidityPool) = {
@@ -172,10 +191,16 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       epochProgress
     )
 
-  def createVotingPowers(currentProgress: EpochProgress): Map[Address, VotingPower] = Map(
-    voterA -> VotingPower(NonNegLong(4000L), SortedSet(createVotingWeightInfo(currentProgress))),
-    voterB -> VotingPower(NonNegLong(1000L), SortedSet(createVotingWeightInfo(currentProgress)))
+  val votingPowerMap: Map[Address, NonNegLong] = Map(
+    voterA -> NonNegLong(4000L),
+    voterB -> NonNegLong(1000L)
   )
+
+  def createVotingPowers(currentProgress: EpochProgress): Map[Address, VotingPower] =
+    votingPowerMap.map {
+      case (address, amount) =>
+        address -> VotingPower(amount, SortedSet(createVotingWeightInfo(currentProgress)))
+    }
 
   def createCalculator(config: ApplicationConfig.Rewards = rewardsConfig): IO[RewardCalculator[IO]] =
     RewardCalculator.make(config, epochData)
@@ -188,7 +213,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("total rewards per epoch should match configuration") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -203,11 +228,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       val expectedPerEpoch = rewardsConfig.totalAnnualTokens.value.value / epochData.epochProgress1Year
-
-      val totalRewards =
-        rewards.nodeValidatorRewards.values.map(_.value.value).sum +
-          rewards.daoRewards._2.value.value +
-          rewards.voteBasedRewards.values.map(_.value.value).sum
+      val totalRewards = rewards.sum.toLong - rewards.getGovernance.getSum
 
       expect(totalRewards === expectedPerEpoch)
     }
@@ -216,7 +237,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("Total distribution proportions shall be according config file") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -230,14 +251,11 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalRewards =
-        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum +
-          rewards.daoRewards._2.toBigDecimal +
-          rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
+      val totalRewards = rewards.sum - rewards.getGovernance.getSum
 
-      val validators = rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum
-      val dao = rewards.daoRewards._2.toBigDecimal
-      val voting = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
+      val validators = rewards.getValidator.getSum
+      val dao = rewards.getDao.getSum
+      val voting = rewards.getVoteBased.getSum
 
       expect(approximatelyEqual((validators / totalRewards).doubleValue, validatorProportion.value.doubleValue / 100, 0.1)) &&
       expect(approximatelyEqual((dao / totalRewards).doubleValue, daoProportion.value.doubleValue / 100, 0.1)) &&
@@ -245,10 +263,10 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
   }
 
-  test("validator rewards should be distributed equally") {
+  test("Validator rewards should be distributed equally") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -263,8 +281,8 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).toSet.size == 1 &&
-          rewards.nodeValidatorRewards.values.size > 1
+        rewards.getValidator.map(_.amount.toBigDecimal).toSet.size == 1 &&
+          rewards.getValidator.size > 1
       )
     }
   }
@@ -272,7 +290,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("Node validator rewards should be distributed taking into account liquidity pools") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -287,7 +305,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant1, lpParticipant2)
       )
     }
   }
@@ -305,7 +323,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -320,7 +338,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant1, lpParticipant2)
       )
     }
   }
@@ -338,7 +356,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -353,7 +371,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant1, lpParticipant2)
       )
     }
   }
@@ -371,7 +389,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -386,7 +404,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.isEmpty
+        rewards.getValidator.map(_.receiver).toSet.isEmpty
       )
     }
   }
@@ -404,7 +422,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -419,7 +437,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.isEmpty
+        rewards.getValidator.map(_.receiver).toSet.isEmpty
       )
     }
   }
@@ -437,7 +455,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -452,7 +470,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant1, lpParticipant2)
       )
     }
   }
@@ -470,7 +488,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       )
     )
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -485,7 +503,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant2)
       )
     }
   }
@@ -516,7 +534,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     )
 
     val config = rewardsConfig.copy(nodeValidatorConfig = nodeValidatorConfig)
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator(config).flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -531,7 +549,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
 
     whenSuccessF(result.value) { rewards =>
       expect(
-        rewards.nodeValidatorRewards.keys.toSet == Set(lpParticipant1, lpParticipant2)
+        rewards.getValidator.map(_.receiver).toSet == Set(lpParticipant1, lpParticipant2)
       )
     }
   }
@@ -539,7 +557,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   test("Voting rewards as expected") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -553,27 +571,75 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalVotingRewards = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
-      expect(totalVotingRewards == BigDecimal(75000000000000L))
-      val percentageMap =
-        rewards.voteBasedRewards.map { case (address, reward) => address -> reward.toBigDecimal / totalVotingRewards }
-      println(percentageMap)
-      val expectedPercentage = Map(
-        address("DAG7coCMRPJah33MMcfAEZVeB1vYn3vDRe6WqeGU") -> 0.01666666666666666666666666666666667,
-        address("DAG0y4eLqhhXUafeE3mgBstezPTnr8L3tZjAtMWB") -> 0.45,
-        address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb") -> 0.35,
-        address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ") -> 0.0666666666666666666666666666666667,
-        address("DAG6kfTqFxLLPLopHqR43CeQrcvJ5k3eXgYSeELt") -> 0.1166666666666666666666666666666667
-      )
+      val totalVotingRewards = rewards.getVoteBased.getSum
 
-      expect(percentageMap.forall { case (address, value) => approximatelyEqual(value.toDouble, expectedPercentage(address), 0.001) })
+      val result = rewards.getVoteBased.map {
+        case RewardDistributionChunk(address, rewardType, amount) => (address, rewardType) -> amount
+      }.toMap
+
+      val expectedResult = Seq[RewardDistributionChunk](
+        RewardDistributionChunk(lpParticipant4, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.11666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorA, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.01666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorB, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorB, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.0333333).toAmountUnsafe),
+        RewardDistributionChunk(validatorB, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.35).toAmountUnsafe),
+        RewardDistributionChunk(validatorC, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorD, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorD, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.05).toAmountUnsafe),
+        RewardDistributionChunk(validatorD, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.23333333).toAmountUnsafe)
+      ).map { case RewardDistributionChunk(address, rewardType, amount) => (address, rewardType) -> amount }.toMap
+
+      expect(
+        totalVotingRewards == BigDecimal(75000000000000L) &&
+          result.forall {
+            case (addressAndType, value) =>
+              approximatelyEqual(value.value.value.toDouble, expectedResult(addressAndType).value.value.toDouble, 0.1)
+          }
+      )
+    }
+  }
+
+  test("Governance rewards as expected") {
+    val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
+
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
+      createCalculator().flatMap(
+        _.calculateEpochRewards(
+          currentProgress,
+          validators,
+          frozenVotingPowers(currentProgress),
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          approvedValidators
+        )
+      )
+    }
+
+    whenSuccessF(result.value) { rewards =>
+      val totalVotingRewards = rewards.getGovernance.getSum
+      expect(totalVotingRewards == rewardsConfig.governancePool.value.value / epochData.epochProgress1Year)
+
+      val result = rewards.getGovernance.map {
+        case RewardDistributionChunk(address, _, amount) => address -> totalVotingRewards / amount.toBigDecimal
+      }.toMap
+
+      val votingPowerMapSum = BigDecimal(votingPowerMap.map(_._2.value).sum)
+      val expectedResult = votingPowerMap.map { case (address, amount) => address -> votingPowerMapSum / amount.value }
+
+      expect(
+        totalVotingRewards == rewardsConfig.governancePool.value.value / epochData.epochProgress1Year &&
+          result.forall {
+            case (address, value) =>
+              approximatelyEqual(value.toDouble, expectedResult(address).toDouble, 0.01)
+          }
+      )
     }
   }
 
   test("when no voters, their share should go to DAO") {
     val currentProgress = EpochProgress(NonNegLong.unsafeFrom(epochData.epochProgress1Month))
 
-    val result: EitherT[IO, RewardError, RewardDistribution] = EitherT {
+    val result: EitherT[IO, RewardError, RewardsDistribution] = EitherT {
       createCalculator().flatMap(
         _.calculateEpochRewards(
           currentProgress,
@@ -587,14 +653,11 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalRewards =
-        rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum +
-          rewards.daoRewards._2.toBigDecimal +
-          rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
+      val totalRewards = rewards.sum - rewards.getGovernance.getSum
 
-      val validators = rewards.nodeValidatorRewards.values.map(_.toBigDecimal).sum
-      val dao = rewards.daoRewards._2.toBigDecimal
-      val voting = rewards.voteBasedRewards.values.map(_.toBigDecimal).sum
+      val validators = rewards.getValidator.getSum
+      val dao = rewards.getDao.getSum
+      val voting = rewards.getVoteBased.getSum
 
       expect(approximatelyEqual((validators / totalRewards).doubleValue, validatorProportion.value.doubleValue / 100, 0.1)) &&
       expect(
@@ -608,13 +671,13 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
   }
 
-  test("whole year rewards should sum up to annual tokens") {
+  test("Whole year rewards should sum up to annual tokens") {
     val initialEpoch = EpochProgress.MinValue
 
     val result = (0L until epochData.epochProgress1Year).toList.traverse { offset =>
       val epochNumber = initialEpoch.value.value + offset
       val progress = EpochProgress(NonNegLong.unsafeFrom(epochNumber))
-      EitherT[IO, RewardError, RewardDistribution] {
+      EitherT[IO, RewardError, RewardsDistribution] {
         createCalculator(rewardsConfig.copy(initialEpoch = initialEpoch)).flatMap(
           _.calculateEpochRewards(
             progress,
@@ -629,9 +692,9 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
     }
 
     whenSuccessF(result.value) { rewards =>
-      val totalValidatorRewards = rewards.flatMap(_.nodeValidatorRewards.values).map(_.value.value).sum
-      val totalDaoRewards = rewards.map(_.daoRewards._2.value.value).sum
-      val totalVotingRewards = rewards.flatMap(_.voteBasedRewards.values).map(_.value.value).sum
+      val totalValidatorRewards = rewards.map(_.getValidator.getSum).sum
+      val totalDaoRewards = rewards.map(_.getDao.getSum).sum
+      val totalVotingRewards = rewards.map(_.getVoteBased.getSum).sum
 
       val totalDistributed = totalValidatorRewards + totalDaoRewards + totalVotingRewards
       val annualAmount = rewardsConfig.totalAnnualTokens.value.value
