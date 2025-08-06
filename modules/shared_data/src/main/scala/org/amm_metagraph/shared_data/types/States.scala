@@ -20,6 +20,7 @@ import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
 import eu.timepit.refined.types.numeric.PosLong
 import io.circe.{KeyDecoder, KeyEncoder}
+import org.amm_metagraph.shared_data.rewards.RewardDistributionChunk
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.Governance._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, TokenInformation}
@@ -34,7 +35,8 @@ object States {
   @derive(encoder, decoder)
   case class AmmOnChainState(
     updatedStateDataUpdate: SortedSet[UpdatedStateDataUpdate],
-    rewardsUpdate: Option[RewardInfo]
+    rewardsUpdate: Seq[RewardDistributionChunk],
+    governanceVotingResult: Option[GovernanceVotingResult]
   ) extends DataOnChainState
 
   @derive(encoder, decoder, order, ordering)

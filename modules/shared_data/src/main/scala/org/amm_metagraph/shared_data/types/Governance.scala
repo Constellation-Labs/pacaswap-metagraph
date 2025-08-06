@@ -170,25 +170,35 @@ object Governance {
       case _ => None
     }
 
+  /** Result of governance voting, it will be used for distributing vote-based rewards and governance rewards
+    * @param monthlyReference
+    *   fow which month resalt is actual
+    * @param votingPowerForAddresses
+    *   voting power info for addresses which voted in previous month, if address didn't vote then it will NOT be present in votes. Used for
+    *   governance reward calculation
+    * @param votes
+    *   actual voting / allocation. Vote-based rewards distributed based on that information
+    */
   @derive(encoder, decoder, order, ordering, show)
-  case class FrozenAddressesVotes(
+  case class GovernanceVotingResult(
     monthlyReference: MonthlyReference,
-    votes: SortedMap[Address, VotingPower],
-    allocationVotes: SortedMap[AllocationId, Percentage]
+    votingPowerForAddresses: SortedMap[Address, VotingPower],
+    votes: SortedMap[AllocationId, Percentage]
   )
-  object FrozenAddressesVotes {
-    val empty: FrozenAddressesVotes = FrozenAddressesVotes(MonthlyReference.empty, SortedMap.empty, SortedMap.empty)
+
+  object GovernanceVotingResult {
+    val empty: GovernanceVotingResult = GovernanceVotingResult(MonthlyReference.empty, SortedMap.empty, SortedMap.empty)
   }
 
   @derive(encoder, decoder, order, ordering, show)
   case class Allocations(
     monthlyReference: MonthlyReference,
     usersAllocations: SortedMap[Address, UserAllocations],
-    frozenUsedUserVotes: FrozenAddressesVotes
+    frozenUsedUserVotes: GovernanceVotingResult
   )
 
   object Allocations {
-    def empty: Allocations = Allocations(MonthlyReference.empty, SortedMap.empty, FrozenAddressesVotes.empty)
+    def empty: Allocations = Allocations(MonthlyReference.empty, SortedMap.empty, GovernanceVotingResult.empty)
   }
 
   /** User allocations / votes for some address
