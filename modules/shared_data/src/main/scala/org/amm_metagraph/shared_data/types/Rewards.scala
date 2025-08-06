@@ -3,24 +3,96 @@ package org.amm_metagraph.shared_data.types
 import cats.Show
 import cats.implicits._
 
+import scala.collection.immutable.SortedMap
 import scala.util.Try
 
+import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.{Amount, BalanceArithmeticError}
+import io.constellationnetwork.schema.balance.{Amount, AmountOverflow, BalanceArithmeticError}
 import io.constellationnetwork.schema.{tupleKeyDecoder, tupleKeyEncoder}
 
-import derevo.cats.{eqv, show}
+import derevo.cats.{eqv, order, show}
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.{Enum, EnumEntry}
 import io.circe._
-import org.amm_metagraph.shared_data.rewards.RewardDistribution
+import org.amm_metagraph.shared_data.rewards.{RewardDistributionChunk, RewardsDistribution}
+import org.amm_metagraph.shared_data.types.Governance.MonthlyReference
 
 object Rewards {
 
-  @derive(eqv, show)
-  sealed trait RewardType extends EnumEntry
+  @derive(eqv, show, order, ordering)
+  sealed trait RewardTypeExtended extends EnumEntry
 
+  object RewardTypeExtended extends Enum[RewardTypeExtended] with RewardTypeExtendedCodecs {
+    val values: IndexedSeq[RewardTypeExtended] = findValues
+
+    case object NodeValidator extends RewardTypeExtended
+    case object Dao extends RewardTypeExtended
+    case object Governance extends RewardTypeExtended
+    case object VoteBasedValidator extends RewardTypeExtended
+    case class VoteBasedLiquidityPool(id: String) extends RewardTypeExtended {
+      override def entryName: String = VoteBasedLiquidityPool.entryName
+    }
+
+    object VoteBasedLiquidityPool {
+      val entryName: String = "VoteBasedLiquidityPool"
+    }
+
+  }
+
+  trait RewardTypeExtendedCodecs {
+    import RewardTypeExtended._
+
+    implicit val encodeRewardTypeExtended: Encoder[RewardTypeExtended] = Encoder.instance {
+      case VoteBasedLiquidityPool(id) =>
+        Json.obj(
+          "type" -> Json.fromString(VoteBasedLiquidityPool.entryName),
+          "id" -> Json.fromString(id)
+        )
+      case simple =>
+        Json.fromString(simple.entryName)
+    }
+
+    implicit val decodeRewardTypeExtended: Decoder[RewardTypeExtended] = Decoder.instance { cursor =>
+      cursor
+        .as[String]
+        .flatMap { str =>
+          values.find(_.entryName == str) match {
+            case Some(value) => Right(value)
+            case None        => Left(DecodingFailure(s"Unknown RewardTypeExtended: $str", cursor.history))
+          }
+        }
+        .orElse {
+          for {
+            typ <- cursor.downField("type").as[String]
+            id <- cursor.downField("id").as[String]
+            result <- typ match {
+              case VoteBasedLiquidityPool.entryName => Right(VoteBasedLiquidityPool(id))
+              case other                            => Left(DecodingFailure(s"Unknown complex type: $other", cursor.history))
+            }
+          } yield result
+        }
+    }
+
+    implicit val keyEncodeRewardTypeExtended: KeyEncoder[RewardTypeExtended] =
+      KeyEncoder.encodeKeyString.contramap {
+        case VoteBasedLiquidityPool(id) => s"${VoteBasedLiquidityPool.entryName}:$id"
+        case other                      => other.entryName
+      }
+
+    implicit val keyDecodeRewardTypeExtended: KeyDecoder[RewardTypeExtended] =
+      KeyDecoder.instance {
+        case s"${VoteBasedLiquidityPool.entryName}:$id" => Some(VoteBasedLiquidityPool(id))
+        case otherName =>
+          values.collectFirst {
+            case obj if obj.entryName == otherName => obj
+          }
+      }
+  }
+
+  @derive(eqv, show, order, ordering)
+  sealed trait RewardType extends EnumEntry
   object RewardType extends Enum[RewardType] with RewardTypeCodecs {
     val values: IndexedSeq[RewardType] = findValues
 
@@ -28,6 +100,15 @@ object Rewards {
     case object VoteBased extends RewardType
     case object Dao extends RewardType
     case object Governance extends RewardType
+
+    def fromExtended(rewardTypeExtended: RewardTypeExtended): RewardType =
+      rewardTypeExtended match {
+        case RewardTypeExtended.NodeValidator             => NodeValidator
+        case RewardTypeExtended.Dao                       => Dao
+        case RewardTypeExtended.Governance                => Governance
+        case RewardTypeExtended.VoteBasedValidator        => VoteBased
+        case RewardTypeExtended.VoteBasedLiquidityPool(_) => VoteBased
+      }
   }
 
   trait RewardTypeCodecs {
@@ -40,6 +121,7 @@ object Rewards {
 
   @derive(encoder, decoder, show)
   case class AddressAndRewardType(address: Address, rewardType: RewardType)
+
   object AddressAndRewardType {
     implicit val keyEncode: KeyEncoder[AddressAndRewardType] =
       tupleKeyEncoder[Address, RewardType].contramap[AddressAndRewardType](v => (v.address, v.rewardType))
@@ -51,7 +133,7 @@ object Rewards {
     Show.show(_.toList.show)
 
   @derive(encoder, decoder, show)
-  case class RewardsBuffer(data: IndexedSeq[(AddressAndRewardType, Amount)])
+  case class RewardsBuffer(data: IndexedSeq[RewardDistributionChunk])
 
   object RewardsBuffer {
     val empty: RewardsBuffer = RewardsBuffer(IndexedSeq.empty)
@@ -107,25 +189,54 @@ object Rewards {
   object RewardInfo {
     val empty: RewardInfo = RewardInfo(Map.empty)
 
+    def fromChunks(that: Iterable[RewardDistributionChunk]): Either[BalanceArithmeticError, RewardInfo] = {
+      val asAddressAndReward =
+        that.map {
+          case RewardDistributionChunk(address, rewardTypeExtended, amount) =>
+            val rewardType = RewardType.fromExtended(rewardTypeExtended)
+            AddressAndRewardType(address, rewardType) -> amount
+        }
+      make(asAddressAndReward)
+    }
+
     def make(that: Iterable[(AddressAndRewardType, Amount)]): Either[BalanceArithmeticError, RewardInfo] = RewardInfo.empty.addRewards(that)
+  }
 
-    def fromRewardDistribution(rewardDistribution: RewardDistribution): RewardInfo = {
-      val validator = rewardDistribution.nodeValidatorRewards.map {
-        case (address, amount) => (address, RewardType.NodeValidator, amount)
-      }
-      val voting = rewardDistribution.voteBasedRewards.map { case (address, amount) => (address, RewardType.VoteBased, amount) }
-      val governance = rewardDistribution.governanceRewards.map { case (address, amount) => (address, RewardType.Governance, amount) }
-      val dao = {
-        val (address, amount) = rewardDistribution.daoRewards
-        List((address, RewardType.Dao, amount))
-      }
-
-      val allNewRewards = validator ++ voting ++ governance ++ dao
-      val rewardsMap = allNewRewards.map {
-        case (address, rewardType, amount) =>
-          AddressAndRewardType(address, rewardType) -> amount
-      }.toMap
-      RewardInfo(rewardsMap)
+  @derive(encoder, decoder, show)
+  case class DistributedRewards(rewards: SortedMap[RewardType, Amount]) {
+    def addRewards(rewardsInfo: RewardsDistribution): Either[BalanceArithmeticError, DistributedRewards] = {
+      val newRewards: Seq[(RewardType, Amount)] =
+        rewardsInfo.rewards.map {
+          case RewardDistributionChunk(_, rewardTypeExtended, amount) =>
+            RewardType.fromExtended(rewardTypeExtended) -> amount
+        }
+      combineAmounts(rewards.toSeq ++ newRewards).map(merged => DistributedRewards(SortedMap.from(merged)))
     }
   }
+  object DistributedRewards {
+    val empty: DistributedRewards = DistributedRewards(SortedMap.empty[RewardType, Amount])
+    def from(chunks: Iterable[RewardDistributionChunk]): Either[BalanceArithmeticError, DistributedRewards] =
+      DistributedRewards.empty.addRewards(RewardsDistribution(chunks.toSeq))
+  }
+
+  private def combineAmounts[K: Ordering](data: Seq[(K, Amount)]): Either[BalanceArithmeticError, Map[K, Amount]] =
+    data
+      .groupBy(_._1) // Map[K, Seq[(K, Amount)]]
+      .toList
+      .foldLeft(Right(Map.empty): Either[BalanceArithmeticError, Map[K, Amount]]) {
+        case (accEither, (key, entries)) =>
+          for {
+            acc <- accEither
+            sum <- entries
+              .map(_._2)
+              .reduceLeftOption { (a, b) =>
+                a.plus(b) match {
+                  case Right(res) => res
+                  case Left(err)  => return Left(err)
+                }
+              }
+              .map(Right(_))
+              .getOrElse(Left(AmountOverflow))
+          } yield acc + (key -> sum)
+      }
 }

@@ -48,7 +48,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Fail to withdraw from empty / non-existing balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(NonNegLong(1L))
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -86,7 +86,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Fail to withdraw from empty / non-existing balance because of reward type") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val actualRewardType = Dao
     val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
@@ -122,7 +122,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Successfully withdraw from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -170,7 +170,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Successfully withdraw twice from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val requestedRewardType = Governance
     val firstRequest = Amount(NonNegLong(20L))
     val secondRequest = Amount(NonNegLong(80L))

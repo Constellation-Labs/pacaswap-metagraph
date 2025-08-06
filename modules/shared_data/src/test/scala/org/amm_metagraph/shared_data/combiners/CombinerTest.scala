@@ -57,7 +57,7 @@ object CombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -147,7 +147,7 @@ object CombinerTest extends MutableIOSuite {
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -213,7 +213,7 @@ object CombinerTest extends MutableIOSuite {
     val tokenBAmount = PosLong.unsafeFrom(50L.toTokenAmountFormat)
 
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -296,7 +296,7 @@ object CombinerTest extends MutableIOSuite {
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
 
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService
@@ -363,7 +363,7 @@ object CombinerTest extends MutableIOSuite {
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
     val destinationAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAP")
 
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, None)
+    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -453,7 +453,7 @@ object CombinerTest extends MutableIOSuite {
       swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
       withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
       rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
-      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
       combinerService = L0CombinerService

@@ -69,14 +69,14 @@ object L0CombinerService {
         lastSyncGlobalEpochProgress: EpochProgress,
         currentSnapshotEpochProgress: EpochProgress,
         globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[swap.AllowSpend]]]],
-        stateCombinedByVotingWeight: DataState[AmmOnChainState, AmmCalculatedState],
+        stateCombinedByVotingPower: DataState[AmmOnChainState, AmmCalculatedState],
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]) =
         if (incomingUpdates.isEmpty) {
-          logger.info("Snapshot without any updates, updating the state to empty updates").as(stateCombinedByVotingWeight)
+          logger.info("Snapshot without any updates, updating the state to empty updates").as(stateCombinedByVotingPower)
         } else {
           logger.info(s"Incoming updates: ${incomingUpdates.size}") >>
-            incomingUpdates.foldLeftM(stateCombinedByVotingWeight) { (acc, signedUpdate) =>
+            incomingUpdates.foldLeftM(stateCombinedByVotingPower) { (acc, signedUpdate) =>
               for {
                 combinedState <- signedUpdate.value match {
                   case liquidityPoolUpdate: LiquidityPoolUpdate =>
@@ -354,26 +354,26 @@ object L0CombinerService {
             .focus(_.onChain.updatedStateDataUpdate)
             .replace(SortedSet.empty)
             .focus(_.onChain.rewardsUpdate)
-            .replace(None)
+            .replace(Seq.empty)
             .focus(_.sharedArtifacts)
             .replace(SortedSet.empty)
 
           pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
           pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)
 
-          updatedVotingWeights = governanceCombinerService.updateVotingWeights(
+          updatedVotingPowers = governanceCombinerService.updateVotingPowers(
             newState.calculated,
             lastCurrencySnapshotInfo,
             lastSyncGlobalEpochProgress
           )
 
-          updatedVotingWeightState = newState.calculated
-            .focus(_.votingWeights)
-            .replace(updatedVotingWeights)
+          updatedVotingPowerState = newState.calculated
+            .focus(_.votingPowers)
+            .replace(updatedVotingPowers)
 
-          stateCombinedByVotingWeight = newState
+          stateCombinedByVotingPower = newState
             .focus(_.calculated)
-            .replace(updatedVotingWeightState)
+            .replace(updatedVotingPowerState)
 
           currencyId <- context.getCurrencyId
 
@@ -383,7 +383,7 @@ object L0CombinerService {
               lastSyncGlobalEpochProgress,
               currentSnapshotEpochProgress,
               globalSnapshotSyncAllowSpends,
-              stateCombinedByVotingWeight,
+              stateCombinedByVotingPower,
               currencyId
             )
 

@@ -91,7 +91,7 @@ const getAvaialbleRewardsForAddress = async (address: string, rewardType: string
     log(`Getting available reward balance for account: ${address} `, "INFO", context);
 
     try {
-        const url = `${ammMl0Url}/v1/rewards/${address}`;
+        const url = `${ammMl0Url}/v1/addresses/${address}/rewards/balance`;
 
         const { data } = await axios.get(url);
         console.log(`${JSON.stringify(data)}`)

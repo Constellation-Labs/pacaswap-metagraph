@@ -46,10 +46,10 @@ case class RewardWithdrawRoutes[F[_]: Async](
     Ok(config.rewards.nodeValidatorConfig.LiquidityPoolsConfig)
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "rewards" / AddressVar(address) / "withdrawals" / "last-reference" =>
+    case GET -> Root / "addresses" / AddressVar(address) / "rewards" / "withdrawals" / "last-reference" =>
       getLastRewardWithdrawalReference(address)
 
-    case GET -> Root / "rewards" / AddressVar(address) =>
+    case GET -> Root / "addresses" / AddressVar(address) / "rewards" / "balance" =>
       getRewardForAddress(address)
 
     case GET -> Root / "rewards" / "config" / "node-validator" / "liquidity-pools" => getLiquidityPoolConfig

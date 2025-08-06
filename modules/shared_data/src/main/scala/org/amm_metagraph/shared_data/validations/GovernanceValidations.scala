@@ -13,7 +13,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.credits.getUpdatedCredits
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardAllocationVoteUpdate}
-import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingWeight, maxCredits}
+import org.amm_metagraph.shared_data.types.Governance.{UserAllocations, VotingPower, maxCredits}
 import org.amm_metagraph.shared_data.types.LiquidityPool.getLiquidityPoolCalculatedState
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
@@ -49,7 +49,7 @@ object GovernanceValidations {
       lastSyncGlobalSnapshotEpochProgress: EpochProgress
     )(implicit sp: SecurityProvider[F]): F[Either[FailedCalculatedState, Signed[RewardAllocationVoteUpdate]]] = {
       val lastAllocations = state.allocations
-      val lastVotingWeights = state.votingWeights
+      val lastVotingPowers = state.votingPowers
       val liquidityPools = getLiquidityPoolCalculatedState(state)
 
       for {
@@ -62,8 +62,8 @@ object GovernanceValidations {
           lastUserAllocation,
           lastSyncGlobalSnapshotEpochProgress
         )
-        walletHasVotingWeight = walletHasVotingWeightValidation(
-          lastVotingWeights,
+        walletHasVotingPower = walletHasVotingPowerValidation(
+          lastVotingPowers,
           sourceAddress
         )
         isValidId = allocationIdValidation(
@@ -88,9 +88,9 @@ object GovernanceValidations {
               rewardAllocationVoteUpdate,
               updateHash
             )
-          } else if (walletHasVotingWeight.isInvalid) {
+          } else if (walletHasVotingPower.isInvalid) {
             failWith(
-              GovernanceWalletWithNoVotingWeight(rewardAllocationVoteUpdate.value),
+              GovernanceWalletWithNoVotingPower(rewardAllocationVoteUpdate.value),
               expireEpochProgress,
               rewardAllocationVoteUpdate,
               updateHash
@@ -149,11 +149,11 @@ object GovernanceValidations {
         ).fold(_ => DailyAllocationExceed.invalid, _ => valid)
       }
 
-    private def walletHasVotingWeightValidation(
-      lastVotingWeights: Map[Address, VotingWeight],
+    private def walletHasVotingPowerValidation(
+      lastVotingPowers: Map[Address, VotingPower],
       address: Address
     ): DataApplicationValidationErrorOr[Unit] =
-      MissingVotingWeight.unlessA(lastVotingWeights.get(address).exists(_.total.value > 0.0d))
+      MissingVotingPower.unlessA(lastVotingPowers.get(address).exists(_.total.value > 0.0d))
 
     private def allocationIdValidation(
       applicationConfig: ApplicationConfig,

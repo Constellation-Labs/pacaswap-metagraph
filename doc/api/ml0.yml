@@ -14,6 +14,8 @@ tags:
     description: Handles voting operations and weight calculations
   - name: Governance
     description: Manages reward allocations and governance
+  - name: Governance Round
+    description: Information about governance voting
   - name: Staking
     description: Manages staking operations
   - name: Withdrawals
@@ -320,7 +322,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: './components.yml#/components/schemas/VotingWeight'
+                    $ref: './components.yml#/components/schemas/VotingPower'
         404:
           description: Address not found
   /addresses/{address}/withdrawals/last-reference:
@@ -373,12 +375,12 @@ paths:
         404:
           description: Withdrawal not found
 
-  /governance/allocations/rewards:
+  /governance-rounds/last/voting-result:
     get:
       tags:
-        - Governance
-      summary: Get allocation rewards
-      description: Retrieve current governance allocation rewards
+        - Governance Rounds
+      summary: Get allocation result for previous month
+      description: Retrieve current governance allocation
       responses:
         200:
           description: Successful response
@@ -388,7 +390,58 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: './components.yml#/components/schemas/GovAllocationRewards'
+                    $ref: './components.yml#/components/schemas/FrozenAddressesVotes'
+
+  /governance-rounds/last/distributed-rewards:
+    get:
+      tags:
+        - Governance Rounds
+      summary: Total distributed reward for previous month
+      description: Retrieve previous month reward distribution per type
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/DistributionReward'
+
+  /governance-rounds/current/distributed-rewards:
+    get:
+      tags:
+        - Governance Rounds
+      summary: Total distributed reward for current month
+      description: Retrieve current reward distribution per type
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/DistributionReward'
+
+  /governance-rounds/current/allocations:
+    get:
+      tags:
+        - Governance Rounds
+      summary: Current allocation (vote) process status
+      description: Retrieve current allocation data
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                    $ref: './components.yml#/components/schemas/CurrentAllocationsForAddress'
+
   /addresses/{address}/stakings/last-reference:
     get:
       tags:

@@ -67,7 +67,7 @@ object MetagraphL0Service {
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
-        DataState(AmmOnChainState(SortedSet.empty, None), AmmCalculatedState())
+        DataState(AmmOnChainState(SortedSet.empty, Seq.empty, None), AmmCalculatedState())
 
       override def validateData(
         state: DataState[AmmOnChainState, AmmCalculatedState],
