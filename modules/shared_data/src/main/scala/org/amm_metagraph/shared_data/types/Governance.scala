@@ -1,18 +1,18 @@
 package org.amm_metagraph.shared_data.types
 
+import cats.Order
 import cats.Order._
 import cats.effect.kernel.Async
 import cats.syntax.all._
-import cats.{Order, Show}
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.ext.crypto._
 import io.constellationnetwork.ext.derevo.ordering
+import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.tokenLock.TokenLock
-import io.constellationnetwork.schema.{tupleKeyDecoder, tupleKeyEncoder}
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
@@ -33,12 +33,6 @@ import org.amm_metagraph.shared_data.types.States.{epochProgressKeyDecode, epoch
 
 object Governance {
   val maxCredits = 50.0
-
-  implicit def showSortedMapAsList[K: Show, V: Show]: Show[SortedMap[K, V]] =
-    Show.show(_.toList.show)
-
-  implicit def showSortedSetAsList[T: Show]: Show[SortedSet[T]] =
-    Show.show(_.toList.show)
 
   @derive(decoder, encoder, order, ordering, show)
   @newtype
@@ -155,20 +149,6 @@ object Governance {
         case (firstEpoch, lastEpoch, monthReference) => MonthlyReference(firstEpoch, lastEpoch, monthReference)
       }
   }
-
-  implicit def tuple3KeyEncoder[A, B, C](implicit A: KeyEncoder[A], B: KeyEncoder[B], C: KeyEncoder[C]): KeyEncoder[(A, B, C)] =
-    KeyEncoder.instance[(A, B, C)] { case (a, b, c) => A(a) + ":" + B(b) + ":" + C(c) }
-
-  implicit def tuple3KeyDecoder[A, B, C](implicit A: KeyDecoder[A], B: KeyDecoder[B], C: KeyDecoder[C]): KeyDecoder[(A, B, C)] =
-    KeyDecoder.instance[(A, B, C)] {
-      case s"$as:$bs:$cs" =>
-        for {
-          a <- A(as)
-          b <- B(bs)
-          c <- C(cs)
-        } yield (a, b, c)
-      case _ => None
-    }
 
   /** Result of governance voting, it will be used for distributing vote-based rewards and governance rewards
     * @param monthlyReference

@@ -18,10 +18,7 @@ import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 
-case class RewardWithdrawRoutes[F[_]: Async](
-  calculatedStateService: CalculatedStateService[F],
-  config: ApplicationConfig
-) extends Http4sDsl[F] {
+case class RewardWithdrawRoutes[F[_]: Async](calculatedStateService: CalculatedStateService[F]) extends Http4sDsl[F] {
   private def getLastRewardWithdrawalReference(address: Address): F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
       val maybeRef = for {
@@ -42,17 +39,12 @@ case class RewardWithdrawRoutes[F[_]: Async](
       Ok(SingleResponse(rewardInfos))
     }
 
-  private def getLiquidityPoolConfig: F[Response[F]] =
-    Ok(config.rewards.nodeValidatorConfig.LiquidityPoolsConfig)
-
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "addresses" / AddressVar(address) / "rewards" / "withdrawals" / "last-reference" =>
       getLastRewardWithdrawalReference(address)
 
     case GET -> Root / "addresses" / AddressVar(address) / "rewards" / "balance" =>
       getRewardForAddress(address)
-
-    case GET -> Root / "rewards" / "config" / "node-validator" / "liquidity-pools" => getLiquidityPoolConfig
   }
 
 }

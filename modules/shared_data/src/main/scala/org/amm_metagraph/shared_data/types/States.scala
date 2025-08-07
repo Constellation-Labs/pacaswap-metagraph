@@ -18,7 +18,6 @@ import derevo.cats.order
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
 import enumeratum.values.{StringCirceEnum, StringEnum, StringEnumEntry}
-import eu.timepit.refined.types.numeric.PosLong
 import io.circe.{KeyDecoder, KeyEncoder}
 import org.amm_metagraph.shared_data.rewards.RewardDistributionChunk
 import org.amm_metagraph.shared_data.types.DataUpdates._
