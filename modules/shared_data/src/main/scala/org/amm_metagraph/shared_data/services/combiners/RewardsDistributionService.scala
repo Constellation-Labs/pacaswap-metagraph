@@ -8,8 +8,9 @@ import scala.collection.immutable.SortedMap
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.CurrencyIncrementalSnapshot
+import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.{Amount, BalanceArithmeticError}
+import io.constellationnetwork.schema.balance.BalanceArithmeticError
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.SecurityProvider
 import io.constellationnetwork.security.signature.Signed
