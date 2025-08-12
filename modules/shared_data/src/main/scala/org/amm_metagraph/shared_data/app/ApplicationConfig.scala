@@ -2,6 +2,7 @@ package org.amm_metagraph.shared_data.app
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
+import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -13,7 +14,7 @@ import eu.timepit.refined.cats._
 import eu.timepit.refined.types.numeric._
 import org.amm_metagraph.shared_data.app.ApplicationConfig.TokenLockLimitsConfig
 
-@derive(show)
+@derive(show, encoder)
 case class ApplicationConfig(
   expirationEpochProgresses: ApplicationConfig.ExpirationEpochProgresses,
   nodeValidatorsGovernanceAllocationId: String,
@@ -28,31 +29,31 @@ case class ApplicationConfig(
 
 object ApplicationConfig {
 
-  @derive(show)
+  @derive(show, encoder)
   sealed trait Environment
   case object Dev extends Environment
   case object Testnet extends Environment
   case object Integrationnet extends Environment
   case object Mainnet extends Environment
 
-  @derive(show)
+  @derive(show, encoder)
   case class ExpirationEpochProgresses(
     confirmedOperations: EpochProgress,
     failedOperations: EpochProgress
   )
 
-  @derive(show)
+  @derive(show, encoder)
   case class LockMultiplier(durationInMonths: NonNegLong, multiplier: PosDouble)
 
-  @derive(show)
+  @derive(show, encoder)
   case class VotingPowerMultipliers(locksConfig: Seq[LockMultiplier])
 
-  @derive(show)
+  @derive(show, encoder)
   case class Governance(
     votingPowerMultipliers: VotingPowerMultipliers
   )
 
-  @derive(show)
+  @derive(show, encoder)
   case class Rewards(
     totalAnnualTokens: Amount,
     governancePool: Amount,
@@ -81,13 +82,13 @@ object ApplicationConfig {
   @derive(show, decoder, encoder)
   case class TokenPairStrings(tokenA: String, tokenB: String)
 
-  @derive(show)
+  @derive(show, encoder)
   case class TokenLimits(
     minTokens: NonNegLong,
     maxTokens: NonNegLong
   )
 
-  @derive(show)
+  @derive(show, encoder)
   case class EpochMetadata(oneEpochProgress: FiniteDuration, daysInMonth: Long) {
     val oneEpochProgressInSeconds: Long = oneEpochProgress.toSeconds
     val epochProgressOneDay: Long = (1.day / oneEpochProgress).toLong
@@ -97,7 +98,7 @@ object ApplicationConfig {
     val epochProgress2Years: Long = epochProgress1Year * 2
   }
 
-  @derive(show)
+  @derive(show, encoder)
   case class TokenLockLimitsConfig(
     maxTokenLocksPerAddress: PosInt,
     minTokenLockAmount: PosLong
