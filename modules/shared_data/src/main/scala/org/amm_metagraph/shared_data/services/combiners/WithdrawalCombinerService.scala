@@ -90,7 +90,7 @@ object WithdrawalCombinerService {
                   current + UpdatedStateDataUpdate(
                     currentState,
                     Failed,
-                    OperationType.Swap,
+                    OperationType.Withdrawal,
                     withdrawalUpdate,
                     updateHash,
                     none
