@@ -99,7 +99,7 @@ object RewardsDistributionService {
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val currentEpochNumber = currentEpoch.value.value
         val newEpoch = currentEpochNumber > state.calculated.rewards.lastProcessedEpoch.value.value
-        val rewardDistributionEpoch = currentEpochNumber % interval.value == 0
+        val rewardDistributionEpoch = (currentEpochNumber + 1) % interval.value == 0
 
         (newEpoch, rewardDistributionEpoch) match {
           case (false, _) =>
