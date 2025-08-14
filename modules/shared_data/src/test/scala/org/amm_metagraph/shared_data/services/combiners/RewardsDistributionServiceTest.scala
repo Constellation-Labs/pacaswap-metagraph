@@ -96,7 +96,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval).next
+    val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
     for {
@@ -162,7 +162,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
+    val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch, Shared.config.epochInfo.epochProgress1Month)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -231,7 +231,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
+    val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch, Shared.config.epochInfo.epochProgress1Month)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -329,8 +329,8 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
-    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
+    val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
+    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
 
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -401,8 +401,8 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
-    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
+    val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
+    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch1, Shared.config.epochInfo.epochProgress1Month)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -456,15 +456,6 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
         RewardDistributionChunk(a4, RewardTypeExtended.VoteBasedValidator, distributedReward(voteBasedReward)),
         RewardDistributionChunk(ownerAddress, RewardTypeExtended.Governance, distributedReward(governanceReward))
       )
-      //      expectedOnChainMap: Map[AddressAndRewardType, Amount] = Map(
-      //        AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward),
-      //        AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward),
-      //        AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward),
-      //        AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward),
-      //        AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward),
-      //        AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward),
-      //        AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward)
-      //      )
       expectedMap = expectedOnChainSet.map {
         case RewardDistributionChunk(address, rewardType, amount) =>
           RewardDistributionChunk(address, rewardType, Amount(NonNegLong.unsafeFrom(amount.value.value * 2)))
@@ -492,10 +483,10 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val ammCalculatedState = AmmCalculatedState()
     val epochConfig = EpochMetadata(1.day, 1)
 
-    val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
+    val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val monthRef1 = MonthlyReference.getMonthlyReference(currentEpoch1, epochConfig.epochProgress1Month)
 
-    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
+    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
     val monthRef2 = MonthlyReference.getMonthlyReference(currentEpoch2, epochConfig.epochProgress1Month)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
@@ -554,7 +545,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       }
 
       distributedRewards = SortedMap(
-        MonthlyReference(EpochProgress(NonNegLong(100)), EpochProgress(NonNegLong(100)), NonNegLong(100)) ->
+        MonthlyReference(EpochProgress(NonNegLong(99)), EpochProgress(NonNegLong(99)), NonNegLong(99)) ->
           DistributedRewards(
             SortedMap[RewardType, Amount](
               Dao -> Amount(NonNegLong(200)),
@@ -563,7 +554,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
               VoteBased -> Amount(NonNegLong(600))
             )
           ),
-        MonthlyReference(EpochProgress(NonNegLong(200)), EpochProgress(NonNegLong(200)), NonNegLong(200)) ->
+        MonthlyReference(EpochProgress(NonNegLong(199)), EpochProgress(NonNegLong(199)), NonNegLong(199)) ->
           DistributedRewards(
             SortedMap[RewardType, Amount](
               Dao -> Amount(NonNegLong(200)),
@@ -593,8 +584,8 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
     val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
     val ammCalculatedState = AmmCalculatedState()
-    val currentEpoch1 = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
-    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2))
+    val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
+    val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch1, Shared.config.epochInfo.epochProgress1Month)
     val state = DataState(ammOnChainState, ammCalculatedState)
 
