@@ -93,7 +93,8 @@ object WithdrawalCombinerService {
                     OperationType.Withdrawal,
                     withdrawalUpdate,
                     updateHash,
-                    none
+                    none,
+                    failedCalculatedState.reason.some
                   )
                 }
                 .focus(_.calculated)

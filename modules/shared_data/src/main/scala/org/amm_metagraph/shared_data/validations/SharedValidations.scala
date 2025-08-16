@@ -30,7 +30,7 @@ object SharedValidations {
   }
 
   def failWith[A <: AmmUpdate](
-    reason: FailedCalculatedStateReason,
+    reason: FailureReason,
     expireEpochProgress: EpochProgress,
     signedUpdate: Signed[A],
     updateHash: Hash
