@@ -116,7 +116,8 @@ object StakingCombinerService {
                     OperationType.Staking,
                     stakingUpdate,
                     updateHash,
-                    none
+                    none,
+                    failedCalculatedState.reason.some
                   )
                 }
                 .focus(_.calculated)
