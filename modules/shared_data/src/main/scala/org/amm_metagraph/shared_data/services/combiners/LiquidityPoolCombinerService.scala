@@ -102,7 +102,8 @@ object LiquidityPoolCombinerService {
                     OperationType.LiquidityPool,
                     liquidityPoolUpdate,
                     updateHash,
-                    none
+                    none,
+                    failedCalculatedState.reason.some
                   )
                 }
                 .focus(_.calculated)
