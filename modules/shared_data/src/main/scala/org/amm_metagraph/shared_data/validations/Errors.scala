@@ -164,48 +164,48 @@ object Errors {
   }
 
   @derive(encoder, decoder)
-  sealed trait FailedCalculatedStateReason
+  sealed trait FailureReason
 
-  case class OperationExpired(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class AllowSpendExpired(allowSpend: AllowSpend) extends FailedCalculatedStateReason
-  case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailedCalculatedStateReason
-  case class SwapLessThanMinAmount() extends FailedCalculatedStateReason
-  case class SwapHigherThanMaxAmount() extends FailedCalculatedStateReason
-  case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailedCalculatedStateReason
-  case class CannotWithdrawAllShares() extends FailedCalculatedStateReason
+  case class OperationExpired(update: AmmUpdate) extends FailureReason
+  case class AllowSpendExpired(allowSpend: AllowSpend) extends FailureReason
+  case class AmountGreaterThanAllowSpendLimit(allowSpend: AllowSpend) extends FailureReason
+  case class SwapLessThanMinAmount() extends FailureReason
+  case class SwapHigherThanMaxAmount() extends FailureReason
+  case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailureReason
+  case class CannotWithdrawAllShares() extends FailureReason
   case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
-      extends FailedCalculatedStateReason
-  case class ArithmeticError(message: String) extends FailedCalculatedStateReason
-  case class SwapWouldDrainPoolBalance() extends FailedCalculatedStateReason
-  case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailedCalculatedStateReason
-  case class WithdrawalWouldDrainPoolBalance() extends FailedCalculatedStateReason
-  case class WithdrawalLessThanMinAmount() extends FailedCalculatedStateReason
-  case class WithdrawalHigherThanMaxAmount() extends FailedCalculatedStateReason
-  case class InvalidLiquidityPool() extends FailedCalculatedStateReason
-  case class InvalidSwapTokenInfo(message: String) extends FailedCalculatedStateReason
-  case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class DuplicatedStakingRequest(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class DuplicatedSwapRequest(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class DuplicatedAllowSpend(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class SourceAddressBetweenUpdateAndAllowSpendDifferent(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class AllowSpendsDestinationAddressInvalid() extends FailedCalculatedStateReason
-  case class MissingSwapTokenInfo() extends FailedCalculatedStateReason
-  case class MissingStakingTokenInfo() extends FailedCalculatedStateReason
-  case class MissingWithdrawalsAmount() extends FailedCalculatedStateReason
-  case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
-  case object WrongRewardWithdrawEpoch extends FailedCalculatedStateReason
-  case class RewardWithdrawAmountError(currentAmount: Amount, error: String) extends FailedCalculatedStateReason
+      extends FailureReason
+  case class ArithmeticError(message: String) extends FailureReason
+  case class SwapWouldDrainPoolBalance() extends FailureReason
+  case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailureReason
+  case class WithdrawalWouldDrainPoolBalance() extends FailureReason
+  case class WithdrawalLessThanMinAmount() extends FailureReason
+  case class WithdrawalHigherThanMaxAmount() extends FailureReason
+  case class InvalidLiquidityPool() extends FailureReason
+  case class InvalidSwapTokenInfo(message: String) extends FailureReason
+  case class DuplicatedLiquidityPoolRequest(update: AmmUpdate) extends FailureReason
+  case class DuplicatedStakingRequest(update: AmmUpdate) extends FailureReason
+  case class DuplicatedSwapRequest(update: AmmUpdate) extends FailureReason
+  case class DuplicatedAllowSpend(update: AmmUpdate) extends FailureReason
+  case class SourceAddressBetweenUpdateAndAllowSpendDifferent(update: AmmUpdate) extends FailureReason
+  case class AllowSpendsDestinationAddressInvalid() extends FailureReason
+  case class MissingSwapTokenInfo() extends FailureReason
+  case class MissingStakingTokenInfo() extends FailureReason
+  case class MissingWithdrawalsAmount() extends FailureReason
+  case class InvalidCurrencyIdsBetweenAllowSpendsAndDataUpdate(update: AmmUpdate) extends FailureReason
+  case object WrongRewardWithdrawEpoch extends FailureReason
+  case class RewardWithdrawAmountError(currentAmount: Amount, error: String) extends FailureReason
 
-  case class InvalidSignatures(messages: String) extends FailedCalculatedStateReason
-  case class TransactionAlreadyExists(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class InvalidLastReference() extends FailedCalculatedStateReason
-  case class NotEnoughShares() extends FailedCalculatedStateReason
-  case class NotEnoughTokens() extends FailedCalculatedStateReason
-  case class WithdrawalAllLPSharesError() extends FailedCalculatedStateReason
-  case class WithdrawalNotPendingError() extends FailedCalculatedStateReason
-  case class GovernanceDailyLimitAllocation(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class GovernanceWalletWithNoVotingPower(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class GovernanceInvalidVoteId(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class InvalidWithdrawalAmount(update: AmmUpdate) extends FailedCalculatedStateReason
-  case class DuplicatedUpdate(update: AmmUpdate) extends FailedCalculatedStateReason
+  case class InvalidSignatures(messages: String) extends FailureReason
+  case class TransactionAlreadyExists(update: AmmUpdate) extends FailureReason
+  case class InvalidLastReference() extends FailureReason
+  case class NotEnoughShares() extends FailureReason
+  case class NotEnoughTokens() extends FailureReason
+  case class WithdrawalAllLPSharesError() extends FailureReason
+  case class WithdrawalNotPendingError() extends FailureReason
+  case class GovernanceDailyLimitAllocation(update: AmmUpdate) extends FailureReason
+  case class GovernanceWalletWithNoVotingPower(update: AmmUpdate) extends FailureReason
+  case class GovernanceInvalidVoteId(update: AmmUpdate) extends FailureReason
+  case class InvalidWithdrawalAmount(update: AmmUpdate) extends FailureReason
+  case class DuplicatedUpdate(update: AmmUpdate) extends FailureReason
 }

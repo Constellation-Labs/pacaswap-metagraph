@@ -154,7 +154,8 @@ object SwapCombinerService {
                     OperationType.Swap,
                     swapUpdate,
                     updateHash,
-                    none
+                    none,
+                    failedCalculatedState.reason.some
                   )
                 }
                 .focus(_.calculated)
