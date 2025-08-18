@@ -352,10 +352,8 @@ object L0CombinerService {
           In other words, we will preserve between the update batches, but we should clean at every call of the combine.
            */
           newState = oldState
-            .focus(_.onChain.updatedStateDataUpdate)
-            .replace(SortedSet.empty)
-            .focus(_.onChain.rewardsUpdate)
-            .replace(Seq.empty)
+            .focus(_.onChain)
+            .replace(AmmOnChainState.empty)
             .focus(_.sharedArtifacts)
             .replace(SortedSet.empty)
 

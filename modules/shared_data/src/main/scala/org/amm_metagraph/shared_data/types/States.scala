@@ -8,6 +8,7 @@ import io.constellationnetwork.currency.dataApplication.{DataCalculatedState, Da
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.schema.{SnapshotOrdinal, nonNegLongKeyDecoder, nonNegLongKeyEncoder}
@@ -35,8 +36,13 @@ object States {
   case class AmmOnChainState(
     updatedStateDataUpdate: SortedSet[UpdatedStateDataUpdate],
     rewardsUpdate: Seq[RewardDistributionChunk],
-    governanceVotingResult: Option[GovernanceVotingResult]
+    governanceVotingResult: Option[GovernanceVotingResult],
+    processedRewardWithdrawal: Seq[ProcessedRewardWithdrawUpdate]
   ) extends DataOnChainState
+
+  object AmmOnChainState {
+    val empty: AmmOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None, Seq.empty)
+  }
 
   @derive(encoder, decoder, order, ordering)
   case class UpdatedStateDataUpdate(
@@ -357,3 +363,6 @@ object States {
   implicit val epochProgressKeyEncode: KeyEncoder[EpochProgress] = nonNegLongKeyEncoder.contramap(_.value)
   implicit val epochProgressKeyDecode: KeyDecoder[EpochProgress] = nonNegLongKeyDecoder.map(EpochProgress(_))
 }
+
+@derive(encoder, decoder)
+case class ProcessedRewardWithdrawUpdate(source: Address, amount: Amount, hash: Hash)
