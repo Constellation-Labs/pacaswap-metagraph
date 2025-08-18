@@ -94,7 +94,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(Shared.config.rewards.rewardCalculationInterval)
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -160,7 +160,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch, Shared.config.epochInfo.epochProgress1Month)
@@ -229,7 +229,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentMonthRef = MonthlyReference.getMonthlyReference(currentEpoch, Shared.config.epochInfo.epochProgress1Month)
@@ -327,7 +327,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
@@ -399,7 +399,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))
@@ -479,7 +479,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val epochConfig = EpochMetadata(1.day, 1)
 
@@ -582,7 +582,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
     val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch1 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value - 1))
     val currentEpoch2 = EpochProgress(NonNegLong.unsafeFrom(Shared.config.rewards.rewardCalculationInterval.value * 2 - 1))

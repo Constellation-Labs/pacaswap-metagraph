@@ -1,6 +1,7 @@
 package org.amm_metagraph.shared_data.services.combiners
 
-import cats.effect.{IO, Resource}
+import cats.effect.kernel.Async
+import cats.effect.{IO, Resource, Sync}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
@@ -13,6 +14,8 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.hash.Hash
+import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import eu.timepit.refined.auto._
@@ -22,6 +25,7 @@ import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
+import org.amm_metagraph.shared_data.types.ProcessedRewardWithdrawUpdate
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardType._
 import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
@@ -46,9 +50,22 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
   val a4: Address = Address("DAG07tqNLYW8jHU9emXcRTT3CfgCUoumwcLghopd")
   val a5: Address = Address("DAG0y4eLqhhXUafeE3mgBstezPTnr8L3tZjAtMWB")
 
+  def updateOnChain[F[_]: Async: HasherSelector](
+    dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate],
+    onChainState: AmmOnChainState,
+    update: Signed[RewardWithdrawUpdate]
+  ): F[AmmOnChainState] =
+    for {
+      updateHash <- HasherSelector[F].withCurrent(implicit hs => update.toHashed(dataUpdateCodec.serialize))
+      processedUpdate = ProcessedRewardWithdrawUpdate(update.source, update.amount, updateHash.hash)
+    } yield
+      onChainState
+        .focus(_.processedRewardWithdrawal)
+        .modify(_ :+ processedUpdate)
+
   test("Fail to withdraw from empty / non-existing balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val ammCalculatedState = AmmCalculatedState()
     val currentEpoch = EpochProgress(NonNegLong(1L))
     val state = DataState(ammOnChainState, ammCalculatedState)
@@ -86,7 +103,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Fail to withdraw from empty / non-existing balance because of reward type") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val actualRewardType = Dao
     val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
@@ -122,7 +139,7 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
 
   test("Successfully withdraw from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val requestedRewardType = Governance
     val requestAmount = Amount(NonNegLong(100L))
     val ownerAddress = Address("DAG6t89ps7G8bfS2WuTcNUAy9Pg8xWqiEHjrrLAZ")
@@ -158,6 +175,8 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
       expectedReference <- RewardWithdrawReference.of[IO](rewardWithdrawUpdate)
       expectedWithdrawEpoch = currentEpoch.plus(config.rewards.rewardWithdrawDelay).toOption.get
       expectedRewardInfo = RewardInfo.empty.addReward(ownerAddress, requestedRewardType, requestAmount).toOption.get
+
+      onChainUpdated <- updateOnChain[IO](jsonBase64BinaryCodec, state.onChain, rewardWithdrawUpdate)
       expectedState = state
         .focus(_.calculated.rewards.availableRewards)
         .replace(RewardInfo.empty)
@@ -165,12 +184,14 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         .replace(SortedMap(ownerAddress -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
         .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
+        .focus(_.onChain)
+        .replace(onChainUpdated)
     } yield expect.all(newState == expectedState)
   }
 
   test("Successfully withdraw twice from exist balance") { implicit res =>
     implicit val (h, hs, sp) = res
-    val ammOnChainState = AmmOnChainState(SortedSet.empty, Seq.empty, None)
+    val ammOnChainState = AmmOnChainState.empty
     val requestedRewardType = Governance
     val firstRequest = Amount(NonNegLong(20L))
     val secondRequest = Amount(NonNegLong(80L))
@@ -213,6 +234,11 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
       newState2 <- rewardWithdrawService.combineNew(rewardWithdrawUpdate2, newState1, currentEpoch, EpochProgress.MaxValue)
 
       expectedReference <- RewardWithdrawReference.of[IO](rewardWithdrawUpdate2)
+
+      onChainUpdated <- updateOnChain[IO](jsonBase64BinaryCodec, state.onChain, rewardWithdrawUpdate1).flatMap(s =>
+        updateOnChain[IO](jsonBase64BinaryCodec, s, rewardWithdrawUpdate2)
+      )
+
       expectedWithdrawEpoch = currentEpoch.plus(config.rewards.rewardWithdrawDelay).toOption.get
       expectedRewardInfo = RewardInfo.empty.addReward(ownerAddress, requestedRewardType, fullAmount).toOption.get
       expectedState = state
@@ -222,6 +248,8 @@ object RewardsWithdrawServiceTest extends MutableIOSuite {
         .replace(SortedMap(ownerAddress -> expectedReference))
         .focus(_.calculated.rewards.withdraws.pending)
         .replace(SortedMap(expectedWithdrawEpoch -> expectedRewardInfo))
+        .focus(_.onChain)
+        .replace(onChainUpdated)
     } yield expect.all(newState2 == expectedState)
   }
 }
