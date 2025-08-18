@@ -5,7 +5,7 @@ import cats.data.NonEmptyList
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.dataApplication.dataApplication.{DataApplicationBlock, DataApplicationValidationErrorOr}
@@ -67,7 +67,7 @@ object MetagraphL0Service {
   ): BaseDataApplicationL0Service[F] =
     BaseDataApplicationL0Service(new DataApplicationL0Service[F, AmmUpdate, AmmOnChainState, AmmCalculatedState] {
       override def genesis: DataState[AmmOnChainState, AmmCalculatedState] =
-        DataState(AmmOnChainState(SortedSet.empty, Seq.empty, None), AmmCalculatedState())
+        DataState(AmmOnChainState.empty, AmmCalculatedState())
 
       override def validateData(
         state: DataState[AmmOnChainState, AmmCalculatedState],

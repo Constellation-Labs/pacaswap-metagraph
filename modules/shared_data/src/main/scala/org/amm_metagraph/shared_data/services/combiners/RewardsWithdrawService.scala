@@ -14,6 +14,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
+import org.amm_metagraph.shared_data.types.ProcessedRewardWithdrawUpdate
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
 import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States._
@@ -83,7 +84,14 @@ object RewardsWithdrawService {
             newConfirmed = confirmed + newConfirmedWithdrawEntry
             newWithdraws = calculatedState.copy(confirmed = newConfirmed, pending = newPending)
             newRewardsState = rewardsState.copy(withdraws = newWithdraws, availableRewards = newAvailableRewards)
-          } yield oldState.focus(_.calculated.rewards).replace(newRewardsState)
+
+            processedUpdate = ProcessedRewardWithdrawUpdate(withdrawRequest.source, withdrawRequest.amount, updateHashed.hash)
+          } yield
+            oldState
+              .focus(_.calculated.rewards)
+              .replace(newRewardsState)
+              .focus(_.onChain.processedRewardWithdrawal)
+              .modify(_ :+ processedUpdate) // that data will be cleared on next combine call at L0CombinerService
 
         combinedState.valueOrF { failedCalculatedState: FailedCalculatedState =>
           handleFailedUpdate(oldState, failedCalculatedState)
