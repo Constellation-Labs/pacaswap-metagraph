@@ -132,15 +132,18 @@ class RewardCalculatorImpl[F[_]: Async](
     perEpoch: BigDecimal,
     approvedValidators: Seq[Address],
     frozenGovernanceVotes: Map[AllocationId, Percentage],
-    currentLiquidityPools: Map[String, LiquidityPool]
+    currentLiquidityPools: Map[String, LiquidityPool],
+    currentEpoch: EpochProgress,
+    addressToLpInfo: Map[Address, Seq[LpInfo]]
   ): Either[RewardError, RewardsDistribution] = {
     val epochRewardsForAllocation = frozenGovernanceVotes.map {
       case (allocation, percentage) => allocation -> (percentage * perEpoch)
     }
 
-    val voteBasedLpRewards = calculateLiquidityPoolsRewards(epochRewardsForAllocation, currentLiquidityPools)
+    val voteBasedLpRewards = calculateVoteBasedLiquidityPoolsRewards(epochRewardsForAllocation, currentLiquidityPools)
 
-    val voteBasedValidatorRewards = calculateValidatorsRewards(epochRewardsForAllocation, approvedValidators)
+    val voteBasedValidatorRewards =
+      calculateVoteBasedValidatorsRewards(epochRewardsForAllocation, approvedValidators, currentEpoch, addressToLpInfo)
 
     val unifiedRewards = (voteBasedLpRewards ++ voteBasedValidatorRewards).filter(_.amount.value.value > 0)
     RewardsDistribution(unifiedRewards).asRight
@@ -157,7 +160,7 @@ class RewardCalculatorImpl[F[_]: Async](
     addressToLpInfo.groupMapReduce(_._1)(e => Seq(e._2))(_ ++ _)
   }
 
-  private def calculateLiquidityPoolsRewards(
+  private def calculateVoteBasedLiquidityPoolsRewards(
     epochRewardsForAllocation: Map[AllocationId, BigDecimal],
     currentLiquidityPools: Map[String, LiquidityPool]
   ): Seq[RewardDistributionChunk] = {
@@ -176,15 +179,22 @@ class RewardCalculatorImpl[F[_]: Async](
     liquidityPoolAddressesRewards
   }
 
-  private def calculateValidatorsRewards(
+  private def calculateVoteBasedValidatorsRewards(
     epochRewardsForAllocation: Map[AllocationId, BigDecimal],
-    approvedValidators: Seq[Address]
+    approvedValidators: Seq[Address],
+    currentEpoch: EpochProgress,
+    addressToLpInfo: Map[Address, Seq[LpInfo]]
   ): Seq[RewardDistributionChunk] = {
+    def isLPConfigured(address: Address): Boolean =
+      voteBasedLpConfig.contains(currentEpoch, addressToLpInfo.getOrElse(address, Seq.empty))
+
+    val eligibleValidators = approvedValidators.filter(isLPConfigured)
+
     val validatorsTotalReward = epochRewardsForAllocation.collect {
       case (AllocationId(_, AllocationCategory.NodeOperator), value) => value
     }.sum
 
-    approvedValidators match {
+    eligibleValidators match {
       case Nil => Seq.empty
       case nonEmptyValidatorsList =>
         val rewardPerValidator = (validatorsTotalReward / nonEmptyValidatorsList.size).toAmountUnsafe
@@ -266,7 +276,14 @@ class RewardCalculatorImpl[F[_]: Async](
       nodeValidatorDistributed = nodeValidatorDistribution.sum
 
       voteBasedDistribution <-
-        calculateVoteBasedShare(voteBasedPerEpoch, approvedValidators, frozenGovernanceVotes, currentLiquidityPools).toEitherT
+        calculateVoteBasedShare(
+          voteBasedPerEpoch,
+          approvedValidators,
+          frozenGovernanceVotes,
+          currentLiquidityPools,
+          currentProgress,
+          addressToLpInfo
+        ).toEitherT
       voteBasedDistributed = voteBasedDistribution.sum
 
       allRemainders = totalEpochTokens - (nodeValidatorDistributed + daoPerEpoch + voteBasedDistributed)

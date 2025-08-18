@@ -580,11 +580,10 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
       val expectedResult = Seq[RewardDistributionChunk](
         RewardDistributionChunk(lpParticipant4, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.11666666).toAmountUnsafe),
         RewardDistributionChunk(validatorA, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.01666666).toAmountUnsafe),
-        RewardDistributionChunk(validatorB, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorB, VoteBasedValidator, (totalVotingRewards * 0.099999999).toAmountUnsafe),
         RewardDistributionChunk(validatorB, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.0333333).toAmountUnsafe),
         RewardDistributionChunk(validatorB, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.35).toAmountUnsafe),
-        RewardDistributionChunk(validatorC, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
-        RewardDistributionChunk(validatorD, VoteBasedValidator, (totalVotingRewards * 0.06666666).toAmountUnsafe),
+        RewardDistributionChunk(validatorD, VoteBasedValidator, (totalVotingRewards * 0.099999999).toAmountUnsafe),
         RewardDistributionChunk(validatorD, VoteBasedLiquidityPool(lp1Id), (totalVotingRewards * 0.05).toAmountUnsafe),
         RewardDistributionChunk(validatorD, VoteBasedLiquidityPool(lp2Id), (totalVotingRewards * 0.23333333).toAmountUnsafe)
       ).map { case RewardDistributionChunk(address, rewardType, amount) => (address, rewardType) -> amount }.toMap
