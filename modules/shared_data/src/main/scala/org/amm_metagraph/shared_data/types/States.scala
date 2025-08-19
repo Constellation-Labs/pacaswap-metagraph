@@ -29,7 +29,7 @@ import org.amm_metagraph.shared_data.types.Rewards.{DistributedRewards, RewardIn
 import org.amm_metagraph.shared_data.types.Staking.StakingCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Swap.SwapCalculatedStateInfo
 import org.amm_metagraph.shared_data.types.Withdrawal.WithdrawalCalculatedStateInfo
-import org.amm_metagraph.shared_data.validations.Errors.FailedCalculatedStateReason
+import org.amm_metagraph.shared_data.validations.Errors.FailureReason
 
 object States {
   @derive(encoder, decoder)
@@ -51,7 +51,8 @@ object States {
     operationType: OperationType,
     update: Signed[AmmUpdate],
     updateHash: Hash,
-    pendingInfo: Option[PendingAction[AmmUpdate]]
+    pendingInfo: Option[PendingAction[AmmUpdate]],
+    failureReason: Option[FailureReason] = None
   )
 
   @derive(encoder, decoder)
@@ -73,7 +74,7 @@ object States {
 
   @derive(encoder, decoder, order, ordering)
   sealed trait FailedCalculatedStateBase {
-    def reason: FailedCalculatedStateReason
+    def reason: FailureReason
     def expiringEpochProgress: EpochProgress
     def updateHash: Hash
     def update: Signed[AmmUpdate]
@@ -81,7 +82,7 @@ object States {
 
   @derive(encoder, decoder)
   case class FailedCalculatedState(
-    reason: FailedCalculatedStateReason,
+    reason: FailureReason,
     expiringEpochProgress: EpochProgress,
     updateHash: Hash,
     update: Signed[AmmUpdate]
@@ -94,7 +95,7 @@ object States {
 
   @derive(encoder, decoder)
   case class SwapFailedCalculatedState(
-    reason: FailedCalculatedStateReason,
+    reason: FailureReason,
     expiringEpochProgress: EpochProgress,
     updateHash: Hash,
     update: Signed[AmmUpdate],
