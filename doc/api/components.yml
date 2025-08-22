@@ -449,7 +449,15 @@ components:
           type: object
           description: Address
         allocation:
-          $ref: '#/components/schemas/CurrentAllocation'
+          type: object
+          description: Current voting status
+          properties:
+            allocations:
+              type: object
+              description: List of current allocations
+            votingPower:
+              type: object
+              description: Voting power for current address
 
     CurrentAllocations:
       type: object
@@ -462,6 +470,42 @@ components:
           type: object
           description: Voting power for current address
 
+    CurrentMonthReference:
+      type: object
+      description: Current month reference
+      properties:
+        monthlyReference:
+          type: object
+          description: monthly reference
+          properties:
+            firstEpochOfMonth:
+              type: number
+              description: The first epoch progress of the month
+            lastEpochOfMonth:
+              type: number
+              description: The last epoch progress of the month
+            monthReference:
+              type: number
+              description: The numeric month reference
+        usersAllocations:
+          type: object
+          description: List of current allocations
+        frozenUsedUserVotes:
+          type: object
+          description: Frozen used user votes
+    AllocationStats:
+      type: object
+      description: Allocation stats
+      properties:
+        totalVpIssued:
+          type: number
+          description: Total vp issues
+        totalVpAllocated:
+          type: number
+          description: Total vp allocated
+        totalTokenLocked:
+          type: number
+          description: Total token locked
 
     SwapQuoteRequest:
       type: object
@@ -568,3 +612,20 @@ components:
         lastSyncGlobalSnapshotOrdinal:
           type: integer
           description: Last sync global snapshot ordinal
+
+    RewardsWithdrawalAvailableBalances:
+      type: array
+      description: Rewards withdrawal available balances
+      items:
+        type: object
+        properties:
+          rewardType:
+            type: string
+            description: Reward type
+          amount:
+            type: number
+            description: Amount
+
+    Config:
+      type: object
+      description: Metagraph config fields

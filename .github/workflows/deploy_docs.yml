@@ -1,0 +1,69 @@
+name: Deploy OpenAPI Docs
+
+on:
+  push:
+    branches:
+      - release/mainnet
+      - release/integrationnet
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ (github.ref_name == 'release/integrationnet' && 'INTEGRATIONNET') || (github.ref_name == 'release/mainnet' && 'MAINNET') }}
+
+    strategy:
+      matrix:
+        spec: [ cl1, dl1, ml0 ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Redocly CLI
+        run: npm i -g @redocly/cli@1.34.2
+
+      - name: Build ${{ matrix.spec }} docs
+        run: |
+          mkdir -p dist/${{ matrix.spec }}
+          redocly build-docs doc/api/${{ matrix.spec }}.yml -o dist/${{ matrix.spec }}/index.html
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+
+      - name: Make bucket objects public via bucket policy
+        run: |
+          cat > /tmp/bucket-policy.json <<'JSON'
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowPublicReadForDocs",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": "s3:GetObject",
+                "Resource": [
+                  "arn:aws:s3:::${BUCKET}/cl1/*",
+                  "arn:aws:s3:::${BUCKET}/dl1/*",
+                  "arn:aws:s3:::${BUCKET}/ml0/*"
+                ]
+              }
+            ]
+          }
+          JSON
+          sed -i "s/\${BUCKET}/${{ secrets.S3_BUCKET_NAME }}/g" /tmp/bucket-policy.json
+          aws s3api put-bucket-policy --bucket "${{ secrets.S3_BUCKET_NAME }}" --policy file:///tmp/bucket-policy.json
+
+      - name: Sync ${{ matrix.spec }} to S3
+        run: |
+          aws s3 sync dist/${{ matrix.spec }} \
+            s3://${{ secrets.S3_BUCKET_NAME }}/${{ matrix.spec }}/ \
+            --delete
