@@ -173,8 +173,7 @@ object Errors {
   case class SwapHigherThanMaxAmount() extends FailureReason
   case class WithdrawalAmountExceedsAvailableShares(requestedShares: ShareAmount) extends FailureReason
   case class CannotWithdrawAllShares() extends FailureReason
-  case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long)
-      extends FailureReason
+  case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long) extends FailureReason
   case class ArithmeticError(message: String) extends FailureReason
   case class SwapWouldDrainPoolBalance() extends FailureReason
   case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailureReason
