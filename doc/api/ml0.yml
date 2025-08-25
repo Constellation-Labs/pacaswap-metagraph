@@ -12,16 +12,18 @@ tags:
     description: Manages liquidity pool operations
   - name: Vote
     description: Handles voting operations and weight calculations
-  - name: Governance
-    description: Manages reward allocations and governance
-  - name: Governance Round
+  - name: Governance Rounds
     description: Information about governance voting
   - name: Staking
     description: Manages staking operations
   - name: Withdrawals
     description: Manages withdrawal operations and references
+  - name: Reward Withdrawals
+    description: Manages reward withdrawals
   - name: Health Check
     description: Get information about the healthiness of the node
+  - name: Config
+    description: Get information about the metagraph config
 paths:
   /swap/quote:
     post:
@@ -100,6 +102,29 @@ paths:
                     $ref: './components.yml#/components/schemas/SwapStateResponse'
         404:
           description: Swap not found
+  /addresses/{address}/swaps/last-reference:
+    get:
+      tags:
+        - Swap
+      summary: Get last swap reference
+      description: Retrieve the last swap reference for a specific address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LastReference'
   /liquidity-pools:
     get:
       tags:
@@ -442,6 +467,37 @@ paths:
                 items:
                     $ref: './components.yml#/components/schemas/CurrentAllocationsForAddress'
 
+  /governance-rounds/current/month-reference:
+    get:
+      tags:
+        - Governance Rounds
+      summary: Current month-reference process status
+      description: Retrieve current month-reference data
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './components.yml#/components/schemas/CurrentMonthReference'
+  /governance-rounds/stats:
+    get:
+      tags:
+        - Governance Rounds
+      summary: Governance stats
+      description: Governance stats
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: './components.yml#/components/schemas/AllocationStats'
+
   /addresses/{address}/stakings/last-reference:
     get:
       tags:
@@ -504,5 +560,66 @@ paths:
             application/json:
               schema:
                 $ref: './components.yml#/components/schemas/LastSyncGlobalSnapshot'
+        500:
+          description: Internal server error
+  /addresses/{address}/rewards/withdrawals/last-reference:
+    get:
+      tags:
+        - Reward Withdrawals
+      summary: Get last reward withdrawal reference
+      description: Retrieve the last reward withdrawal reference for a specific address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/LastReference'
+  /addresses/{address}/rewards/balance:
+    get:
+      tags:
+        - Reward Withdrawals
+      summary: Get wallet reward available balances
+      description: Get wallet reward available balances
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: Address to query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: './components.yml#/components/schemas/RewardsWithdrawalAvailableBalances'
+  /config:
+    get:
+      tags:
+        - Config
+      summary: Get the metagraph config
+      description: Get the metagraph config
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: './components.yml#/components/schemas/Config'
         500:
           description: Internal server error
