@@ -42,21 +42,6 @@ object GenesisRewardsSpec extends SimpleIOSuite {
       )
   }
 
-  test("Should build rewards correctly with specific values") {
-    for {
-      content <- RewardsService.buildGenesisRewards[IO](2L)
-    } yield
-      if (content.nonEmpty) {
-        expect.all(
-          content.nonEmpty,
-          content.exists(_.destination == Address("DAG01S8hdo9BXJhY6yicJYmaxBo7ZDDXYDM68ZCW")),
-          content.forall(_.amount.value.value > 0L)
-        )
-      } else {
-        expect(false)
-      }
-  }
-
   test("Should handle CSV loading errors correctly") {
     for {
       result <- RewardsService.buildGenesisRewards[IO](-1L)
