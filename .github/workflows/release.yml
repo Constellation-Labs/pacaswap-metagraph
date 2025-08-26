@@ -216,3 +216,29 @@ jobs:
 
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           DEPLOYED_VERSION: ${{ needs.build.outputs.release_tag }}
+
+  deploy-mainnet:
+    if: github.ref_name == 'release/mainnet'
+    name: Deploy mainnet source nodes
+    runs-on: ubuntu-latest
+    needs: [ docker,build ]
+    environment: MAINNET
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Mainnet
+        uses: "./.github/templates/actions/deploy"
+        with:
+          SSH_NODE_1_HOST: ${{ secrets.SSH_NODE_1_HOST }}
+          SSH_NODE_1_USER: ${{ secrets.SSH_NODE_1_USER }}
+          SSH_NODE_2_HOST: ${{ secrets.SSH_NODE_2_HOST }}
+          SSH_NODE_2_USER: ${{ secrets.SSH_NODE_2_USER }}
+          SSH_NODE_3_HOST: ${{ secrets.SSH_NODE_3_HOST }}
+          SSH_NODE_3_USER: ${{ secrets.SSH_NODE_3_USER }}
+
+          SSH_HOST_MONITORING: ${{ secrets.SSH_HOST_MONITORING }}
+          SSH_USER_MONITORING: ${{ secrets.SSH_USER_MONITORING }}
+          MONITORING_PROJECT_DIRECTORY: ${{ secrets.MONITORING_PROJECT_DIRECTORY }}
+
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOYED_VERSION: ${{ needs.build.outputs.release_tag }}
