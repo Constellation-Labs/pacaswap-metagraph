@@ -8,13 +8,14 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
+import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
-import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal, swap}
 import io.constellationnetwork.security.signature.Signed
 
+import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.globalSnapshots._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
@@ -36,7 +37,7 @@ trait L0CombinerService[F[_]] {
 }
 
 object L0CombinerService {
-  def make[F[_]: Async: HasherSelector](
+  def make[F[_]: Async](
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     governanceCombinerService: GovernanceCombinerService[F],
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
@@ -45,7 +46,33 @@ object L0CombinerService {
     withdrawalCombinerService: WithdrawalCombinerService[F],
     rewardsCombinerService: RewardsDistributionService[F],
     rewardsWithdrawService: RewardsWithdrawService[F]
-  ): L0CombinerService[F] =
+  ): F[L0CombinerService[F]] = for {
+    currentSnapshotOrdinalR <- SignallingRef
+      .of[F, SnapshotOrdinal](SnapshotOrdinal.MinValue)
+    result = make(
+      globalSnapshotsStorage,
+      governanceCombinerService,
+      liquidityPoolCombinerService,
+      stakingCombinerService,
+      swapCombinerService,
+      withdrawalCombinerService,
+      rewardsCombinerService,
+      rewardsWithdrawService,
+      currentSnapshotOrdinalR
+    )
+  } yield result
+
+  def make[F[_]: Async](
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    governanceCombinerService: GovernanceCombinerService[F],
+    liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
+    stakingCombinerService: StakingCombinerService[F],
+    swapCombinerService: SwapCombinerService[F],
+    withdrawalCombinerService: WithdrawalCombinerService[F],
+    rewardsCombinerService: RewardsDistributionService[F],
+    rewardsWithdrawService: RewardsWithdrawService[F],
+    currentSnapshotOrdinalR: SignallingRef[F, SnapshotOrdinal]
+  ): L0CombinerService[F] = {
     new L0CombinerService[F] {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
@@ -336,10 +363,14 @@ object L0CombinerService {
             logger.error(message) >> new Exception(message).raiseError[F, (EpochProgress, SnapshotOrdinal, GlobalSnapshotInfo)]
           }
 
-          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: ${lastSyncGlobalEpochProgress}")
-          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT ORDINAL: ${lastSyncGlobalOrdinal}")
-          currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+          currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
           currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
+          lastSnapshotOrdinalStored <- currentSnapshotOrdinalR.get
+
+          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: $lastSyncGlobalEpochProgress")
+          _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT ORDINAL: $lastSyncGlobalOrdinal")
+          _ <- logger.info(s"CURRENT SNAPSHOT ORDINAL: $currentSnapshotOrdinalFromContext")
+          _ <- logger.info(s"LAST SNAPSHOT ORDINAL STORED: $lastSnapshotOrdinalStored")
 
           globalSnapshotSyncAllowSpends = getAllowSpendsFromGlobalSnapshotState(lastSyncState)
           globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
@@ -348,14 +379,24 @@ object L0CombinerService {
             globalSnapshotsStorage
           )
 
-          /*We should clean up the previous onChain and sharedArtifacts in every combine call, to avoid duplications.
-          In other words, we will preserve between the update batches, but we should clean at every call of the combine.
+          /*
+            On each call to `combine`, if the snapshot ordinal has increased,
+            we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
+            If the ordinal remains the same, we preserve the state.
+            In other words:
+              - state is preserved across updates within the same ordinal,
+              - state is reset whenever the ordinal advances.
            */
-          newState = oldState
-            .focus(_.onChain)
-            .replace(AmmOnChainState.empty)
-            .focus(_.sharedArtifacts)
-            .replace(SortedSet.empty)
+          newState =
+            if (lastSnapshotOrdinalStored < currentSnapshotOrdinalFromContext) {
+              oldState
+                .focus(_.onChain)
+                .replace(AmmOnChainState.empty)
+                .focus(_.sharedArtifacts)
+                .replace(SortedSet.empty)
+            } else {
+              oldState
+            }
 
           pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
           pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)
@@ -399,7 +440,7 @@ object L0CombinerService {
             combinePendingSpendTransactionsUpdates(
               lastSyncGlobalEpochProgress,
               globalSnapshotsSyncSpendActions,
-              currentSnapshotOrdinal,
+              currentSnapshotOrdinalFromContext,
               pendingSpendActions,
               stateCombinedByPendingAllowSpendUpdates,
               currencyId
@@ -426,6 +467,8 @@ object L0CombinerService {
             stateUpdatedByLastGlobalSync,
             currentSnapshotEpochProgress
           )
+
+          _ <- currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext)
         } yield stateUpdatedRewardDistribution
 
         combined.handleErrorWith { e =>
@@ -433,4 +476,5 @@ object L0CombinerService {
         }
       }
     }
+  }
 }

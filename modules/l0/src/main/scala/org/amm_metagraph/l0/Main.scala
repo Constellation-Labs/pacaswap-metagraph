@@ -83,7 +83,7 @@ object Main
     rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards, config.epochInfo)
     rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations, jsonBase64BinaryCodec)
 
-    combinerService = L0CombinerService
+    combinerService <- L0CombinerService
       .make[IO](
         globalSnapshotsStorage,
         governanceCombinerService,
@@ -94,6 +94,7 @@ object Main
         rewardsCombinerService,
         rewardsWithdrawService
       )
+      .toResource
 
     l0Service = MetagraphL0Service
       .make[IO](
