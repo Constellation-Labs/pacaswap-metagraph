@@ -150,7 +150,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService = L0CombinerService
+      combinerService <- L0CombinerService
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,
@@ -299,7 +299,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService = L0CombinerService
+      combinerService <- L0CombinerService
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,
@@ -456,7 +456,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService = L0CombinerService
+      combinerService <- L0CombinerService
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,
