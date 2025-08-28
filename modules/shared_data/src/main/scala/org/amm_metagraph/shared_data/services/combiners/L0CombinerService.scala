@@ -88,8 +88,8 @@ object L0CombinerService {
       ): SortedSet[PendingSpendAction[AmmUpdate]] =
         getPendingSpendActionLiquidityPoolUpdates(state) ++
           getPendingSpendActionStakingUpdates(state) ++
-          getPendingSpendActionSwapUpdates(state) ++
-          getPendingSpendActionWithdrawalUpdates(state)
+          getPendingSpendActionSwapUpdates(state)
+//          getPendingSpendActionWithdrawalUpdates(state)
 
       private def combineIncomingUpdates(
         incomingUpdates: List[Signed[AmmUpdate]],
@@ -127,14 +127,14 @@ object L0CombinerService {
                       )
 
                   case withdrawalUpdate: WithdrawalUpdate =>
-                    logger.info(s"Received withdrawal update: $withdrawalUpdate") >>
-                      withdrawalCombinerService.combineNew(
-                        Signed(withdrawalUpdate, signedUpdate.proofs),
-                        acc,
-                        lastSyncGlobalEpochProgress,
-                        globalSnapshotSyncAllowSpends,
-                        currencyId
-                      )
+                    logger.info(s"Received withdrawal update: $withdrawalUpdate").as(acc)
+                  //                      withdrawalCombinerService.combineNew(
+//                        Signed(withdrawalUpdate, signedUpdate.proofs),
+//                        acc,
+//                        lastSyncGlobalEpochProgress,
+//                        globalSnapshotSyncAllowSpends,
+//                        currencyId
+//                      )
 
                   case swapUpdate: SwapUpdate =>
                     logger.info(s"Received swap update: $swapUpdate") >>
@@ -290,18 +290,7 @@ object L0CombinerService {
                   currencyId
                 )
               case withdrawalUpdate: WithdrawalUpdate =>
-                withdrawalCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(withdrawalUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal
-                )
+                acc.pure
               case swapUpdate: SwapUpdate =>
                 swapCombinerService.combinePendingSpendAction(
                   PendingSpendAction(
