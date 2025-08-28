@@ -204,12 +204,6 @@ object SwapValidationTest extends MutableIOSuite {
 
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      ss <- Id(
-        Hex(
-          "e11d31791e1c28738d4b8701c733a3798399866340b3657309bb648a7262ef96c970768be1e190a367819b9a1ae4f5481c1567df47e48840132837a229fa8af0"
-        )
-      ).toAddress
-      _ = println(s"TESTIING: ${ss}")
       allowSpend = AllowSpend(
         ownerAddress,
         Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb"),
