@@ -262,6 +262,7 @@ object L0CombinerService {
           .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingUpdate) =>
             pendingUpdate.update.value match {
               case lpUpdate: LiquidityPoolUpdate =>
+                logger.info(s"Processing LP spend action: ${lpUpdate}") >>
                 liquidityPoolCombinerService.combinePendingSpendAction(
                   PendingSpendAction(
                     Signed(lpUpdate, pendingUpdate.update.proofs),
@@ -276,6 +277,7 @@ object L0CombinerService {
                   currencyId
                 )
               case stakingUpdate: StakingUpdate =>
+                logger.info(s"Processing Staking spend action: ${stakingUpdate}") >>
                 stakingCombinerService.combinePendingSpendAction(
                   PendingSpendAction(
                     Signed(stakingUpdate, pendingUpdate.update.proofs),
@@ -292,6 +294,7 @@ object L0CombinerService {
               case withdrawalUpdate: WithdrawalUpdate =>
                 acc.pure
               case swapUpdate: SwapUpdate =>
+                logger.info(s"Processing Swap spend action: ${swapUpdate}") >>
                 swapCombinerService.combinePendingSpendAction(
                   PendingSpendAction(
                     Signed(swapUpdate, pendingUpdate.update.proofs),
