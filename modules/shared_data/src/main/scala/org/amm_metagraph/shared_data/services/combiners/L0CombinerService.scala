@@ -194,43 +194,46 @@ object L0CombinerService {
           .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingUpdate) =>
             pendingUpdate.update.value match {
               case lpUpdate: LiquidityPoolUpdate =>
-                liquidityPoolCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing LP pending allow spend: ${lpUpdate}") >>
+                  liquidityPoolCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
               case stakingUpdate: StakingUpdate =>
-                stakingCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing staking pending allow spend: ${stakingUpdate}") >>
+                  stakingCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
               case swapUpdate: SwapUpdate =>
-                swapCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing swap pending allow spend: ${swapUpdate}") >>
+                  swapCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
               case _ => acc.pure
             }
           }
@@ -263,51 +266,51 @@ object L0CombinerService {
             pendingUpdate.update.value match {
               case lpUpdate: LiquidityPoolUpdate =>
                 logger.info(s"Processing LP spend action: ${lpUpdate}") >>
-                liquidityPoolCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                  liquidityPoolCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case stakingUpdate: StakingUpdate =>
                 logger.info(s"Processing Staking spend action: ${stakingUpdate}") >>
-                stakingCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                  stakingCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case withdrawalUpdate: WithdrawalUpdate =>
                 acc.pure
               case swapUpdate: SwapUpdate =>
                 logger.info(s"Processing Swap spend action: ${swapUpdate}") >>
-                swapCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                  swapCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case _ => acc.pure
             }
           }
