@@ -28,7 +28,7 @@ import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, MissingStakingTokenInfo, MissingSwapTokenInfo}
+import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.StakingValidations
 
 trait StakingCombinerService[F[_]] {
@@ -342,7 +342,18 @@ object StakingCombinerService {
                   )
 
             case _ =>
-              EitherT.rightT[F, FailedCalculatedState](oldState)
+              if (pendingAllowSpendUpdate.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                  FailedCalculatedState(
+                    OperationExpired(pendingAllowSpendUpdate.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingAllowSpendUpdate.updateHash,
+                    pendingAllowSpendUpdate.update
+                  )
+                )
+              } else {
+                EitherT.rightT[F, FailedCalculatedState](oldState)
+              }
           }
         } yield result
 
@@ -392,7 +403,18 @@ object StakingCombinerService {
           }
           result <-
             if (!allSpendActionsAccepted) {
-              EitherT.rightT[F, FailedCalculatedState](oldState)
+              if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                  FailedCalculatedState(
+                    OperationExpired(pendingSpendAction.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingSpendAction.updateHash,
+                    pendingSpendAction.update
+                  )
+                )
+              } else {
+                EitherT.rightT[F, FailedCalculatedState](oldState)
+              }
             } else {
               for {
                 poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
