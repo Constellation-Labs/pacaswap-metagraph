@@ -291,7 +291,24 @@ object WithdrawalCombinerService {
 
           combinedState <-
             if (!allSpendActionsAccepted) {
-              oldState.pure[F]
+              if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                val failedState = FailedCalculatedState(
+                  OperationExpired(pendingSpendAction.update),
+                  getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                  pendingSpendAction.updateHash,
+                  pendingSpendAction.update
+                )
+                handleFailedUpdate(
+                  pendingSpendAction.update,
+                  oldState,
+                  failedState,
+                  withdrawalCalculatedState,
+                  pendingSpendAction.updateHash,
+                  PendingSpendTransactions
+                )
+              } else {
+                oldState.pure[F]
+              }
             } else {
               val processingState = for {
                 _ <- EitherT(

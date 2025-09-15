@@ -406,7 +406,18 @@ object SwapCombinerService {
                   )
 
             case None =>
-              EitherT.rightT[F, FailedCalculatedState](oldState)
+              if (pendingAllowSpend.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                  FailedCalculatedState(
+                    OperationExpired(pendingAllowSpend.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingAllowSpend.updateHash,
+                    pendingAllowSpend.update
+                  )
+                )
+              } else {
+                EitherT.rightT[F, FailedCalculatedState](oldState)
+              }
           }
         } yield result
 
@@ -468,7 +479,18 @@ object SwapCombinerService {
             }
             result <-
               if (!allSpendActionsAccepted) {
-                EitherT.rightT[F, FailedCalculatedState](oldState)
+                if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                  EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                    FailedCalculatedState(
+                      OperationExpired(pendingSpendAction.update),
+                      getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                      pendingSpendAction.updateHash,
+                      pendingSpendAction.update
+                    )
+                  )
+                } else {
+                  EitherT.rightT[F, FailedCalculatedState](oldState)
+                }
               } else {
                 (for {
                   swapReference <- EitherT.liftF[F, FailedCalculatedState, SwapReference](
