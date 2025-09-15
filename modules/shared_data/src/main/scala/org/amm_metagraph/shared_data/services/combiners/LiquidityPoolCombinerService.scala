@@ -23,6 +23,8 @@ import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
+import org.amm_metagraph.shared_data.app.ApplicationConfig
+import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
@@ -30,7 +32,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
-import org.amm_metagraph.shared_data.validations.Errors.DuplicatedUpdate
+import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, OperationExpired}
 import org.amm_metagraph.shared_data.validations.{Errors, LiquidityPoolValidations}
 
 trait LiquidityPoolCombinerService[F[_]] {
@@ -67,6 +69,7 @@ trait LiquidityPoolCombinerService[F[_]] {
 
 object LiquidityPoolCombinerService {
   def make[F[_]: Async: HasherSelector](
+    applicationConfig: ApplicationConfig,
     liquidityPoolValidations: LiquidityPoolValidations[F],
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): LiquidityPoolCombinerService[F] =
@@ -313,7 +316,18 @@ object LiquidityPoolCombinerService {
                     )
                   )
             case _ =>
-              EitherT.rightT[F, FailedCalculatedState](oldState)
+              if (pendingAllowSpendUpdate.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                  FailedCalculatedState(
+                    OperationExpired(pendingAllowSpendUpdate.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingAllowSpendUpdate.updateHash,
+                    pendingAllowSpendUpdate.update
+                  )
+                )
+              } else {
+                EitherT.rightT[F, FailedCalculatedState](oldState)
+              }
           }
         } yield result
 
@@ -367,7 +381,18 @@ object LiquidityPoolCombinerService {
           fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
           result <-
             if (!allSpendActionsAccepted) {
-              EitherT.rightT[F, FailedCalculatedState](oldState)
+              if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
+                EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
+                  FailedCalculatedState(
+                    OperationExpired(pendingSpendAction.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingSpendAction.updateHash,
+                    pendingSpendAction.update
+                  )
+                )
+              } else {
+                EitherT.rightT[F, FailedCalculatedState](oldState)
+              }
             } else {
               val amountA = liquidityPoolUpdate.tokenAAmount.value
               val amountB = liquidityPoolUpdate.tokenBAmount.value
