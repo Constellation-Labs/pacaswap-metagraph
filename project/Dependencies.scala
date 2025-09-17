@@ -3,7 +3,7 @@ import sbt.*
 object Dependencies {
 
   object V {
-    val tessellation = "3.4.8"
+    val tessellation = "3.4.9"
     val decline = "2.4.1"
     val organizeImports = "0.5.0"
   }
