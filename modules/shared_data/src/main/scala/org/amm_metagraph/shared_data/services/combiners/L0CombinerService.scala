@@ -5,6 +5,7 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.util.{Failure, Success}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
@@ -15,14 +16,16 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.globalSnapshots._
+import org.amm_metagraph.shared_data.loaders.LiquidityPoolLoader
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
-import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.LiquidityPool.{buildLiquidityPoolUniqueIdentifier, _}
 import org.amm_metagraph.shared_data.types.Staking._
-import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
@@ -74,6 +77,10 @@ object L0CombinerService {
     currentSnapshotOrdinalR: SignallingRef[F, SnapshotOrdinal]
   ): L0CombinerService[F] = {
     new L0CombinerService[F] {
+      private val poolUpdateConfigs = Map(
+        SnapshotOrdinal(NonNegLong.unsafeFrom(111630L)) -> "updated-pools.json"
+      )
+
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
       def getPendingAllowSpendsUpdates(
@@ -194,43 +201,46 @@ object L0CombinerService {
           .foldLeftM(stateCombinedByNewUpdates) { (acc, pendingUpdate) =>
             pendingUpdate.update.value match {
               case lpUpdate: LiquidityPoolUpdate =>
-                liquidityPoolCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing LP pending allow spend: ${lpUpdate}") >>
+                  liquidityPoolCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
               case stakingUpdate: StakingUpdate =>
-                stakingCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing staking pending allow spend: ${stakingUpdate}") >>
+                  stakingCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
 
               case swapUpdate: SwapUpdate =>
-                swapCombinerService.combinePendingAllowSpend(
-                  PendingAllowSpend(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Processing swap pending allow spend: ${swapUpdate}") >>
+                  swapCombinerService.combinePendingAllowSpend(
+                    PendingAllowSpend(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncAllowSpends,
+                    currencyId
+                  )
               case _ => acc.pure
             }
           }
@@ -262,60 +272,64 @@ object L0CombinerService {
           .foldLeftM(stateCombinedByPendingAllowSpends) { (acc, pendingUpdate) =>
             pendingUpdate.update.value match {
               case lpUpdate: LiquidityPoolUpdate =>
-                liquidityPoolCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(lpUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                logger.info(s"Processing LP spend action: ${lpUpdate}") >>
+                  liquidityPoolCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(lpUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case stakingUpdate: StakingUpdate =>
-                stakingCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(stakingUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                logger.info(s"Processing Staking spend action: ${stakingUpdate}") >>
+                  stakingCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(stakingUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case withdrawalUpdate: WithdrawalUpdate =>
-                withdrawalCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(withdrawalUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal
-                )
+                logger.info(s"Processing Withdrawal spend action: ${withdrawalUpdate}") >>
+                  withdrawalCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(withdrawalUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal
+                  )
               case swapUpdate: SwapUpdate =>
-                swapCombinerService.combinePendingSpendAction(
-                  PendingSpendAction(
-                    Signed(swapUpdate, pendingUpdate.update.proofs),
-                    pendingUpdate.updateHash,
-                    pendingUpdate.generatedSpendAction,
-                    pendingUpdate.pricingTokenInfo
-                  ),
-                  acc,
-                  lastSyncGlobalEpochProgress,
-                  globalSnapshotSyncSpendActions,
-                  currencySnapshotOrdinal,
-                  currencyId
-                )
+                logger.info(s"Processing Swap spend action: ${swapUpdate}") >>
+                  swapCombinerService.combinePendingSpendAction(
+                    PendingSpendAction(
+                      Signed(swapUpdate, pendingUpdate.update.proofs),
+                      pendingUpdate.updateHash,
+                      pendingUpdate.generatedSpendAction,
+                      pendingUpdate.pricingTokenInfo
+                    ),
+                    acc,
+                    lastSyncGlobalEpochProgress,
+                    globalSnapshotSyncSpendActions,
+                    currencySnapshotOrdinal,
+                    currencyId
+                  )
               case _ => acc.pure
             }
           }
@@ -345,6 +359,80 @@ object L0CombinerService {
           lastSyncGlobalEpochProgress
         )
       }
+
+      private def shouldUpdatePools(currentOrdinal: SnapshotOrdinal): Option[String] =
+        poolUpdateConfigs.get(currentOrdinal)
+
+      private def updatePoolsAtOrdinal(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        targetOrdinal: SnapshotOrdinal,
+        currentOrdinal: SnapshotOrdinal,
+        resourcePath: String
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
+        if (currentOrdinal === targetOrdinal) {
+          LiquidityPoolLoader.loadPools(resourcePath) match {
+            case Failure(exception) =>
+              logger.error(exception)("Error when updating the pools") >>
+                oldState.pure[F]
+            case Success(pools) =>
+              pools.toList.traverse {
+                case (_, pool) =>
+                  buildLiquidityPoolUniqueIdentifier(pool.tokenA.identifier, pool.tokenB.identifier)
+                    .map(uniquePoolId => (uniquePoolId, pool))
+              }.flatMap { poolsWithIds =>
+                poolsWithIds.foldM(oldState) {
+                  case (state, (uniquePoolId, pool)) =>
+                    val currentCalculated = state.calculated
+                    val liquidityPoolOps =
+                      currentCalculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+                    val confirmedState = liquidityPoolOps.confirmed
+
+                    confirmedState.value.get(uniquePoolId.value) match {
+                      case Some(liquidityPool) =>
+                        val updatedLiquidityPool = liquidityPool.copy(
+                          poolShares = pool.poolShares,
+                          k = pool.k,
+                          tokenA = pool.tokenA,
+                          tokenB = pool.tokenB
+                        )
+
+                        val updatedConfirmedState = confirmedState
+                          .focus(_.value)
+                          .modify(_.updated(uniquePoolId.value, updatedLiquidityPool))
+
+                        val updatedLiquidityPoolOps = liquidityPoolOps.copy(confirmed = updatedConfirmedState)
+
+                        val updatedOperations = currentCalculated.operations.updated(
+                          OperationType.LiquidityPool,
+                          updatedLiquidityPoolOps
+                        )
+
+                        val updatedCalculated = currentCalculated.copy(operations = updatedOperations)
+
+                        // Reset onChain and sharedArtifacts as part of the pool update
+                        val finalState = state
+                          .copy(calculated = updatedCalculated)
+                          .focus(_.onChain)
+                          .replace(AmmOnChainState.empty)
+                          .focus(_.sharedArtifacts)
+                          .replace(SortedSet.empty)
+
+                        finalState.pure[F]
+
+                      case None =>
+                        Async[F].raiseError(new RuntimeException(s"Pool ${uniquePoolId.value} not found in state"))
+                    }
+                }
+              }
+          }
+        } else {
+          oldState
+            .focus(_.onChain)
+            .replace(AmmOnChainState.empty)
+            .focus(_.sharedArtifacts)
+            .replace(SortedSet.empty)
+            .pure[F]
+        }
 
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
@@ -387,15 +475,28 @@ object L0CombinerService {
               - state is preserved across updates within the same ordinal,
               - state is reset whenever the ordinal advances.
            */
-          newState =
+          newState <-
             if (lastSnapshotOrdinalStored < currentSnapshotOrdinalFromContext) {
-              oldState
-                .focus(_.onChain)
-                .replace(AmmOnChainState.empty)
-                .focus(_.sharedArtifacts)
-                .replace(SortedSet.empty)
+              shouldUpdatePools(currentSnapshotOrdinalFromContext) match {
+                case Some(resourcePath) =>
+                  logger.info(s"Pool update detected for ordinal $currentSnapshotOrdinalFromContext, loading from $resourcePath") >>
+                    updatePoolsAtOrdinal(
+                      oldState,
+                      currentSnapshotOrdinalFromContext,
+                      currentSnapshotOrdinalFromContext,
+                      resourcePath
+                    )
+                case None =>
+                  // Standard state reset without pool updates
+                  oldState
+                    .focus(_.onChain)
+                    .replace(AmmOnChainState.empty)
+                    .focus(_.sharedArtifacts)
+                    .replace(SortedSet.empty)
+                    .pure[F]
+              }
             } else {
-              oldState
+              oldState.pure[F]
             }
 
           pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
