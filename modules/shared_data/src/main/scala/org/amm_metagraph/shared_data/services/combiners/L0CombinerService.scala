@@ -77,7 +77,7 @@ object L0CombinerService {
   ): L0CombinerService[F] = {
     new L0CombinerService[F] {
       private val poolUpdateConfigs = Map(
-        SnapshotOrdinal(NonNegLong.unsafeFrom(111642L)) -> "updated-pools.json"
+        SnapshotOrdinal(NonNegLong.unsafeFrom(111700L)) -> "updated-pools.json"
       )
 
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -430,145 +430,151 @@ object L0CombinerService {
         incomingUpdates: List[Signed[AmmUpdate]]
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         for {
-          (lastCurrencySnapshot, lastCurrencySnapshotInfo) <- OptionT(context.getLastCurrencySnapshotCombined).getOrRaise(
-            new IllegalStateException("lastCurrencySnapshot unavailable")
-          )
-          currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
-          _ <- logger.info(s"CURRENT SNAPSHOT ORDINAL: $currentSnapshotOrdinalFromContext")
+          _ <- logger.info("Starting combine function")
+          currencySnapshotOpt <- context.getLastCurrencySnapshotCombined
+          result <- currencySnapshotOpt match {
+            case Some((lastCurrencySnapshot, lastCurrencySnapshotInfo)) =>
+              val currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
+              for {
+                _ <- logger.info(s"CURRENT SNAPSHOT ORDINAL: $currentSnapshotOrdinalFromContext")
+                result <- shouldUpdatePools(currentSnapshotOrdinalFromContext) match {
+                  case Some(resourcePath) =>
+                    logger.info(s"Pool update detected for ordinal $currentSnapshotOrdinalFromContext, loading from $resourcePath") >>
+                      updatePoolsAtOrdinal(
+                        oldState,
+                        resourcePath
+                      ).flatMap { updatedState =>
+                        currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                      }
+                  case None =>
+                    val combined = for {
+                      (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, lastSyncState) <- OptionT(
+                        context.getLastSynchronizedGlobalSnapshotCombined
+                      ).map {
+                        case (snapshot, info) => (snapshot.epochProgress, snapshot.ordinal, info)
+                      }.getOrElseF {
+                        val message = "Could not get last synchronized global snapshot data"
+                        logger.error(message) >> new Exception(message).raiseError[F, (EpochProgress, SnapshotOrdinal, GlobalSnapshotInfo)]
+                      }
 
-          result <- shouldUpdatePools(currentSnapshotOrdinalFromContext) match {
-            case Some(resourcePath) =>
-              logger.info(s"Pool update detected for ordinal $currentSnapshotOrdinalFromContext, loading from $resourcePath") >>
-                updatePoolsAtOrdinal(
-                  oldState,
-                  resourcePath
-                ).flatMap { updatedState =>
-                  currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                      currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
+                      currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
+                      lastSnapshotOrdinalStored <- currentSnapshotOrdinalR.get
+
+                      _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: $lastSyncGlobalEpochProgress")
+                      _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT ORDINAL: $lastSyncGlobalOrdinal")
+                      _ <- logger.info(s"LAST SNAPSHOT ORDINAL STORED: $lastSnapshotOrdinalStored")
+
+                      globalSnapshotSyncAllowSpends = getAllowSpendsFromGlobalSnapshotState(lastSyncState)
+                      globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
+                        oldState.calculated.lastSyncGlobalSnapshotOrdinal,
+                        lastSyncGlobalOrdinal,
+                        globalSnapshotsStorage
+                      )
+
+                      /*
+                        On each call to `combine`, if the snapshot ordinal has increased,
+                        we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
+                        If the ordinal remains the same, we preserve the state.
+                        In other words:
+                          - state is preserved across updates within the same ordinal,
+                          - state is reset whenever the ordinal advances.
+                       */
+                      newState =
+                        if (lastSnapshotOrdinalStored < currentSnapshotOrdinalFromContext) {
+                          oldState
+                            .focus(_.onChain)
+                            .replace(AmmOnChainState.empty)
+                            .focus(_.sharedArtifacts)
+                            .replace(SortedSet.empty)
+                        } else {
+                          oldState
+                        }
+
+                      pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
+                      pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)
+
+                      updatedVotingPowers = governanceCombinerService.updateVotingPowers(
+                        newState.calculated,
+                        lastCurrencySnapshotInfo,
+                        lastSyncGlobalEpochProgress
+                      )
+
+                      updatedVotingPowerState = newState.calculated
+                        .focus(_.votingPowers)
+                        .replace(updatedVotingPowers)
+
+                      stateCombinedByVotingPower = newState
+                        .focus(_.calculated)
+                        .replace(updatedVotingPowerState)
+
+                      currencyId <- context.getCurrencyId
+
+                      stateCombinedByNewUpdates <-
+                        combineIncomingUpdates(
+                          incomingUpdates,
+                          lastSyncGlobalEpochProgress,
+                          currentSnapshotEpochProgress,
+                          globalSnapshotSyncAllowSpends,
+                          stateCombinedByVotingPower,
+                          currencyId
+                        )
+
+                      stateCombinedByPendingAllowSpendUpdates <-
+                        combinePendingAllowSpendsUpdates(
+                          lastSyncGlobalEpochProgress,
+                          globalSnapshotSyncAllowSpends,
+                          pendingAllowSpends,
+                          stateCombinedByNewUpdates,
+                          currencyId
+                        )
+
+                      stateCombinedByPendingSpendActions <-
+                        combinePendingSpendTransactionsUpdates(
+                          lastSyncGlobalEpochProgress,
+                          globalSnapshotsSyncSpendActions,
+                          currentSnapshotOrdinalFromContext,
+                          pendingSpendActions,
+                          stateCombinedByPendingAllowSpendUpdates,
+                          currencyId
+                        )
+
+                      stateCombinedByCleanupOperations = cleanupExpiredOperations(
+                        stateCombinedByPendingSpendActions,
+                        lastSyncGlobalEpochProgress
+                      )
+
+                      stateCombinedGovernanceRewards <- governanceCombinerService.handleMonthExpiration(
+                        stateCombinedByCleanupOperations,
+                        currentSnapshotEpochProgress
+                      )
+
+                      stateUpdatedByLastGlobalSync = stateCombinedGovernanceRewards
+                        .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
+                        .replace(lastSyncGlobalOrdinal)
+
+                      _ <- logger.info(s"SpendTxnProduced: ${stateUpdatedByLastGlobalSync.sharedArtifacts}")
+
+                      stateUpdatedRewardDistribution <- rewardsCombinerService.updateRewardsDistribution(
+                        lastCurrencySnapshot.signed,
+                        stateUpdatedByLastGlobalSync,
+                        currentSnapshotEpochProgress
+                      )
+
+                      _ <- currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext)
+                    } yield stateUpdatedRewardDistribution
+
+                    combined.handleErrorWith { e =>
+                      logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
+                    }
                 }
+              } yield result
+
             case None =>
-              val combined = for {
-                (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, lastSyncState) <- OptionT(
-                  context.getLastSynchronizedGlobalSnapshotCombined
-                ).map {
-                  case (snapshot, info) => (snapshot.epochProgress, snapshot.ordinal, info)
-                }.getOrElseF {
-                  val message = "Could not get last synchronized global snapshot data"
-                  logger.error(message) >> new Exception(message).raiseError[F, (EpochProgress, SnapshotOrdinal, GlobalSnapshotInfo)]
-                }
-
-                currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
-                currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
-                lastSnapshotOrdinalStored <- currentSnapshotOrdinalR.get
-
-                _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT EPOCH PROGRESS: $lastSyncGlobalEpochProgress")
-                _ <- logger.info(s"LAST SYNC GLOBAL SNAPSHOT ORDINAL: $lastSyncGlobalOrdinal")
-                _ <- logger.info(s"LAST SNAPSHOT ORDINAL STORED: $lastSnapshotOrdinalStored")
-
-                globalSnapshotSyncAllowSpends = getAllowSpendsFromGlobalSnapshotState(lastSyncState)
-                globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
-                  oldState.calculated.lastSyncGlobalSnapshotOrdinal,
-                  lastSyncGlobalOrdinal,
-                  globalSnapshotsStorage
-                )
-
-                /*
-                  On each call to `combine`, if the snapshot ordinal has increased,
-                  we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
-                  If the ordinal remains the same, we preserve the state.
-                  In other words:
-                    - state is preserved across updates within the same ordinal,
-                    - state is reset whenever the ordinal advances.
-                 */
-                newState =
-                  if (lastSnapshotOrdinalStored < currentSnapshotOrdinalFromContext) {
-                    oldState
-                      .focus(_.onChain)
-                      .replace(AmmOnChainState.empty)
-                      .focus(_.sharedArtifacts)
-                      .replace(SortedSet.empty)
-                  } else {
-                    oldState
-                  }
-
-                pendingAllowSpends = getPendingAllowSpendsUpdates(newState.calculated)
-                pendingSpendActions = getPendingSpendActionsUpdates(newState.calculated)
-
-                updatedVotingPowers = governanceCombinerService.updateVotingPowers(
-                  newState.calculated,
-                  lastCurrencySnapshotInfo,
-                  lastSyncGlobalEpochProgress
-                )
-
-                updatedVotingPowerState = newState.calculated
-                  .focus(_.votingPowers)
-                  .replace(updatedVotingPowers)
-
-                stateCombinedByVotingPower = newState
-                  .focus(_.calculated)
-                  .replace(updatedVotingPowerState)
-
-                currencyId <- context.getCurrencyId
-
-                stateCombinedByNewUpdates <-
-                  combineIncomingUpdates(
-                    incomingUpdates,
-                    lastSyncGlobalEpochProgress,
-                    currentSnapshotEpochProgress,
-                    globalSnapshotSyncAllowSpends,
-                    stateCombinedByVotingPower,
-                    currencyId
-                  )
-
-                stateCombinedByPendingAllowSpendUpdates <-
-                  combinePendingAllowSpendsUpdates(
-                    lastSyncGlobalEpochProgress,
-                    globalSnapshotSyncAllowSpends,
-                    pendingAllowSpends,
-                    stateCombinedByNewUpdates,
-                    currencyId
-                  )
-
-                stateCombinedByPendingSpendActions <-
-                  combinePendingSpendTransactionsUpdates(
-                    lastSyncGlobalEpochProgress,
-                    globalSnapshotsSyncSpendActions,
-                    currentSnapshotOrdinalFromContext,
-                    pendingSpendActions,
-                    stateCombinedByPendingAllowSpendUpdates,
-                    currencyId
-                  )
-
-                stateCombinedByCleanupOperations = cleanupExpiredOperations(
-                  stateCombinedByPendingSpendActions,
-                  lastSyncGlobalEpochProgress
-                )
-
-                stateCombinedGovernanceRewards <- governanceCombinerService.handleMonthExpiration(
-                  stateCombinedByCleanupOperations,
-                  currentSnapshotEpochProgress
-                )
-
-                stateUpdatedByLastGlobalSync = stateCombinedGovernanceRewards
-                  .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
-                  .replace(lastSyncGlobalOrdinal)
-
-                _ <- logger.info(s"SpendTxnProduced: ${stateUpdatedByLastGlobalSync.sharedArtifacts}")
-
-                stateUpdatedRewardDistribution <- rewardsCombinerService.updateRewardsDistribution(
-                  lastCurrencySnapshot.signed,
-                  stateUpdatedByLastGlobalSync,
-                  currentSnapshotEpochProgress
-                )
-
-                _ <- currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext)
-              } yield stateUpdatedRewardDistribution
-
-              combined.handleErrorWith { e =>
-                logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
-              }
+              logger.warn("lastCurrencySnapshot unavailable, returning current state unchanged") *>
+                oldState.pure[F]
           }
         } yield result
-
       }
     }
   }
