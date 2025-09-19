@@ -12,6 +12,7 @@ import io.constellationnetwork.security.hash.Hash
 
 import io.circe.syntax.EncoderOps
 import io.circe.{Json, JsonObject}
+import monocle.syntax.all._
 import org.amm_metagraph.shared_data.types.States._
 
 trait CalculatedStateService[F[_]] {
@@ -38,19 +39,8 @@ object CalculatedStateService {
           state: AmmCalculatedState
         ): F[Boolean] =
           stateRef.modify { currentState =>
-            val currentCalculatedState = currentState.state
-            val updatedOperations = state.operations.foldLeft(currentCalculatedState.operations) {
-              case (acc, (address, value)) =>
-                acc.updated(address, value)
-            }
-
-            (
-              CalculatedState(
-                snapshotOrdinal,
-                state.copy(operations = updatedOperations)
-              ),
-              true
-            )
+            val newState = currentState.focus(_.state).replace(state)
+            (newState, true)
           }
 
         private def sortJsonKeys(json: Json): Json =
