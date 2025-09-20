@@ -76,9 +76,8 @@ object L0CombinerService {
     currentSnapshotOrdinalR: SignallingRef[F, SnapshotOrdinal]
   ): L0CombinerService[F] = {
     new L0CombinerService[F] {
-      private val poolUpdateConfigs = Map(
-        SnapshotOrdinal(NonNegLong.unsafeFrom(111700L)) -> "updated-pools.json"
-      )
+      val updatePoolsOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(111700L))
+      val flipTokensOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(112222L))
 
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
@@ -359,9 +358,6 @@ object L0CombinerService {
         )
       }
 
-      private def shouldUpdatePools(currentOrdinal: SnapshotOrdinal): Option[String] =
-        poolUpdateConfigs.get(currentOrdinal)
-
       private def updatePoolsAtOrdinal(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         resourcePath: String
@@ -425,6 +421,42 @@ object L0CombinerService {
         _ <- logger.info("Pools successfully loaded")
       } yield result
 
+      private def flipPoolTokens(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState]
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
+        for {
+          _ <- logger.info("Starting to flip the pool tokens")
+          usdcMetagraphId = "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh"
+          currentCalculated = oldState.calculated
+          liquidityPoolOps =
+            currentCalculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+          confirmedState = liquidityPoolOps.confirmed
+
+          flippedState = confirmedState.copy(
+            value = confirmedState.value.map {
+              case (key, liquidityPool) =>
+                if (key.contains(usdcMetagraphId)) {
+                  key -> liquidityPool
+                } else {
+                  key -> liquidityPool.copy(
+                    tokenA = liquidityPool.tokenB,
+                    tokenB = liquidityPool.tokenA
+                  )
+                }
+            }
+          )
+
+          updatedState = oldState.copy(
+            calculated = currentCalculated.copy(
+              operations = currentCalculated.operations.updated(
+                OperationType.LiquidityPool,
+                liquidityPoolOps.copy(confirmed = flippedState)
+              )
+            )
+          )
+
+        } yield updatedState
+
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
@@ -437,16 +469,21 @@ object L0CombinerService {
               val currentSnapshotOrdinalFromContext = lastCurrencySnapshot.ordinal.next
               for {
                 _ <- logger.info(s"CURRENT SNAPSHOT ORDINAL: $currentSnapshotOrdinalFromContext")
-                result <- shouldUpdatePools(currentSnapshotOrdinalFromContext) match {
-                  case Some(resourcePath) =>
-                    logger.info(s"Pool update detected for ordinal $currentSnapshotOrdinalFromContext, loading from $resourcePath") >>
-                      updatePoolsAtOrdinal(
-                        oldState,
-                        resourcePath
-                      ).flatMap { updatedState =>
-                        currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
-                      }
-                  case None =>
+                result <-
+                  if (currentSnapshotOrdinalFromContext === updatePoolsOrdinal) {
+                    updatePoolsAtOrdinal(
+                      oldState,
+                      "updated-pools.json"
+                    ).flatMap { updatedState =>
+                      currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                    }
+                  } else if (currentSnapshotOrdinalFromContext === flipTokensOrdinal) {
+                    flipPoolTokens(
+                      oldState
+                    ).flatMap { updatedState =>
+                      currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                    }
+                  } else {
                     val combined = for {
                       (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, lastSyncState) <- OptionT(
                         context.getLastSynchronizedGlobalSnapshotCombined
@@ -473,12 +510,12 @@ object L0CombinerService {
                       )
 
                       /*
-                        On each call to `combine`, if the snapshot ordinal has increased,
-                        we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
-                        If the ordinal remains the same, we preserve the state.
-                        In other words:
-                          - state is preserved across updates within the same ordinal,
-                          - state is reset whenever the ordinal advances.
+                      On each call to `combine`, if the snapshot ordinal has increased,
+                      we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
+                      If the ordinal remains the same, we preserve the state.
+                      In other words:
+                        - state is preserved across updates within the same ordinal,
+                        - state is reset whenever the ordinal advances.
                        */
                       newState =
                         if (lastSnapshotOrdinalStored < currentSnapshotOrdinalFromContext) {
@@ -567,7 +604,7 @@ object L0CombinerService {
                     combined.handleErrorWith { e =>
                       logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
                     }
-                }
+                  }
               } yield result
 
             case None =>
