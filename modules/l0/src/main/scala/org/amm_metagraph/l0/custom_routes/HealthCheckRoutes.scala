@@ -33,6 +33,18 @@ case class HealthCheckRoutes[F[_]: Async](
     lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal
   )
 
+  private def getIfNodeIsHealthy: F[Response[F]] =
+    for {
+      calculatedState <- calculatedStateService.get
+      lastSyncGlobalSnapshotOrdinal = calculatedState.state.lastSyncGlobalSnapshotOrdinal
+      result <-
+        if (lastSyncGlobalSnapshotOrdinal === SnapshotOrdinal.MinValue) {
+          ServiceUnavailable()
+        } else {
+          Ok()
+        }
+    } yield result
+
   private def getLastGlobalSnapshotSync: F[Response[F]] =
     for {
       calculatedState <- calculatedStateService.get
@@ -41,6 +53,7 @@ case class HealthCheckRoutes[F[_]: Async](
     } yield result
 
   val routes: HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "health-check"                               => getIfNodeIsHealthy
     case GET -> Root / "health-check" / "last-global-snapshot-sync" => getLastGlobalSnapshotSync
   }
 }
