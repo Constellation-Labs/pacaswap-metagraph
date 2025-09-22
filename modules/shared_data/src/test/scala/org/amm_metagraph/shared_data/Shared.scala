@@ -123,4 +123,5 @@ object Shared {
     )
 
   def toFixedPoint(decimal: Double): Long = (decimal * 1e8).toLong
+  def toDoublePoint(amount: Long): Double = amount.toDouble / 1e8
 }
