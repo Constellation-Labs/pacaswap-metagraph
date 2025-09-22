@@ -78,6 +78,7 @@ object L0CombinerService {
     new L0CombinerService[F] {
       val updatePoolsOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(111700L))
       val flipTokensOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(112222L))
+      val updatePools2Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116018L))
 
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
@@ -480,6 +481,13 @@ object L0CombinerService {
                   } else if (currentSnapshotOrdinalFromContext === flipTokensOrdinal) {
                     flipPoolTokens(
                       oldState
+                    ).flatMap { updatedState =>
+                      currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                    }
+                  } else if (currentSnapshotOrdinalFromContext === updatePools2Ordinal) {
+                    updatePoolsAtOrdinal(
+                      oldState,
+                      "updated-pools-2.json"
                     ).flatMap { updatedState =>
                       currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
                     }
