@@ -24,6 +24,7 @@ import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
 import org.amm_metagraph.shared_data.refined.Percentage
+import org.amm_metagraph.shared_data.services.combiners.operations.GovernanceCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardAllocationVoteUpdate, RewardWithdrawUpdate}
 import org.amm_metagraph.shared_data.types.Governance.AllocationCategory.{LiquidityPool, NodeOperator}
 import org.amm_metagraph.shared_data.types.Governance._

@@ -23,7 +23,7 @@ import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.services.combiners.LiquidityPoolCombinerService
+import org.amm_metagraph.shared_data.services.combiners.operations.LiquidityPoolCombinerService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{
   TokenInformation,

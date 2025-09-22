@@ -1,4 +1,4 @@
-package org.amm_metagraph.shared_data.services.combiners
+package org.amm_metagraph.shared_data.services.combiners.operations
 
 import cats.data.EitherT
 import cats.effect.Async
