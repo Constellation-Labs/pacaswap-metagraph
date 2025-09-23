@@ -29,6 +29,7 @@ import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.rewards.RewardCalculator
 import org.amm_metagraph.shared_data.services.combiners._
+import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
@@ -107,7 +108,7 @@ object Main
     rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards, config.epochInfo)
     rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations, jsonBase64BinaryCodec)
 
-    combinerService <- L0CombinerService
+    combinerService <- L0CombinerServiceFactory
       .make[IO](
         globalSnapshotsStorage,
         governanceCombinerService,

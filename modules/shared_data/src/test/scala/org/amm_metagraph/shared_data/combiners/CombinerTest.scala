@@ -25,6 +25,7 @@ import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.rewards.RewardCalculator
 import org.amm_metagraph.shared_data.services.combiners._
+import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
@@ -150,7 +151,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService <- L0CombinerService
+      combinerService <- L0CombinerServiceFactory
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,
@@ -299,7 +300,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService <- L0CombinerService
+      combinerService <- L0CombinerServiceFactory
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,
@@ -456,7 +457,7 @@ object CombinerTest extends MutableIOSuite {
       rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
       rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
 
-      combinerService <- L0CombinerService
+      combinerService <- L0CombinerServiceFactory
         .make[IO](
           globalSnapshotService,
           governanceCombinerService,

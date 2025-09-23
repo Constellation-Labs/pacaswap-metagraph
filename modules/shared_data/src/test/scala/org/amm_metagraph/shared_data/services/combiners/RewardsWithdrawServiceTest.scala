@@ -24,6 +24,7 @@ import monocle.Monocle._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
 import org.amm_metagraph.shared_data.Shared
 import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
+import org.amm_metagraph.shared_data.services.combiners.operations.RewardsWithdrawService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardWithdrawUpdate}
 import org.amm_metagraph.shared_data.types.ProcessedRewardWithdrawUpdate
 import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
