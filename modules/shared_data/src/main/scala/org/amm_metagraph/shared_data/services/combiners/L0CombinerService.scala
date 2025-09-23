@@ -16,7 +16,9 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
+import eu.timepit.refined.types.numeric.PosLong
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.globalSnapshots._
@@ -79,6 +81,7 @@ object L0CombinerService {
       val updatePoolsOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(111700L))
       val flipTokensOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(112222L))
       val updatePools2Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116018L))
+      val updateUSDCPool: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116115L))
 
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
 
@@ -458,6 +461,55 @@ object L0CombinerService {
 
         } yield updatedState
 
+      private def updatePoolAmount(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        poolToken: Option[CurrencyId],
+        amount: PosLong
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
+        poolToken match {
+          case None =>
+            logger.warn("No pool token provided, returning unchanged state").as(oldState)
+
+          case Some(token) =>
+            for {
+              _ <- logger.info(s"Starting to update pool token amount for: ${token.value.value.value}")
+
+              currentCalculated = oldState.calculated
+              liquidityPoolOps = currentCalculated
+                .operations(OperationType.LiquidityPool)
+                .asInstanceOf[LiquidityPoolCalculatedState]
+              confirmedState = liquidityPoolOps.confirmed
+
+              updatedPools = confirmedState.value.map {
+                case (key, liquidityPool) =>
+                  if (key.contains(token.value.value.value)) {
+                    val updatedPool =
+                      if (liquidityPool.tokenA.identifier === poolToken) {
+                        liquidityPool.copy(tokenA = liquidityPool.tokenA.copy(amount = amount))
+                      } else if (liquidityPool.tokenB.identifier === poolToken) {
+                        liquidityPool.copy(tokenB = liquidityPool.tokenB.copy(amount = amount))
+                      } else {
+                        liquidityPool
+                      }
+                    key -> updatedPool
+                  } else {
+                    key -> liquidityPool
+                  }
+              }
+
+              updatedState = oldState.copy(
+                calculated = currentCalculated.copy(
+                  operations = currentCalculated.operations.updated(
+                    OperationType.LiquidityPool,
+                    liquidityPoolOps.copy(confirmed = confirmedState.copy(value = updatedPools))
+                  )
+                )
+              )
+
+              _ <- logger.debug("Successfully updated pool token amount")
+            } yield updatedState
+        }
+
       override def combine(
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         incomingUpdates: List[Signed[AmmUpdate]]
@@ -488,6 +540,14 @@ object L0CombinerService {
                     updatePoolsAtOrdinal(
                       oldState,
                       "updated-pools-2.json"
+                    ).flatMap { updatedState =>
+                      currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
+                    }
+                  } else if (currentSnapshotOrdinalFromContext === updateUSDCPool) {
+                    updatePoolAmount(
+                      oldState,
+                      CurrencyId(Address("DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh")).some,
+                      PosLong.unsafeFrom(1200116577579L)
                     ).flatMap { updatedState =>
                       currentSnapshotOrdinalR.set(currentSnapshotOrdinalFromContext).as(updatedState)
                     }
