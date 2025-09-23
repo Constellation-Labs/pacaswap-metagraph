@@ -546,6 +546,17 @@ paths:
                     $ref: './components.yml#/components/schemas/StakingStateResponse'
         404:
           description: Staking not found
+  /health-check:
+    get:
+      tags:
+        - Health Check
+      summary: Get last global snapshot sync by node
+      description: Get last global snapshot sync by node
+      responses:
+        200:
+          description: Service available
+        503:
+          description: Service unavailable
 
   /health-check/last-global-snapshot-sync:
     get:

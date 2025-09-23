@@ -5,6 +5,9 @@ import java.util.UUID
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedSet
+import scala.util.{Failure, Success}
+
 import io.constellationnetwork.currency.dataApplication._
 import io.constellationnetwork.currency.l0.CurrencyL0App
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotStateProof}
@@ -12,15 +15,21 @@ import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.{JsonSerializer => JsonBrotliBinaryCodec}
 import io.constellationnetwork.node.shared.domain.rewards.Rewards
 import io.constellationnetwork.node.shared.snapshot.currency.CurrencySnapshotEvent
+import io.constellationnetwork.schema.artifact.SharedArtifact
 import io.constellationnetwork.schema.cluster.ClusterId
 import io.constellationnetwork.schema.semver.{MetagraphVersion, TessellationVersion}
+import io.constellationnetwork.schema.{SnapshotOrdinal, artifact}
+import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
+import eu.timepit.refined.types.numeric.NonNegLong
+import org.amm_metagraph.l0.BalanceAdjustmentLoader.loadBalanceAdjustments
 import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.rewards.RewardCalculator
 import org.amm_metagraph.shared_data.services.combiners._
+import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
@@ -36,6 +45,22 @@ object Main
       tessellationVersion = TessellationVersion.unsafeFrom(io.constellationnetwork.BuildInfo.version),
       metagraphVersion = MetagraphVersion.unsafeFrom(org.amm_metagraph.l0.BuildInfo.version)
     ) {
+
+  override def customArtifacts(
+    lastCurrencySnapshot: Signed[CurrencyIncrementalSnapshot]
+  ): Option[SortedSet[SharedArtifact]] = {
+    val ordinalToPerformBalanceAdjustments = 109991L
+    if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments) {
+      loadBalanceAdjustments("balance-adjustments.json") match {
+        case Failure(_) => None
+        case Success(adjustments) =>
+          val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
+          Some(artifactSet)
+      }
+    } else {
+      None
+    }
+  }
 
   implicit val implicitLogger: SelfAwareStructuredLogger[IO] = logger
   override def dataApplication: Option[Resource[IO, BaseDataApplicationL0Service[IO]]] = (for {
@@ -83,7 +108,7 @@ object Main
     rewardsCombinerService = RewardsDistributionService.make[IO](rewardsCalculator, config.rewards, config.epochInfo)
     rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardWithdrawValidations, jsonBase64BinaryCodec)
 
-    combinerService <- L0CombinerService
+    combinerService <- L0CombinerServiceFactory
       .make[IO](
         globalSnapshotsStorage,
         governanceCombinerService,
