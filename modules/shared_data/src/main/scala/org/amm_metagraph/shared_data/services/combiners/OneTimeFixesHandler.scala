@@ -8,8 +8,11 @@ import scala.util.{Failure, Success}
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.swap.CurrencyId
 
-import eu.timepit.refined.types.all.NonNegLong
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.loaders.LiquidityPoolLoader
@@ -34,6 +37,8 @@ object OneTimeFixesHandler {
 
     val updatePoolsOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(111700L))
     val flipTokensOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(112222L))
+    val updatePools2Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116018L))
+    val updateUSDCPool: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116115L))
 
     override def handleOneTimeFixesOrdinals(
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
@@ -47,8 +52,71 @@ object OneTimeFixesHandler {
         flipPoolTokens(oldState).flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
+      } else if (currentSnapshotOrdinal === updatePools2Ordinal) {
+        updatePoolsAtOrdinal(oldState, "updated-pools-2.json").flatMap { updatedState =>
+          currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
+        }
+      } else if (currentSnapshotOrdinal === updateUSDCPool) {
+        val usdcPool = CurrencyId(Address("DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh")).some
+        val newAmount = PosLong.unsafeFrom(1200116577579L)
+        updatePoolAmount(
+          oldState,
+          usdcPool,
+          newAmount
+        ).flatMap { updatedState =>
+          currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
+        }
       } else {
         none[DataState[AmmOnChainState, AmmCalculatedState]].pure[F]
+      }
+
+    private def updatePoolAmount(
+      oldState: DataState[AmmOnChainState, AmmCalculatedState],
+      poolToken: Option[CurrencyId],
+      amount: PosLong
+    ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
+      poolToken match {
+        case None =>
+          logger.warn("No pool token provided, returning unchanged state").as(oldState)
+
+        case Some(token) =>
+          for {
+            _ <- logger.info(s"Starting to update pool token amount for: ${token.value.value.value}")
+
+            currentCalculated = oldState.calculated
+            liquidityPoolOps = currentCalculated
+              .operations(OperationType.LiquidityPool)
+              .asInstanceOf[LiquidityPoolCalculatedState]
+            confirmedState = liquidityPoolOps.confirmed
+
+            updatedPools = confirmedState.value.map {
+              case (key, liquidityPool) =>
+                if (key.contains(token.value.value.value)) {
+                  val updatedPool =
+                    if (liquidityPool.tokenA.identifier === poolToken) {
+                      liquidityPool.copy(tokenA = liquidityPool.tokenA.copy(amount = amount))
+                    } else if (liquidityPool.tokenB.identifier === poolToken) {
+                      liquidityPool.copy(tokenB = liquidityPool.tokenB.copy(amount = amount))
+                    } else {
+                      liquidityPool
+                    }
+                  key -> updatedPool
+                } else {
+                  key -> liquidityPool
+                }
+            }
+
+            updatedState = oldState.copy(
+              calculated = currentCalculated.copy(
+                operations = currentCalculated.operations.updated(
+                  OperationType.LiquidityPool,
+                  liquidityPoolOps.copy(confirmed = confirmedState.copy(value = updatedPools))
+                )
+              )
+            )
+
+            _ <- logger.debug("Successfully updated pool token amount")
+          } yield updatedState
       }
 
     private def updatePoolsAtOrdinal(

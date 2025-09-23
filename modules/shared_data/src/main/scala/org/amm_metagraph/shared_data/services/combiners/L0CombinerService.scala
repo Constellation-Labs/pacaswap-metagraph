@@ -43,7 +43,7 @@ object L0CombinerService {
             val currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
 
             for {
-              _ <- logger.info(s"CURRENT SNAPSHOT ORDINAL: $currentSnapshotOrdinal")
+              _ <- logger.info(s"currentSnapshotOrdinal=$currentSnapshotOrdinal")
 
               oneTimeFixesResult <- oneTimeFixesHandler.handleOneTimeFixesOrdinals(
                 oldState,
