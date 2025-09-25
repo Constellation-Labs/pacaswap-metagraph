@@ -25,7 +25,7 @@ import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.services.combiners.SwapCombinerService
+import org.amm_metagraph.shared_data.services.combiners.operations.SwapCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, SwapUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._

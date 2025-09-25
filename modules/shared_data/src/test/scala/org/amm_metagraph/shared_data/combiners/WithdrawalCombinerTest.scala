@@ -25,7 +25,7 @@ import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.services.combiners.WithdrawalCombinerService
+import org.amm_metagraph.shared_data.services.combiners.operations.WithdrawalCombinerService
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._

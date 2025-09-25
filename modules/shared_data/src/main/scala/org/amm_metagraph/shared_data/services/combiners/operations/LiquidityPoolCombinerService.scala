@@ -1,4 +1,4 @@
-package org.amm_metagraph.shared_data.services.combiners
+package org.amm_metagraph.shared_data.services.combiners.operations
 
 import cats.data.EitherT
 import cats.effect.Async
@@ -19,7 +19,6 @@ import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
-import eu.timepit.refined.types.numeric.NonNegLong
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
@@ -33,7 +32,7 @@ import org.amm_metagraph.shared_data.types.States.StateTransitionType._
 import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, OperationExpired}
-import org.amm_metagraph.shared_data.validations.{Errors, LiquidityPoolValidations}
+import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
 
 trait LiquidityPoolCombinerService[F[_]] {
   def combineNew(
