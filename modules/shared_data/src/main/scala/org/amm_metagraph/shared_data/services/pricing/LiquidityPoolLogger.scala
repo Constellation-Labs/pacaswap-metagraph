@@ -12,7 +12,6 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 
-
 case class PoolBalanceChange(
   operation: String,
   timestamp: String,

@@ -57,7 +57,7 @@ object OneTimeFixesHandler {
         updatePoolsAtOrdinal(oldState, "updated-pools-2.json").flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
-      }  else if (currentSnapshotOrdinal === updatePools3Ordinal) {
+      } else if (currentSnapshotOrdinal === updatePools3Ordinal) {
         updatePoolsAtOrdinal(oldState, "updated-pools-3.json").flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
