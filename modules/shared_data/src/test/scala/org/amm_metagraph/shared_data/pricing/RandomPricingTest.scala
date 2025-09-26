@@ -41,7 +41,14 @@ object RandomPricingTest extends SimpleIOSuite {
   test("Random liquidity ops preserve accounting") {
 
     val N = 10000
-    val rnd = new Random(3145L)
+    val rnd = new Random(1234567L)
+    val trackedAddresses = 10
+
+    def compareWithTolerance(a: Double, b: Double, tolerance: Double): Boolean = {
+      val diff = (a - b).abs
+      val relDiff = diff / math.max(a, b)
+      relDiff <= tolerance
+    }
 
     def createNewAddress(): Address = {
       val arr = new Array[Byte](40)
@@ -54,7 +61,8 @@ object RandomPricingTest extends SimpleIOSuite {
     def trackAdd(runner: PriceRunner[IO], addr: Address, primary: Boolean, amount: Double): IO[Unit] =
       for {
         amount <- runner.addShares(addr, primary, amount).value.flatMap {
-          case Right((lp, shares)) =>
+          case Right((lp, tokenInfo)) =>
+            val shares = tokenInfo.newlyIssuedShares
             logger[IO].trace(s"$addr: ADDED $shares shares --  $lp") >> shares.pure[IO]
           case Left(_) =>
             logger[IO].trace("ADD ERROR") >> 0L.pure[IO]
@@ -110,8 +118,30 @@ object RandomPricingTest extends SimpleIOSuite {
           }
       }
 
+    def addTrackedAddress(runner: PriceRunner[IO]): EitherT[IO, FailedCalculatedState, TrackedAddress] =
+      for {
+        trackingAddress <- EitherT.liftF(createNewAddress().pure[IO])
+        tokenAAdded = rnd.between(1.0, 10000.0)
+        (_, stakingTokenInfo) <- runner.addShares(trackingAddress, primary = true, tokenAAdded)
+        tokenBAmount = toDoublePoint(stakingTokenInfo.incomingPairAmount.value.value)
+        initialPrice <- EitherT.liftF(runner.getPrice)
+      } yield TrackedAddress(trackingAddress, tokenAAdded, tokenBAmount, stakingTokenInfo.newlyIssuedShares, initialPrice)
+
+    def checkTrackedAddress(runner: PriceRunner[IO])(tracking: TrackedAddress): EitherT[IO, FailedCalculatedState, Boolean] =
+      for {
+        _ <- runner.setPrice(tracking.price, 0.01, 10000)
+        (_, withdrawalToken) <- runner.withdraw(tracking.address, tracking.shares)
+        aTokenWithdraw = toDoublePoint(withdrawalToken.tokenAAmount.value.value)
+        bTokenWithdraw = toDoublePoint(withdrawalToken.tokenBAmount.value.value)
+        aTokenRes = compareWithTolerance(tracking.tokenAAmount, aTokenWithdraw, 0.001)
+        bTokenRes = compareWithTolerance(tracking.tokenBAmount, bTokenWithdraw, 0.001)
+      } yield aTokenRes && bTokenRes
+
     val res: EitherT[IO, Any, Expectations] = for {
       runner <- EitherT.liftF(PriceRunner.make[IO](1000.0, 100.0))
+
+      trackedAddresses <- (1 to trackedAddresses).toList.traverse(_ => addTrackedAddress(runner))
+
       _ <- EitherT.liftF((1 to N).toList.traverse_ { _ =>
         for {
           _ <- doRandomAction(runner)
@@ -123,6 +153,9 @@ object RandomPricingTest extends SimpleIOSuite {
           _ <- logger[IO].trace(s"=========")
         } yield ()
       })
+
+      trackedRes <- trackedAddresses.traverse(checkTrackedAddress(runner))
+
       _ <- EitherT.liftF(accounting.keys.toList.traverse_ { address =>
         trackWithdraw(runner, address, forceAll = true)
       })
@@ -134,7 +167,12 @@ object RandomPricingTest extends SimpleIOSuite {
       actualShares <- EitherT.liftF(
         accounting.keys.toList.traverse(address => runner.getTotalValueBySharesForAddress(address).map(_._1)).map(_.sum)
       )
-    } yield expect.all(allSum == 0, actualShares == 0)
+    } yield
+      expect.all(
+        allSum == 0,
+        actualShares == 0,
+        trackedRes.forall(identity)
+      )
 
     res.value.map {
       case Left(e)      => failure(s"Test failed with error: $e")
@@ -142,6 +180,8 @@ object RandomPricingTest extends SimpleIOSuite {
     }
   }
 }
+
+case class TrackedAddress(address: Address, tokenAAmount: Double, tokenBAmount: Double, shares: Long, price: Double)
 
 case class PriceRunner[F[_]: Async](
   owner: Address,
@@ -151,6 +191,44 @@ case class PriceRunner[F[_]: Async](
   calculatedStateService: CalculatedStateService[F],
   pricingService: PricingService[F]
 ) {
+  def getPrice: F[Double] =
+    getLiquidityPool.map(lp => (BigDecimal(lp.tokenA.amount) / BigDecimal(lp.tokenB.amount)).toDouble)
+
+  def setPrice(targetPrice: Double, tolerancePercent: Double, maxIterations: Int = 100): EitherT[F, FailedCalculatedState, Unit] = {
+
+    def withinTolerance(current: Double): Boolean = {
+      val diff = (current - targetPrice).abs
+      val relDiff = diff / targetPrice
+      relDiff <= tolerancePercent / 100.0
+    }
+
+    def loop(iter: Int): EitherT[F, FailedCalculatedState, Unit] =
+      EitherT.liftF[F, FailedCalculatedState, Double](getPrice).flatMap { currentPrice =>
+        if (withinTolerance(currentPrice) || iter >= maxIterations) {
+          EitherT(().asRight[FailedCalculatedState].pure[F])
+        } else {
+          val direction = if (currentPrice < targetPrice) 1.0 else -1.0
+          for {
+            lp <- EitherT.liftF(getLiquidityPool)
+            aRes = toDoublePoint(lp.tokenA.amount)
+            bRes = toDoublePoint(lp.tokenB.amount)
+
+            maxStep = math.min(aRes, bRes) * 0.05
+            maxPrice = math.max(currentPrice, targetPrice)
+            minPrice = math.min(currentPrice, targetPrice)
+            desiredStep = math.min(aRes, bRes) * (1.0 - minPrice / maxPrice)
+
+            step = direction * math.min(maxStep, desiredStep)
+
+            _ <- doSwap(step)
+            result <- loop(iter + 1)
+          } yield result
+        }
+      }
+
+    loop(0)
+  }
+
   def getLiquidityPool: F[LiquidityPool] =
     calculatedStateService.get.map(state => getLiquidityPoolCalculatedState(state.state).confirmed.value(poolId.value))
 
@@ -232,7 +310,11 @@ case class PriceRunner[F[_]: Async](
 
   }
 
-  def addShares(address: Address, primary: Boolean, amount: Double): EitherT[F, FailedCalculatedState, (LiquidityPool, Long)] = {
+  def addShares(
+    address: Address,
+    primary: Boolean,
+    amount: Double
+  ): EitherT[F, FailedCalculatedState, (LiquidityPool, StakingTokenInfo)] = {
 
     val (token, otherToken) = if (primary) (tokenA, tokenB) else (tokenB, tokenA)
     val stakingUpdate = getFakeSignedUpdate[StakingUpdate](
@@ -283,7 +365,7 @@ case class PriceRunner[F[_]: Async](
         .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
       _ <- EitherT.liftF(calculatedStateService.update(SnapshotOrdinal.MinValue, updatedCalculatedState))
-    } yield (liquidityPoolUpdated, stakingTokenInfo.newlyIssuedShares)
+    } yield (liquidityPoolUpdated, stakingTokenInfo)
   }
 
   def withdraw(address: Address, amount: Long): EitherT[F, FailedCalculatedState, (LiquidityPool, WithdrawalTokenInfo)] = {
