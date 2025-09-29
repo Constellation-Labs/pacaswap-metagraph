@@ -205,14 +205,15 @@ case class PriceRunner[F[_]: Async](
       )
 
       liquidityPool <- EitherT.liftF(getLiquidityPool)
-      liquidityPoolUpdated <- EitherT.fromEither[F](
+      liquidityPoolUpdated <- EitherT(
         pricingService.getUpdatedLiquidityPoolDueNewSwap(
           Hashed[SwapUpdate](swapUpdate, Hash.empty, ProofsHash("")),
           liquidityPool,
           updatedTokenInformation.primaryTokenInformationUpdated,
           updatedTokenInformation.pairTokenInformationUpdated,
           updatedTokenInformation.grossReceived,
-          CurrencyId(owner)
+          CurrencyId(owner),
+          SnapshotOrdinal.MinValue
         )
       )
 
@@ -260,14 +261,15 @@ case class PriceRunner[F[_]: Async](
       )
 
       liquidityPool <- EitherT.liftF(getLiquidityPool)
-      liquidityPoolUpdated <- EitherT.fromEither[F](
+      liquidityPoolUpdated <- EitherT(
         pricingService.getUpdatedLiquidityPoolDueStaking(
           liquidityPool,
           stakingUpdate,
           Hash.empty,
           address,
           stakingTokenInfo,
-          EpochProgress.MinValue
+          EpochProgress.MinValue,
+          SnapshotOrdinal.MinValue
         )
       )
 
@@ -315,13 +317,14 @@ case class PriceRunner[F[_]: Async](
         )
       )
 
-      updatedPool <- EitherT.fromEither[F](
+      updatedPool <- EitherT(
         pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
           withdrawUpdate,
           Hash.empty,
           liquidityPool,
           withdrawalAmounts,
-          EpochProgress.MinValue
+          EpochProgress.MinValue,
+          SnapshotOrdinal.MinValue
         )
       )
 
@@ -369,7 +372,7 @@ object PriceRunner {
     for {
       calculatedStateService <- CalculatedStateService.make[F]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[F](config, calculatedStateService)
+      pricingService <- PricingService.make[F](config, calculatedStateService)
     } yield
       PriceRunner[F](ownerAddress, PoolId(poolId), primaryToken.identifier, pairToken.identifier, calculatedStateService, pricingService)
   }

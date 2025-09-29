@@ -79,6 +79,7 @@ object NewUpdatesProcessor {
               state,
               context.lastSyncGlobalEpochProgress,
               context.globalSnapshotSyncAllowSpends,
+              context.currentSnapshotOrdinal,
               context.currencyId
             )
 
@@ -89,6 +90,7 @@ object NewUpdatesProcessor {
               state,
               context.lastSyncGlobalEpochProgress,
               context.globalSnapshotSyncAllowSpends,
+              context.currentSnapshotOrdinal,
               context.currencyId
             )
 

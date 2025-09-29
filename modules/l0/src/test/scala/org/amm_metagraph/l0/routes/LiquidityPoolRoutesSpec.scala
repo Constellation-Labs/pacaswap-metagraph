@@ -52,7 +52,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       implicit0(hs: HasherSelector[IO]) = res._2
 
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
@@ -78,7 +78,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
@@ -107,7 +107,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
@@ -132,7 +132,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
@@ -162,7 +162,7 @@ object LiquidityPoolRoutesSpec extends MutableIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, ammCalculatedState)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       implicit0(hs: HasherSelector[IO]) = res._2
       liquidityPoolRoutes = LiquidityPoolRoutes(calculatedStateService, pricingService)
       paginationParams = PaginationParams(10, 0)
