@@ -133,6 +133,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -259,6 +260,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -389,6 +391,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -474,6 +477,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -560,6 +564,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress(NonNegLong.unsafeFrom(10L)),
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -667,6 +672,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -819,6 +825,7 @@ object SwapCombinerTest extends MutableIOSuite {
           state,
           futureEpoch,
           allowSpends,
+          SnapshotOrdinal.MinValue,
           CurrencyId(destinationAddress)
         )
 
@@ -954,6 +961,7 @@ object SwapCombinerTest extends MutableIOSuite {
           state,
           futureEpoch,
           allowSpends,
+          SnapshotOrdinal.MinValue,
           CurrencyId(destinationAddress)
         )
 
@@ -1100,6 +1108,7 @@ object SwapCombinerTest extends MutableIOSuite {
             state,
             futureEpoch,
             allowSpends,
+            SnapshotOrdinal.MinValue,
             CurrencyId(destinationAddress)
           )
 
@@ -1270,6 +1279,7 @@ object SwapCombinerTest extends MutableIOSuite {
             state,
             futureEpoch,
             allowSpends,
+            SnapshotOrdinal.MinValue,
             CurrencyId(destinationAddress)
           )
 
@@ -1422,6 +1432,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -1558,6 +1569,7 @@ object SwapCombinerTest extends MutableIOSuite {
                   accState,
                   EpochProgress.MinValue,
                   allowSpends,
+                  SnapshotOrdinal.MinValue,
                   CurrencyId(destinationAddress)
                 )
 
@@ -1697,6 +1709,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -1827,6 +1840,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       swapCalculatedState = swapPendingSpendActionResponse.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
@@ -1931,6 +1945,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         tokenEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -2047,6 +2062,7 @@ object SwapCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -2055,6 +2071,7 @@ object SwapCombinerTest extends MutableIOSuite {
         swapPendingSpendActionResponse,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 

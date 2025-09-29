@@ -195,6 +195,7 @@ object PendingOperationsProcessor {
                         acc,
                         context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotSyncAllowSpends,
+                        context.currentSnapshotOrdinal,
                         context.currencyId
                       )
                       _ <- logger.debug(s"Successfully processed swap pending allow spend ${pendingUpdate.updateHash}")

@@ -39,6 +39,7 @@ trait WithdrawalCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -119,7 +120,8 @@ object WithdrawalCombinerService {
         updateHash: Hash,
         lastSyncGlobalSnapshotEpoch: EpochProgress,
         maybePricingTokenInfo: Option[PricingTokenInfo],
-        oldState: DataState[AmmOnChainState, AmmCalculatedState]
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        currentSnapshotOrdinal: SnapshotOrdinal
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = maybePricingTokenInfo match {
         case Some(WithdrawalTokenInfo(tokenAIdentifier, tokenAAmount, tokenBIdentifier, tokenBAmount)) =>
           for {
@@ -135,7 +137,8 @@ object WithdrawalCombinerService {
                 lastSyncGlobalSnapshotEpoch,
                 liquidityPool,
                 tokenAAmount,
-                tokenBAmount
+                tokenBAmount,
+                currentSnapshotOrdinal
               )
               .flatMap {
                 case Right(updatedLiquidityPool) =>
@@ -162,6 +165,7 @@ object WithdrawalCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val withdrawalUpdate = signedUpdate.value
@@ -221,7 +225,8 @@ object WithdrawalCombinerService {
                     updateHashed.hash,
                     liquidityPool,
                     withdrawalAmounts,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    currentSnapshotOrdinal
                   )
                 )
 
@@ -453,7 +458,8 @@ object WithdrawalCombinerService {
                       pendingSpendAction.updateHash,
                       globalEpochProgress,
                       pendingSpendAction.pricingTokenInfo,
-                      oldState
+                      oldState,
+                      currentSnapshotOrdinal
                     )
                     result <- handleFailedUpdate(
                       pendingSpendAction.update,

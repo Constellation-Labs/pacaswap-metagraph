@@ -212,7 +212,8 @@ case class PriceRunner[F[_]: Async](
           updatedTokenInformation.primaryTokenInformationUpdated,
           updatedTokenInformation.pairTokenInformationUpdated,
           updatedTokenInformation.grossReceived,
-          CurrencyId(owner)
+          CurrencyId(owner),
+          SnapshotOrdinal.MinValue
         )
       )
 
@@ -267,7 +268,8 @@ case class PriceRunner[F[_]: Async](
           Hash.empty,
           address,
           stakingTokenInfo,
-          EpochProgress.MinValue
+          EpochProgress.MinValue,
+          SnapshotOrdinal.MinValue
         )
       )
 
@@ -321,7 +323,8 @@ case class PriceRunner[F[_]: Async](
           Hash.empty,
           liquidityPool,
           withdrawalAmounts,
-          EpochProgress.MinValue
+          EpochProgress.MinValue,
+          SnapshotOrdinal.MinValue
         )
       )
 

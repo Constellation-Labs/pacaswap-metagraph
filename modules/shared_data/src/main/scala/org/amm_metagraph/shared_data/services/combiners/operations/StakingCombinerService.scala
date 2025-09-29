@@ -464,7 +464,8 @@ object StakingCombinerService {
                     pendingSpendAction.updateHash,
                     sourceAddress,
                     stakingTokenInfo,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    currentSnapshotOrdinal
                   )
                 )
 

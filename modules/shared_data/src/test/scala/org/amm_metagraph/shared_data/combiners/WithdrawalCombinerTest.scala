@@ -149,6 +149,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -267,6 +268,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -356,6 +358,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           state,
           EpochProgress.MinValue,
           SortedMap.empty,
+          SnapshotOrdinal.MinValue,
           CurrencyId(ownerAddress)
         )
         .attempt
@@ -432,6 +435,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -523,6 +527,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           state,
           EpochProgress(NonNegLong.unsafeFrom(100L)),
           SortedMap.empty,
+          SnapshotOrdinal.MinValue,
           CurrencyId(ownerAddress)
         )
     } yield
@@ -598,6 +603,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -707,6 +713,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -811,6 +818,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -892,6 +900,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -973,6 +982,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -1054,6 +1064,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 

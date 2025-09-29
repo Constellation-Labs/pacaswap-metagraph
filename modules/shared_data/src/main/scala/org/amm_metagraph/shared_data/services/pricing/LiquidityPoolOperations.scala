@@ -3,6 +3,7 @@ package org.amm_metagraph.shared_data.services.pricing
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -33,7 +34,8 @@ class LiquidityPoolOperations[F[_]: Async](
     updateHash: Hash,
     signerAddress: Address,
     stakingTokenInformation: StakingTokenInfo,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
     val primaryToken = stakingTokenInformation.primaryTokenInformation
     val pairToken = stakingTokenInformation.pairTokenInformation
@@ -107,7 +109,8 @@ class LiquidityPoolOperations[F[_]: Async](
             additionalInfo = Map(
               "newlyIssuedShares" -> newlyIssuedShares.toString,
               "primaryTokenAmount" -> primaryToken.amount.value.toString,
-              "pairTokenAmount" -> pairToken.amount.value.toString
+              "pairTokenAmount" -> pairToken.amount.value.toString,
+              "currencyOrdinal" -> currencyOrdinal.show
             )
           )
           .as(Right(updatedPool))
@@ -122,7 +125,8 @@ class LiquidityPoolOperations[F[_]: Async](
     fromTokenInfo: TokenInformation,
     toTokenInfo: TokenInformation,
     grossAmount: SwapAmount,
-    metagraphId: CurrencyId
+    metagraphId: CurrencyId,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
     val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
     val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
@@ -146,7 +150,8 @@ class LiquidityPoolOperations[F[_]: Async](
           "fromToken" -> fromTokenInfo.identifier.toString,
           "toToken" -> toTokenInfo.identifier.toString,
           "grossAmount" -> grossAmount.value.toString,
-          "metagraphId" -> metagraphId.toString
+          "metagraphId" -> metagraphId.toString,
+          "currencyOrdinal" -> currencyOrdinal.show
         )
       )
       .as(Right(updatedPool))
@@ -157,7 +162,8 @@ class LiquidityPoolOperations[F[_]: Async](
     updateHash: Hash,
     liquidityPool: LiquidityPool,
     withdrawalAmounts: WithdrawalTokenInfo,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
     val tokenAValue = liquidityPool.tokenA.amount.value - withdrawalAmounts.tokenAAmount.value
     val tokenBValue = liquidityPool.tokenB.amount.value - withdrawalAmounts.tokenBAmount.value
@@ -242,7 +248,8 @@ class LiquidityPoolOperations[F[_]: Async](
               "sharesToWithdraw" -> signedUpdate.shareToWithdraw.value.toString,
               "tokenAWithdrawn" -> withdrawalAmounts.tokenAAmount.value.toString,
               "tokenBWithdrawn" -> withdrawalAmounts.tokenBAmount.value.toString,
-              "remainingShares" -> totalShares.value.toString
+              "remainingShares" -> totalShares.value.toString,
+              "currencyOrdinal" -> currencyOrdinal.show
             )
           )
           .as(Right(updatedPool))

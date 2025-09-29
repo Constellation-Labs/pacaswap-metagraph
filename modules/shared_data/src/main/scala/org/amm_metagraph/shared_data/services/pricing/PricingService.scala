@@ -5,6 +5,7 @@ import java.nio.file.Paths
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
@@ -61,7 +62,8 @@ trait PricingService[F[_]] {
     updateHash: Hash,
     signerAddress: Address,
     stakingTokenInformation: StakingTokenInfo,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 
   def getUpdatedLiquidityPoolDueNewSwap(
@@ -70,7 +72,8 @@ trait PricingService[F[_]] {
     fromTokenInfo: TokenInformation,
     toTokenInfo: TokenInformation,
     grossAmount: SwapAmount,
-    metagraphId: CurrencyId
+    metagraphId: CurrencyId,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 
   def getUpdatedLiquidityPoolDueNewWithdrawal(
@@ -78,7 +81,8 @@ trait PricingService[F[_]] {
     updateHash: Hash,
     liquidityPool: LiquidityPool,
     withdrawalAmounts: WithdrawalTokenInfo,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 
   def getWithdrawalTokenInfo(
@@ -95,7 +99,8 @@ trait PricingService[F[_]] {
     liquidityPool: LiquidityPool,
     tokenAAmountToReturn: SwapAmount,
     tokenBAmountToReturn: SwapAmount,
-    metagraphId: CurrencyId
+    metagraphId: CurrencyId,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 
   def rollbackWithdrawalLiquidityPoolAmounts(
@@ -104,7 +109,8 @@ trait PricingService[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress,
     liquidityPool: LiquidityPool,
     tokenAAmountToReturn: SwapAmount,
-    tokenBAmountToReturn: SwapAmount
+    tokenBAmountToReturn: SwapAmount,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 }
 
@@ -301,7 +307,8 @@ object PricingService {
           updateHash: Hash,
           signerAddress: Address,
           stakingTokenInformation: StakingTokenInfo,
-          lastSyncGlobalEpochProgress: EpochProgress
+          lastSyncGlobalEpochProgress: EpochProgress,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           poolOps.updatePoolForStaking(
             liquidityPool,
@@ -309,7 +316,8 @@ object PricingService {
             updateHash,
             signerAddress,
             stakingTokenInformation,
-            lastSyncGlobalEpochProgress
+            lastSyncGlobalEpochProgress,
+            currencyOrdinal
           )
 
         def getUpdatedLiquidityPoolDueNewSwap(
@@ -318,7 +326,8 @@ object PricingService {
           fromTokenInfo: TokenInformation,
           toTokenInfo: TokenInformation,
           grossAmount: SwapAmount,
-          metagraphId: CurrencyId
+          metagraphId: CurrencyId,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           poolOps.updatePoolForSwap(
             hashedSwapUpdate,
@@ -326,7 +335,8 @@ object PricingService {
             fromTokenInfo,
             toTokenInfo,
             grossAmount,
-            metagraphId
+            metagraphId,
+            currencyOrdinal
           )
 
         def getUpdatedLiquidityPoolDueNewWithdrawal(
@@ -334,14 +344,16 @@ object PricingService {
           updateHash: Hash,
           liquidityPool: LiquidityPool,
           withdrawalAmounts: WithdrawalTokenInfo,
-          lastSyncGlobalEpochProgress: EpochProgress
+          lastSyncGlobalEpochProgress: EpochProgress,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           poolOps.updatePoolForWithdrawal(
             signedUpdate,
             updateHash,
             liquidityPool,
             withdrawalAmounts,
-            lastSyncGlobalEpochProgress
+            lastSyncGlobalEpochProgress,
+            currencyOrdinal
           )
 
         def getWithdrawalTokenInfo(
@@ -359,7 +371,8 @@ object PricingService {
           liquidityPool: LiquidityPool,
           tokenAAmountToReturn: SwapAmount,
           tokenBAmountToReturn: SwapAmount,
-          metagraphId: CurrencyId
+          metagraphId: CurrencyId,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           rollbackOps.rollbackSwap(
             signedUpdate,
@@ -368,7 +381,8 @@ object PricingService {
             liquidityPool,
             tokenAAmountToReturn,
             tokenBAmountToReturn,
-            metagraphId
+            metagraphId,
+            currencyOrdinal
           )
 
         def rollbackWithdrawalLiquidityPoolAmounts(
@@ -377,7 +391,8 @@ object PricingService {
           lastSyncGlobalEpochProgress: EpochProgress,
           liquidityPool: LiquidityPool,
           tokenAAmountToReturn: SwapAmount,
-          tokenBAmountToReturn: SwapAmount
+          tokenBAmountToReturn: SwapAmount,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           rollbackOps.rollbackWithdrawal(
             signedUpdate,
@@ -385,7 +400,8 @@ object PricingService {
             lastSyncGlobalEpochProgress,
             liquidityPool,
             tokenAAmountToReturn,
-            tokenBAmountToReturn
+            tokenBAmountToReturn,
+            currencyOrdinal
           )
       }
     }

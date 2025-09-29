@@ -3,6 +3,7 @@ package org.amm_metagraph.shared_data.services.pricing
 import cats.effect.Async
 import cats.syntax.all._
 
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
@@ -30,7 +31,8 @@ class RollbackOperations[F[_]: Async](
     liquidityPool: LiquidityPool,
     tokenAAmountToReturn: SwapAmount,
     tokenBAmountToReturn: SwapAmount,
-    metagraphId: CurrencyId
+    metagraphId: CurrencyId,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
     val tokenAIsFrom = liquidityPool.tokenA.identifier === signedUpdate.swapFromPair
     val tokenBIsTo = liquidityPool.tokenB.identifier === signedUpdate.swapToPair
@@ -82,7 +84,8 @@ class RollbackOperations[F[_]: Async](
               "tokenBReturned" -> tokenBAmountToReturn.value.toString,
               "metagraphId" -> metagraphId.toString,
               "swapFromPair" -> signedUpdate.swapFromPair.toString,
-              "swapToPair" -> signedUpdate.swapToPair.toString
+              "swapToPair" -> signedUpdate.swapToPair.toString,
+              "currencyOrdinal" -> currencyOrdinal.show
             )
           )
           .as(Right(updatedPool))
@@ -97,7 +100,8 @@ class RollbackOperations[F[_]: Async](
     lastSyncGlobalEpochProgress: EpochProgress,
     liquidityPool: LiquidityPool,
     tokenAAmountToReturn: SwapAmount,
-    tokenBAmountToReturn: SwapAmount
+    tokenBAmountToReturn: SwapAmount,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
     val expireEpochProgress = getFailureExpireEpochProgress(config, lastSyncGlobalEpochProgress)
 
@@ -131,7 +135,8 @@ class RollbackOperations[F[_]: Async](
             additionalInfo = Map(
               "tokenAReturned" -> tokenAAmountToReturn.value.toString,
               "tokenBReturned" -> tokenBAmountToReturn.value.toString,
-              "originalSharesWithdrawn" -> signedUpdate.shareToWithdraw.value.toString
+              "originalSharesWithdrawn" -> signedUpdate.shareToWithdraw.value.toString,
+              "currencyOrdinal" -> currencyOrdinal.show
             )
           )
           .as(Right(updatedPool))

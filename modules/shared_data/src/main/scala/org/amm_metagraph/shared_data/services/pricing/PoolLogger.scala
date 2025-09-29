@@ -8,6 +8,8 @@ import java.time.{Instant, ZoneOffset}
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.util.{Failure, Success, Using}
+
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.hash.Hash
@@ -60,12 +62,13 @@ object PoolLogger {
             logger.debug(s"Writing balance change for operation: ${change.operation}") *>
             Async[F].delay {
               val logEntry = formatLogEntry(change)
-              val writer = new PrintWriter(new FileWriter(logFilePath, true))
-              try {
+              Using(new PrintWriter(new FileWriter(logFilePath, true))) { writer =>
                 writer.println(logEntry)
                 writer.flush()
-              } finally
-                writer.close()
+              } match {
+                case Success(_)  => ()
+                case Failure(ex) => throw ex
+              }
             }.handleErrorWith { ex =>
               logger.error(ex)(s"Failed to write log entry for operation: ${change.operation}")
             } *> logger.debug(s"Successfully wrote balance change for operation: ${change.operation}")
