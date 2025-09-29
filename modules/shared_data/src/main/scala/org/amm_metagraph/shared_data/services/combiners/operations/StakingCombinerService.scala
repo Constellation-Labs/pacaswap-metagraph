@@ -30,6 +30,8 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.StakingValidations
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 trait StakingCombinerService[F[_]] {
   def combineNew(
@@ -71,10 +73,12 @@ object StakingCombinerService {
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): StakingCombinerService[F] =
     new StakingCombinerService[F] {
+      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
+
       private def getUpdateAllowSpends(
         stakingUpdate: StakingUpdate,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]
-      ) =
+      ): F[(Option[io.constellationnetwork.security.Hashed[AllowSpend]], Option[io.constellationnetwork.security.Hashed[AllowSpend]])] =
         HasherSelector[F].withBrotli { implicit hs =>
           getAllowSpendsGlobalSnapshotsState(
             stakingUpdate.tokenAAllowSpend,
@@ -92,9 +96,10 @@ object StakingCombinerService {
         stakingCalculatedState: StakingCalculatedState,
         updateHash: Hash,
         currentState: StateTransitionType
-      ) =
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         failedCalculatedState.reason match {
-          case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
+          case DuplicatedUpdate(_) =>
+            logger.warn("Duplicated data update, ignoring") >> acc.pure[F]
           case _ =>
             val updatedStakingCalculatedState = stakingCalculatedState
               .focus(_.failed)
@@ -106,29 +111,29 @@ object StakingCombinerService {
               .focus(_.operations)
               .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
 
-            Async[F].pure(
-              acc
-                .focus(_.onChain.updatedStateDataUpdate)
-                .modify { current =>
-                  current + UpdatedStateDataUpdate(
-                    currentState,
-                    Failed,
-                    OperationType.Staking,
-                    stakingUpdate,
-                    updateHash,
-                    none,
-                    failedCalculatedState.reason.some
-                  )
-                }
-                .focus(_.calculated)
-                .replace(updatedCalculatedState)
+            val dataUpdate = UpdatedStateDataUpdate(
+              currentState,
+              Failed,
+              OperationType.Staking,
+              stakingUpdate.asInstanceOf[Signed[AmmUpdate]],
+              updateHash,
+              None,
+              Some(failedCalculatedState.reason)
             )
+
+            val result = acc
+              .focus(_.onChain.updatedStateDataUpdate)
+              .modify(_ + dataUpdate)
+              .focus(_.calculated)
+              .replace(updatedCalculatedState)
+
+            result.pure[F]
         }
 
       private def removePendingAllowSpend(
         stakingCalculatedState: StakingCalculatedState,
         signedStakingUpdate: Signed[StakingUpdate]
-      ) =
+      ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
           case PendingAllowSpend(update, _, _) if update === signedStakingUpdate => true
           case _                                                                 => false
@@ -137,7 +142,7 @@ object StakingCombinerService {
       private def removePendingSpendAction(
         stakingCalculatedState: StakingCalculatedState,
         signedStakingUpdate: Signed[StakingUpdate]
-      ) =
+      ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
           case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
           case _                                                                     => false
@@ -162,13 +167,15 @@ object StakingCombinerService {
 
         val stakingUpdate = signedUpdate.value
         val combinedState = for {
+          _ <- EitherT.liftF[F, FailedCalculatedState, Unit](logger.info(s"Processing new staking update from ${signedUpdate.source}"))
+
           _ <- EitherT(
             stakingValidations.l0Validations(
               signedUpdate,
               oldState.calculated,
               globalEpochProgress
             )
-          )
+          ).leftWiden[FailedCalculatedState]
           _ <- EitherT(
             stakingValidations.newUpdateValidations(
               oldState.calculated,
@@ -177,10 +184,16 @@ object StakingCombinerService {
               confirmedStakings,
               pendingStakings
             )
+          ).leftWiden[FailedCalculatedState]
+          updateAllowSpends <- EitherT.liftF[
+            F,
+            FailedCalculatedState,
+            (Option[io.constellationnetwork.security.Hashed[AllowSpend]], Option[io.constellationnetwork.security.Hashed[AllowSpend]])
+          ](getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
+          updateHashed <- EitherT.liftF[F, FailedCalculatedState, io.constellationnetwork.security.Hashed[StakingUpdate]](updateHashedF)
+          poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
+            buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           )
-          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
-          updateHashed <- EitherT.liftF(updateHashedF)
-          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
           stakingTokenInfo <- EitherT(
             pricingService
               .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress)
@@ -190,7 +203,7 @@ object StakingCombinerService {
               val pendingAllowSpend = PendingAllowSpend(
                 signedUpdate,
                 updateHashed.hash,
-                stakingTokenInfo.some
+                Some(stakingTokenInfo)
               )
 
               val updatedPendingCalculatedState = pendingAllowSpendsCalculatedState + pendingAllowSpend
@@ -202,42 +215,47 @@ object StakingCombinerService {
                 .focus(_.operations)
                 .modify(_.updated(OperationType.Staking, newStakingState))
 
-              EitherT.rightT[F, FailedCalculatedState](
-                oldState
-                  .focus(_.onChain.updatedStateDataUpdate)
-                  .modify { current =>
-                    current + UpdatedStateDataUpdate(
-                      NewUpdate,
-                      PendingAllowSpends,
-                      OperationType.Staking,
-                      signedUpdate,
-                      updateHashed.hash,
-                      Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
-                    )
-                  }
-                  .focus(_.calculated)
-                  .replace(updatedCalculatedState)
+              val dataUpdate = UpdatedStateDataUpdate(
+                NewUpdate,
+                PendingAllowSpends,
+                OperationType.Staking,
+                signedUpdate.asInstanceOf[Signed[AmmUpdate]],
+                updateHashed.hash,
+                Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
+              )
+
+              EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
+                logger.warn(s"Allow spend not confirmed, storing as pending") >>
+                  oldState
+                    .focus(_.onChain.updatedStateDataUpdate)
+                    .modify(_ + dataUpdate)
+                    .focus(_.calculated)
+                    .replace(updatedCalculatedState)
+                    .pure[F]
               )
 
             case (Some(_), Some(_)) =>
               EitherT.liftF[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]](
-                combinePendingAllowSpend(
-                  PendingAllowSpend(signedUpdate, updateHashed.hash, stakingTokenInfo.some),
-                  oldState,
-                  globalEpochProgress,
-                  lastGlobalSnapshotsAllowSpends,
-                  currencyId
-                )
+                logger.info(s"Allow spend confirmed, processing immediately") >>
+                  combinePendingAllowSpend(
+                    PendingAllowSpend(signedUpdate, updateHashed.hash, Some(stakingTokenInfo)),
+                    oldState,
+                    globalEpochProgress,
+                    lastGlobalSnapshotsAllowSpends,
+                    currencyId
+                  )
               )
           }
         } yield response
 
         combinedState.foldF(
           failed =>
-            updateHashedF.flatMap(hashed =>
-              handleFailedUpdate(signedUpdate, oldState, failed, stakingCalculatedState, hashed.hash, NewUpdate)
-            ),
-          success => success.pure[F]
+            for {
+              _ <- logger.error(s"Failed to process staking update: ${failed.reason}")
+              updateHashed <- updateHashedF
+              result <- handleFailedUpdate(signedUpdate, oldState, failed, stakingCalculatedState, updateHashed.hash, NewUpdate)
+            } yield result,
+          success => logger.info("Successfully processed staking update") >> success.pure[F]
         )
       }
 
@@ -255,7 +273,12 @@ object StakingCombinerService {
           case stakingTokenInfo: StakingTokenInfo => stakingTokenInfo
         }
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          updateAllowSpends <- EitherT.liftF(getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
+          _ <- EitherT.liftF[F, FailedCalculatedState, Unit](logger.info(s"Processing pending allow spend"))
+          updateAllowSpends <- EitherT.liftF[
+            F,
+            FailedCalculatedState,
+            (Option[io.constellationnetwork.security.Hashed[AllowSpend]], Option[io.constellationnetwork.security.Hashed[AllowSpend]])
+          ](getUpdateAllowSpends(stakingUpdate, lastGlobalSnapshotsAllowSpends))
           result <- updateAllowSpends match {
             case (Some(allowSpendTokenA), Some(allowSpendTokenB)) =>
               for {
@@ -266,7 +289,7 @@ object StakingCombinerService {
                     getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
                     pendingAllowSpendUpdate.updateHash,
                     pendingAllowSpendUpdate.update
-                  )
+                  ): FailedCalculatedState
                 )
                 _ <- EitherT(
                   stakingValidations.pendingAllowSpendsValidations(
@@ -277,7 +300,7 @@ object StakingCombinerService {
                     allowSpendTokenA,
                     allowSpendTokenB
                   )
-                )
+                ).leftWiden[FailedCalculatedState]
                 (amountToSpendA, amountToSpendB) =
                   if (stakingUpdate.tokenAId === stakingTokenInfo.primaryTokenInformation.identifier) {
                     (
@@ -319,19 +342,19 @@ object StakingCombinerService {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Staking, updatedStakingCalculatedState))
 
+                dataUpdate = UpdatedStateDataUpdate(
+                  PendingAllowSpends,
+                  PendingSpendTransactions,
+                  OperationType.Staking,
+                  pendingAllowSpendUpdate.update.asInstanceOf[Signed[AmmUpdate]],
+                  pendingAllowSpendUpdate.updateHash,
+                  Some(pendingSpendAction.asInstanceOf[PendingAction[AmmUpdate]])
+                )
+
               } yield
                 oldState
                   .focus(_.onChain.updatedStateDataUpdate)
-                  .modify { current =>
-                    current + UpdatedStateDataUpdate(
-                      PendingAllowSpends,
-                      PendingSpendTransactions,
-                      OperationType.Staking,
-                      pendingAllowSpendUpdate.update,
-                      pendingAllowSpendUpdate.updateHash,
-                      Some(pendingSpendAction.asInstanceOf[PendingAction[AmmUpdate]])
-                    )
-                  }
+                  .modify(_ + dataUpdate)
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
                   .focus(_.sharedArtifacts)
@@ -342,7 +365,7 @@ object StakingCombinerService {
                   )
 
             case _ =>
-              if (pendingAllowSpendUpdate.update.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (pendingAllowSpendUpdate.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingAllowSpendUpdate.update),
@@ -359,15 +382,18 @@ object StakingCombinerService {
 
         combinedState.foldF(
           failed =>
-            handleFailedUpdate(
-              pendingAllowSpendUpdate.update,
-              oldState,
-              failed,
-              stakingCalculatedState,
-              pendingAllowSpendUpdate.updateHash,
-              PendingAllowSpends
-            ),
-          success => success.pure[F]
+            for {
+              _ <- logger.error(s"Failed to process pending allow spend: ${failed.reason}")
+              result <- handleFailedUpdate(
+                pendingAllowSpendUpdate.update,
+                oldState,
+                failed,
+                stakingCalculatedState,
+                pendingAllowSpendUpdate.updateHash,
+                PendingAllowSpends
+              )
+            } yield result,
+          success => logger.info("Successfully processed pending allow spend") >> success.pure[F]
         )
       }
 
@@ -391,19 +417,19 @@ object StakingCombinerService {
               pendingSpendAction.update,
               globalEpochProgress
             )
-          )
-          metagraphGeneratedSpendActionHash <- EitherT.liftF(
+          ).leftWiden[FailedCalculatedState]
+          metagraphGeneratedSpendActionHash <- EitherT.liftF[F, FailedCalculatedState, Hash](
             HasherSelector[F].withCurrent(implicit hs => Hasher[F].hash(pendingSpendAction.generatedSpendAction))
           )
-          globalSnapshotsHashes <- EitherT.liftF(
+          globalSnapshotsHashes <- EitherT.liftF[F, FailedCalculatedState, List[Hash]](
             HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
           )
-          allSpendActionsAccepted <- EitherT.liftF {
-            Async[F].pure(checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes))
+          allSpendActionsAccepted <- EitherT.liftF[F, FailedCalculatedState, Boolean] {
+            checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes).pure[F]
           }
           result <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
@@ -417,9 +443,13 @@ object StakingCombinerService {
               }
             } else {
               for {
-                poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId))
-                liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
-                stakingReference <- EitherT.liftF(
+                poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
+                  buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
+                )
+                liquidityPool <- EitherT.liftF[F, FailedCalculatedState, LiquidityPool](
+                  getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+                )
+                stakingReference <- EitherT.liftF[F, FailedCalculatedState, StakingReference](
                   HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
                 )
                 sourceAddress = signedStakingUpdate.source
@@ -483,19 +513,19 @@ object StakingCombinerService {
                   .focus(_.operations)
                   .modify(_.updated(OperationType.LiquidityPool, updatedLiquidityPool))
 
+                dataUpdate = UpdatedStateDataUpdate(
+                  PendingSpendTransactions,
+                  Confirmed,
+                  OperationType.Staking,
+                  pendingSpendAction.update.asInstanceOf[Signed[AmmUpdate]],
+                  pendingSpendAction.updateHash,
+                  None
+                )
+
               } yield
                 oldState
                   .focus(_.onChain.updatedStateDataUpdate)
-                  .modify { current =>
-                    current + UpdatedStateDataUpdate(
-                      PendingSpendTransactions,
-                      Confirmed,
-                      OperationType.Staking,
-                      pendingSpendAction.update,
-                      pendingSpendAction.updateHash,
-                      none
-                    )
-                  }
+                  .modify(_ + dataUpdate)
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
             }
@@ -503,15 +533,18 @@ object StakingCombinerService {
 
         combinedState.foldF(
           failed =>
-            handleFailedUpdate(
-              pendingSpendAction.update,
-              oldState,
-              failed,
-              stakingCalculatedState,
-              pendingSpendAction.updateHash,
-              PendingSpendTransactions
-            ),
-          success => success.pure[F]
+            for {
+              _ <- logger.error(s"Failed to process pending spend action: ${failed.reason}")
+              result <- handleFailedUpdate(
+                pendingSpendAction.update,
+                oldState,
+                failed,
+                stakingCalculatedState,
+                pendingSpendAction.updateHash,
+                PendingSpendTransactions
+              )
+            } yield result,
+          success => logger.info("Successfully processed pending spend action") >> success.pure[F]
         )
       }
 

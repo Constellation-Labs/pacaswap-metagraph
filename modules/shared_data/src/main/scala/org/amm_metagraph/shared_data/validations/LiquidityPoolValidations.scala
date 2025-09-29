@@ -253,6 +253,7 @@ object LiquidityPoolValidations {
             case ApplicationConfig.Dev | ApplicationConfig.Testnet => valid
             case _                                                 => FeePercentageTotalMustBeGreaterThanZero.invalidNec
           }
+        else if (feePercentages.total == Percentage.one) FeePercentageTotalMustBeLessThanOne.invalidNec
         else
           valid
 

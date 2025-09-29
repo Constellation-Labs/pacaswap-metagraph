@@ -6,7 +6,7 @@ import cats.data.Validated.{Invalid, Valid}
 import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
-import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
@@ -30,14 +30,13 @@ import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig._
+import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs
 import org.amm_metagraph.shared_data.types.codecs.JsonWithBase64BinaryCodec
 import org.amm_metagraph.shared_data.validations.Errors._
-import org.amm_metagraph.shared_data.validations.SwapValidationTest.expect
-import org.amm_metagraph.shared_data.validations._
 import weaver.MutableIOSuite
 
 object LiquidityPoolValidationTest extends MutableIOSuite {
@@ -89,7 +88,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     Eq.fromUniversalEquals
 
   test("Validate update successfully") { implicit res =>
-    implicit val (h, hs, sp) = res
+    implicit val (_, hs, sp) = res
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
@@ -134,7 +133,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
   }
 
   test("Validate update fail - both tokens none") { implicit res =>
-    implicit val (h, hs, sp) = res
+    implicit val (_, hs, sp) = res
 
     val primaryToken = TokenInformation(none, 100L)
     val pairToken = TokenInformation(none, 50L)
@@ -302,7 +301,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
   }
 
   test("Validate data fail - pool already exists") { implicit res =>
-    implicit val (h, hs, sp) = res
+    implicit val (_, hs, sp) = res
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
@@ -331,17 +330,6 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
     val fakeSignedUpdate = getFakeSignedUpdate(liquidityPoolUpdate)
 
     for {
-      keyPair <- KeyPairGenerator.makeKeyPair[IO]
-      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
-        keyPair,
-        SortedMap.empty,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        SortedMap.empty,
-        EpochProgress.MinValue,
-        SnapshotOrdinal.MinValue,
-        ownerAddress
-      )
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
       response <- liquidityPoolValidations.l0Validations(fakeSignedUpdate, state.calculated, EpochProgress.MaxValue)
@@ -357,7 +345,7 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
   }
 
   test("Validate update fail - fees as 0 on mainnet environment") { implicit res =>
-    implicit val (h, hs, sp) = res
+    implicit val (_, hs, sp) = res
 
     val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
     val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
@@ -398,6 +386,50 @@ object LiquidityPoolValidationTest extends MutableIOSuite {
       )
       response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
     } yield expect(response == Errors.FeePercentageTotalMustBeGreaterThanZero.invalidNec)
+  }
+
+  test("Validate update fail - fees as 1") { implicit res =>
+    implicit val (_, hs, sp) = res
+
+    val primaryToken = TokenInformation(CurrencyId(Address("DAG0DQPuvVThrHnz66S4V6cocrtpg59oesAWyRMb")).some, 100L)
+    val pairToken = TokenInformation(CurrencyId(Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5")).some, 50L)
+    val context: L1NodeContext[IO] = buildL1NodeContext(
+      ammMetagraphId
+    )
+
+    val liquidityPoolUpdate = LiquidityPoolUpdate(
+      ammMetagraphIdAsCurrencyId,
+      sourceAddress,
+      Hash.empty,
+      Hash.empty,
+      primaryToken.identifier,
+      pairToken.identifier,
+      primaryToken.amount,
+      pairToken.amount,
+      EpochProgress.MaxValue,
+      FeeDistributor.empty.copy(total = Percentage.one, providers = Percentage.one).some
+    )
+
+    for {
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config.copy(environment = Mainnet), jsonBase64BinaryCodec)
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardWithdrawValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+
+      validationService = ValidationService.make[IO](
+        config,
+        liquidityPoolValidations,
+        stakingValidations,
+        swapValidations,
+        withdrawalValidations,
+        governanceValidations,
+        rewardWithdrawValidations
+      )
+      response <- validationService.validateUpdate(liquidityPoolUpdate)(context)
+    } yield expect(response == Errors.FeePercentageTotalMustBeLessThanOne.invalidNec)
   }
 
 }

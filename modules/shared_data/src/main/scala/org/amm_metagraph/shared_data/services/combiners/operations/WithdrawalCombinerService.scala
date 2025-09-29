@@ -30,6 +30,8 @@ import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 trait WithdrawalCombinerService[F[_]] {
   def combineNew(
@@ -62,6 +64,8 @@ object WithdrawalCombinerService {
     dataUpdateCodec: JsonWithBase64BinaryCodec[F, AmmUpdate]
   ): WithdrawalCombinerService[F] =
     new WithdrawalCombinerService[F] {
+      def logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
+
       private def handleFailedUpdate(
         withdrawalUpdate: Signed[WithdrawalUpdate],
         acc: DataState[AmmOnChainState, AmmCalculatedState],
@@ -69,9 +73,10 @@ object WithdrawalCombinerService {
         withdrawalCalculatedState: WithdrawalCalculatedState,
         updateHash: Hash,
         currentState: StateTransitionType
-      ) =
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         failedCalculatedState.reason match {
-          case DuplicatedUpdate(_) => logger.warn("Duplicated data update, ignoring") >> acc.pure
+          case DuplicatedUpdate(_) =>
+            logger.warn("Duplicated data update, ignoring") >> acc.pure[F]
           case _ =>
             val updatedWithdrawalCalculatedState = withdrawalCalculatedState
               .focus(_.failed)
@@ -83,23 +88,23 @@ object WithdrawalCombinerService {
               .focus(_.operations)
               .modify(_.updated(OperationType.Withdrawal, updatedWithdrawalCalculatedState))
 
-            Async[F].pure(
-              acc
-                .focus(_.onChain.updatedStateDataUpdate)
-                .modify { current =>
-                  current + UpdatedStateDataUpdate(
-                    currentState,
-                    Failed,
-                    OperationType.Withdrawal,
-                    withdrawalUpdate,
-                    updateHash,
-                    none,
-                    failedCalculatedState.reason.some
-                  )
-                }
-                .focus(_.calculated)
-                .replace(updatedCalculatedState)
+            val dataUpdate = UpdatedStateDataUpdate(
+              currentState,
+              Failed,
+              OperationType.Withdrawal,
+              withdrawalUpdate.asInstanceOf[Signed[AmmUpdate]],
+              updateHash,
+              None,
+              Some(failedCalculatedState.reason)
             )
+
+            val result = acc
+              .focus(_.onChain.updatedStateDataUpdate)
+              .modify(_ + dataUpdate)
+              .focus(_.calculated)
+              .replace(updatedCalculatedState)
+
+            result.pure[F]
         }
 
       private def removePendingSpendAction(
@@ -117,44 +122,37 @@ object WithdrawalCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState]
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = maybePricingTokenInfo match {
         case Some(WithdrawalTokenInfo(tokenAIdentifier, tokenAAmount, tokenBIdentifier, tokenBAmount)) =>
-          (for {
-            poolId <- EitherT.liftF(
-              buildLiquidityPoolUniqueIdentifier(
-                tokenAIdentifier,
-                tokenBIdentifier
-              )
-            )
-
+          for {
+            _ <- logger.debug(s"Rolling back withdrawal liquidity pool amounts for ${signedUpdate.source}")
+            poolId <- buildLiquidityPoolUniqueIdentifier(tokenAIdentifier, tokenBIdentifier)
             liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
+            liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolCalculatedState.confirmed.value, poolId)
 
-            liquidityPool <- EitherT.liftF(
-              getLiquidityPoolByPoolId(liquidityPoolCalculatedState.confirmed.value, poolId)
-            )
+            rollbackResult <- pricingService.rollbackWithdrawalLiquidityPoolAmounts(
+              signedUpdate,
+              updateHash,
+              lastSyncGlobalSnapshotEpoch,
+              liquidityPool,
+              tokenAAmount,
+              tokenBAmount
+            ) match {
+              case Right(updatedLiquidityPool) =>
+                val newLiquidityPoolState = liquidityPoolCalculatedState
+                  .focus(_.confirmed.value)
+                  .modify(_.updated(poolId.value, updatedLiquidityPool))
 
-            updatedLiquidityPool <- EitherT.fromEither(
-              pricingService.rollbackWithdrawalLiquidityPoolAmounts(
-                signedUpdate,
-                updateHash,
-                lastSyncGlobalSnapshotEpoch,
-                liquidityPool,
-                tokenAAmount,
-                tokenBAmount
-              )
-            )
+                val updatedCalculatedState = oldState.calculated
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
-            updatedState = {
-              val newLiquidityPoolState = liquidityPoolCalculatedState
-                .focus(_.confirmed.value)
-                .modify(_.updated(poolId.value, updatedLiquidityPool))
-
-              val updatedCalculatedState = oldState.calculated
-                .focus(_.operations)
-                .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
-
-              oldState.copy(calculated = updatedCalculatedState)
+                val updatedState = oldState.copy(calculated = updatedCalculatedState)
+                logger.debug(s"Successfully rolled back withdrawal liquidity pool amounts") >> updatedState.pure[F]
+              case Left(error) =>
+                logger.warn(s"Failed to rollback withdrawal amounts: $error") >> oldState.pure[F]
             }
-          } yield updatedState).valueOrF(_ => oldState.pure)
-        case _ => oldState.pure
+          } yield rollbackResult
+        case _ =>
+          logger.debug("No withdrawal token info available for rollback") >> oldState.pure[F]
       }
 
       override def combineNew(
@@ -168,107 +166,134 @@ object WithdrawalCombinerService {
         val withdrawalCalculatedState = getWithdrawalCalculatedState(oldState.calculated)
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
 
-        if (withdrawalCalculatedState.pending.exists(_.update === signedUpdate)) {
-          return oldState.pure[F]
-        }
-        val updateHashedF = HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
-
-        val combinedState = for {
-          _ <- EitherT(
-            withdrawalValidations.l0Validations(
-              signedUpdate,
-              oldState.calculated,
-              globalEpochProgress
-            )
+        for {
+          _ <- logger.info(
+            s"Processing new withdrawal update from ${signedUpdate.source}: shareToWithdraw=${withdrawalUpdate.shareToWithdraw}"
           )
 
-          poolId <- EitherT.liftF(buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId))
-          liquidityPool <- EitherT.liftF(getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId))
-          updateHashed <- EitherT.liftF(updateHashedF)
-          withdrawalAmounts <- EitherT.fromEither[F](
-            pricingService.getWithdrawalTokenInfo(
-              signedUpdate,
-              updateHashed.hash,
-              liquidityPool,
-              globalEpochProgress
-            )
-          )
+          // Early return if already pending
+          result <-
+            if (withdrawalCalculatedState.pending.exists(_.update === signedUpdate)) {
+              logger.warn(s"Withdrawal update ${signedUpdate.source} already pending, ignoring") >> oldState.pure[F]
+            } else {
+              val updateHashedF = HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
 
-          updatedPool <- EitherT.fromEither[F](
-            pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
-              signedUpdate,
-              updateHashed.hash,
-              liquidityPool,
-              withdrawalAmounts,
-              globalEpochProgress
-            )
-          )
+              val combinedState = for {
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](logger.debug(s"Starting validation for withdrawal update"))
 
-          _ <- EitherT(
-            withdrawalValidations.newUpdateValidations(
-              signedUpdate,
-              withdrawalAmounts,
-              globalEpochProgress,
-              updatedPool
-            )
-          )
+                _ <- EitherT(
+                  withdrawalValidations.l0Validations(
+                    signedUpdate,
+                    oldState.calculated,
+                    globalEpochProgress
+                  )
+                ).leftWiden[FailedCalculatedState]
 
-          spendAction = generateSpendActionWithoutAllowSpends(
-            signedUpdate.tokenAId,
-            withdrawalAmounts.tokenAAmount,
-            signedUpdate.tokenBId,
-            withdrawalAmounts.tokenBAmount,
-            signedUpdate.source,
-            currencyId
-          )
+                poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
+                  buildLiquidityPoolUniqueIdentifier(withdrawalUpdate.tokenAId, withdrawalUpdate.tokenBId)
+                )
+                liquidityPool <- EitherT.liftF[F, FailedCalculatedState, LiquidityPool](
+                  getLiquidityPoolByPoolId(liquidityPoolsCalculatedState.confirmed.value, poolId)
+                )
+                updateHashed <- EitherT
+                  .liftF[F, FailedCalculatedState, io.constellationnetwork.security.Hashed[WithdrawalUpdate]](updateHashedF)
 
-          newLiquidityPoolState = liquidityPoolsCalculatedState
-            .focus(_.confirmed.value)
-            .modify(_.updated(poolId.value, updatedPool))
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](logger.debug(s"Getting withdrawal token info for pool ${poolId}"))
+                withdrawalAmounts <- EitherT.fromEither[F](
+                  pricingService.getWithdrawalTokenInfo(
+                    signedUpdate,
+                    updateHashed.hash,
+                    liquidityPool,
+                    globalEpochProgress
+                  )
+                )
 
-          pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, withdrawalAmounts.some)
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](
+                  logger.debug(
+                    s"Withdrawal amounts calculated: tokenA=${withdrawalAmounts.tokenAAmount}, tokenB=${withdrawalAmounts.tokenBAmount}"
+                  )
+                )
+                updatedPool <- EitherT.fromEither[F](
+                  pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
+                    signedUpdate,
+                    updateHashed.hash,
+                    liquidityPool,
+                    withdrawalAmounts,
+                    globalEpochProgress
+                  )
+                )
 
-          updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
-            .focus(_.pending)
-            .replace(
-              withdrawalCalculatedState.pending + pendingAllowSpend
-            )
+                _ <- EitherT(
+                  withdrawalValidations.newUpdateValidations(
+                    signedUpdate,
+                    withdrawalAmounts,
+                    globalEpochProgress,
+                    updatedPool
+                  )
+                ).leftWiden[FailedCalculatedState]
 
-          updatedCalculatedState = oldState.calculated
-            .focus(_.operations)
-            .modify(_.updated(OperationType.Withdrawal, updatedPendingWithdrawalCalculatedState))
-            .focus(_.operations)
-            .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+                spendAction = generateSpendActionWithoutAllowSpends(
+                  signedUpdate.value.tokenAId,
+                  withdrawalAmounts.tokenAAmount,
+                  signedUpdate.value.tokenBId,
+                  withdrawalAmounts.tokenBAmount,
+                  signedUpdate.source,
+                  currencyId
+                )
 
-        } yield
-          oldState
-            .focus(_.onChain.updatedStateDataUpdate)
-            .modify { current =>
-              current + UpdatedStateDataUpdate(
-                NewUpdate,
-                PendingAllowSpends,
-                OperationType.Withdrawal,
-                signedUpdate,
-                updateHashed.hash,
-                Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
+                newLiquidityPoolState = liquidityPoolsCalculatedState
+                  .focus(_.confirmed.value)
+                  .modify(_.updated(poolId.value, updatedPool))
+
+                pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, Some(withdrawalAmounts))
+
+                updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
+                  .focus(_.pending)
+                  .replace(
+                    withdrawalCalculatedState.pending + pendingAllowSpend
+                  )
+
+                updatedCalculatedState = oldState.calculated
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.Withdrawal, updatedPendingWithdrawalCalculatedState))
+                  .focus(_.operations)
+                  .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+
+                dataUpdate = UpdatedStateDataUpdate(
+                  NewUpdate,
+                  PendingAllowSpends,
+                  OperationType.Withdrawal,
+                  signedUpdate.asInstanceOf[Signed[AmmUpdate]],
+                  updateHashed.hash,
+                  Some(pendingAllowSpend.asInstanceOf[PendingAction[AmmUpdate]])
+                )
+
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](logger.debug(s"Successfully created pending withdrawal spend action"))
+
+              } yield
+                oldState
+                  .focus(_.onChain.updatedStateDataUpdate)
+                  .modify(_ + dataUpdate)
+                  .focus(_.calculated)
+                  .replace(updatedCalculatedState)
+                  .focus(_.sharedArtifacts)
+                  .modify(current =>
+                    current ++ SortedSet[SharedArtifact](
+                      spendAction
+                    )
+                  )
+
+              combinedState.foldF(
+                failed =>
+                  for {
+                    _ <- logger.error(s"Failed to process withdrawal update: ${failed.reason}")
+                    updateHashed <- updateHashedF
+                    result <- handleFailedUpdate(signedUpdate, oldState, failed, withdrawalCalculatedState, updateHashed.hash, NewUpdate)
+                  } yield result,
+                success => logger.info("Successfully processed withdrawal update") >> success.pure[F]
               )
             }
-            .focus(_.calculated)
-            .replace(updatedCalculatedState)
-            .focus(_.sharedArtifacts)
-            .modify(current =>
-              current ++ SortedSet[SharedArtifact](
-                spendAction
-              )
-            )
-
-        combinedState.foldF(
-          failed =>
-            updateHashedF.flatMap(hashed =>
-              handleFailedUpdate(signedUpdate, oldState, failed, withdrawalCalculatedState, hashed.hash, NewUpdate)
-            ),
-          success => success.pure[F]
-        )
+        } yield result
       }
 
       override def combinePendingSpendAction(
@@ -283,42 +308,51 @@ object WithdrawalCombinerService {
         val withdrawalUpdate = pendingSpendAction.update.value
 
         for {
+          _ <- logger.info(
+            s"Processing withdrawal spend action from ${signedWithdrawalUpdate.source}: shareToWithdraw=${withdrawalUpdate.shareToWithdraw}"
+          )
+
           metagraphGeneratedSpendActionHash <- HasherSelector[F].withCurrent(implicit hs =>
             Hasher[F].hash(pendingSpendAction.generatedSpendAction)
           )
           globalSnapshotsHashes <- HasherSelector[F].withCurrent(implicit hs => spendActions.traverse(action => Hasher[F].hash(action)))
           allSpendActionsAccepted = checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes)
 
+          _ <- logger.debug(s"Spend action accepted: $allSpendActionsAccepted")
+
           combinedState <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.maxValidGsEpochProgress <= globalEpochProgress) {
-                val failedState = FailedCalculatedState(
-                  OperationExpired(pendingSpendAction.update),
-                  getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
-                  pendingSpendAction.updateHash,
-                  pendingSpendAction.update
-                )
-                handleFailedUpdate(
-                  pendingSpendAction.update,
-                  oldState,
-                  failedState,
-                  withdrawalCalculatedState,
-                  pendingSpendAction.updateHash,
-                  PendingSpendTransactions
-                )
+              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+                logger.warn(s"Withdrawal spend action expired for ${signedWithdrawalUpdate.source}") >> {
+                  val failedState = FailedCalculatedState(
+                    OperationExpired(pendingSpendAction.update),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingSpendAction.updateHash,
+                    pendingSpendAction.update
+                  )
+                  handleFailedUpdate(
+                    pendingSpendAction.update,
+                    oldState,
+                    failedState,
+                    withdrawalCalculatedState,
+                    pendingSpendAction.updateHash,
+                    PendingSpendTransactions
+                  )
+                }
               } else {
-                oldState.pure[F]
+                logger.debug(s"Withdrawal spend action not yet expired, keeping pending") >> oldState.pure[F]
               }
             } else {
+              logger.info(s"Processing confirmed withdrawal spend action for ${signedWithdrawalUpdate.source}")
               val processingState = for {
                 _ <- EitherT(
                   withdrawalValidations.pendingSpendActionsValidation(
                     signedWithdrawalUpdate,
                     globalEpochProgress
                   )
-                )
+                ).leftWiden[FailedCalculatedState]
 
-                withdrawalReference <- EitherT.liftF(
+                withdrawalReference <- EitherT.liftF[F, FailedCalculatedState, WithdrawalReference](
                   HasherSelector[F].withCurrent(implicit hs => WithdrawalReference.of(signedWithdrawalUpdate))
                 )
 
@@ -333,6 +367,12 @@ object WithdrawalCombinerService {
                     getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
                     pendingSpendAction.updateHash,
                     pendingSpendAction.update
+                  ): FailedCalculatedState
+                )
+
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](
+                  logger.debug(
+                    s"Creating withdrawal calculated state for ${withdrawalAmounts.tokenAAmount}/${withdrawalAmounts.tokenBAmount}"
                   )
                 )
 
@@ -382,32 +422,38 @@ object WithdrawalCombinerService {
                 updatedCalculatedState = oldState.calculated
                   .focus(_.operations)
                   .modify(_.updated(OperationType.Withdrawal, newWithdrawalState))
+
+                dataUpdate = UpdatedStateDataUpdate(
+                  PendingSpendTransactions,
+                  Confirmed,
+                  OperationType.Withdrawal,
+                  pendingSpendAction.update.asInstanceOf[Signed[AmmUpdate]],
+                  pendingSpendAction.updateHash,
+                  None
+                )
+
+                _ <- EitherT.liftF[F, FailedCalculatedState, Unit](
+                  logger.debug(s"Successfully confirmed withdrawal for ${signedWithdrawalUpdate.source}")
+                )
               } yield
                 oldState
                   .focus(_.onChain.updatedStateDataUpdate)
-                  .modify { current =>
-                    current + UpdatedStateDataUpdate(
-                      PendingSpendTransactions,
-                      Confirmed,
-                      OperationType.Withdrawal,
-                      pendingSpendAction.update,
-                      pendingSpendAction.updateHash,
-                      none
-                    )
-                  }
+                  .modify(_ + dataUpdate)
                   .focus(_.calculated)
                   .replace(updatedCalculatedState)
 
               processingState.foldF(
                 failed =>
-                  rollbackAmountInLPs(
-                    pendingSpendAction.update,
-                    pendingSpendAction.updateHash,
-                    globalEpochProgress,
-                    pendingSpendAction.pricingTokenInfo,
-                    oldState
-                  ).flatMap { rolledBackState =>
-                    handleFailedUpdate(
+                  for {
+                    _ <- logger.error(s"Failed to process withdrawal spend action: ${failed.reason}")
+                    rolledBackState <- rollbackAmountInLPs(
+                      pendingSpendAction.update,
+                      pendingSpendAction.updateHash,
+                      globalEpochProgress,
+                      pendingSpendAction.pricingTokenInfo,
+                      oldState
+                    )
+                    result <- handleFailedUpdate(
                       pendingSpendAction.update,
                       rolledBackState,
                       failed,
@@ -415,8 +461,8 @@ object WithdrawalCombinerService {
                       pendingSpendAction.updateHash,
                       PendingSpendTransactions
                     )
-                  },
-                success => success.pure[F]
+                  } yield result,
+                success => logger.info("Successfully processed withdrawal spend action") >> success.pure[F]
               )
             }
         } yield combinedState

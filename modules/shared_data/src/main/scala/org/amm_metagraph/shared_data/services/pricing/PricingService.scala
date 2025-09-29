@@ -1,5 +1,9 @@
 package org.amm_metagraph.shared_data.services.pricing
 
+import java.nio.file.Paths
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset}
+
 import cats.Semigroup
 import cats.effect.Async
 import cats.syntax.all._
@@ -118,6 +122,15 @@ object PricingService {
     applicationConfig: ApplicationConfig,
     calculatedStateService: CalculatedStateService[F]
   ): PricingService[F] = {
+    val currentPath = Paths.get("").toAbsolutePath.toString
+    val liquidityPoolLogger = LiquidityPoolLogger.make(s"$currentPath/pools-updates.log")
+    make(applicationConfig, calculatedStateService, liquidityPoolLogger)
+  }
+  def make[F[_]: Async](
+    applicationConfig: ApplicationConfig,
+    calculatedStateService: CalculatedStateService[F],
+    logger: LiquidityPoolLogger[F]
+  ): PricingService[F] = {
     case class ReservesAndReceived(
       swapAmount: BigInt,
       newInputReserveBeforeFee: BigInt,
@@ -139,6 +152,39 @@ object PricingService {
     )
 
     new PricingService[F] {
+      // Helper method to create balance change log
+      private def createBalanceChangeLog(
+        operation: String,
+        beforePool: LiquidityPool,
+        afterPool: LiquidityPool,
+        epochProgress: Option[EpochProgress] = None,
+        updateHash: Option[Hash] = None,
+        address: Option[Address] = None,
+        additionalInfo: Map[String, String] = Map.empty
+      ): PoolBalanceChange = {
+        val timestamp = DateTimeFormatter
+          .ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+          .withZone(ZoneOffset.UTC)
+          .format(Instant.now())
+
+        PoolBalanceChange(
+          operation = operation,
+          timestamp = timestamp,
+          epochProgress = epochProgress,
+          updateHash = updateHash,
+          beforeTokenA = (beforePool.tokenA.identifier, beforePool.tokenA.amount.value),
+          beforeTokenB = (beforePool.tokenB.identifier, beforePool.tokenB.amount.value),
+          afterTokenA = (afterPool.tokenA.identifier, afterPool.tokenA.amount.value),
+          afterTokenB = (afterPool.tokenB.identifier, afterPool.tokenB.amount.value),
+          tokenAChange = afterPool.tokenA.amount.value - beforePool.tokenA.amount.value,
+          tokenBChange = afterPool.tokenB.amount.value - beforePool.tokenB.amount.value,
+          beforeK = beforePool.k,
+          afterK = afterPool.k,
+          address = address,
+          additionalInfo = additionalInfo
+        )
+      }
+
       private def getConfirmedLiquidityPools =
         calculatedStateService.get.map(calculatedState => getLiquidityPoolCalculatedState(calculatedState.state))
 
@@ -558,8 +604,8 @@ object PricingService {
                 signedUpdate
               )
             )
-        } yield
-          liquidityPool
+
+          updatedPool = liquidityPool
             .focus(_.tokenA)
             .modify(_.focus(_.amount).replace(updatedTokenAAmount))
             .focus(_.tokenB)
@@ -573,6 +619,25 @@ object PricingService {
                 updatedAddressShares
               )
             )
+
+          _ = {
+            val logChange = createBalanceChangeLog(
+              operation = "STAKING",
+              beforePool = liquidityPool,
+              afterPool = updatedPool,
+              epochProgress = Some(lastSyncGlobalEpochProgress),
+              updateHash = Some(updateHash),
+              address = Some(signerAddress),
+              additionalInfo = Map(
+                "newlyIssuedShares" -> newlyIssuedShares.toString,
+                "primaryTokenAmount" -> primaryToken.amount.value.toString,
+                "pairTokenAmount" -> pairToken.amount.value.toString
+              )
+            )
+
+            Async[F].start(logger.logBalanceChange(logChange)).void
+          }
+        } yield updatedPool
       }
 
       def getUpdatedLiquidityPoolDueNewSwap(
@@ -587,15 +652,30 @@ object PricingService {
         val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
         val k = BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value)
 
-        Right(
-          liquidityPool
-            .focus(_.tokenA)
-            .replace(tokenA)
-            .focus(_.tokenB)
-            .replace(tokenB)
-            .focus(_.k)
-            .replace(k)
+        val updatedPool = liquidityPool
+          .focus(_.tokenA)
+          .replace(tokenA)
+          .focus(_.tokenB)
+          .replace(tokenB)
+          .focus(_.k)
+          .replace(k)
+
+        val logChange = createBalanceChangeLog(
+          operation = "SWAP",
+          beforePool = liquidityPool,
+          afterPool = updatedPool,
+          updateHash = Some(hashedSwapUpdate.hash),
+          additionalInfo = Map(
+            "fromToken" -> fromTokenInfo.identifier.toString,
+            "toToken" -> toTokenInfo.identifier.toString,
+            "grossAmount" -> grossAmount.value.toString,
+            "metagraphId" -> metagraphId.toString
+          )
         )
+
+        Async[F].start(logger.logBalanceChange(logChange)).void
+
+        Right(updatedPool)
       }
 
       def getUpdatedLiquidityPoolDueNewWithdrawal(
@@ -662,8 +742,8 @@ object PricingService {
             }
 
           k = BigInt(tokenAAmount.value) * BigInt(tokenBAmount.value)
-        } yield
-          liquidityPool.copy(
+
+          updatedPool = liquidityPool.copy(
             tokenA = liquidityPool.tokenA.copy(amount = tokenAAmount),
             tokenB = liquidityPool.tokenB.copy(amount = tokenBAmount),
             k = k,
@@ -672,6 +752,26 @@ object PricingService {
               updatedAddressShares
             )
           )
+
+          _ = {
+            val logChange = createBalanceChangeLog(
+              operation = "WITHDRAWAL",
+              beforePool = liquidityPool,
+              afterPool = updatedPool,
+              epochProgress = Some(lastSyncGlobalEpochProgress),
+              updateHash = Some(updateHash),
+              address = Some(signedUpdate.source),
+              additionalInfo = Map(
+                "sharesToWithdraw" -> signedUpdate.shareToWithdraw.value.toString,
+                "tokenAWithdrawn" -> withdrawalAmounts.tokenAAmount.value.toString,
+                "tokenBWithdrawn" -> withdrawalAmounts.tokenBAmount.value.toString,
+                "remainingShares" -> totalSharesAmount.value.toString
+              )
+            )
+
+            Async[F].start(logger.logBalanceChange(logChange)).void
+          }
+        } yield updatedPool
       }
 
       def getWithdrawalTokenInfo(
@@ -800,12 +900,32 @@ object PricingService {
         for {
           newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
           newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
-        } yield
-          liquidityPool
+
+          updatedPool = liquidityPool
             .focus(_.tokenA)
             .replace(newTokenA)
             .focus(_.tokenB)
             .replace(newTokenB)
+
+          _ = {
+            val logChange = createBalanceChangeLog(
+              operation = "SWAP_ROLLBACK",
+              beforePool = liquidityPool,
+              afterPool = updatedPool,
+              epochProgress = Some(lastSyncGlobalEpochProgress),
+              updateHash = Some(updateHash),
+              additionalInfo = Map(
+                "tokenAReturned" -> tokenAAmountToReturn.value.toString,
+                "tokenBReturned" -> tokenBAmountToReturn.value.toString,
+                "metagraphId" -> metagraphId.toString,
+                "swapFromPair" -> signedUpdate.swapFromPair.toString,
+                "swapToPair" -> signedUpdate.swapToPair.toString
+              )
+            )
+
+            Async[F].start(logger.logBalanceChange(logChange)).void
+          }
+        } yield updatedPool
       }
 
       def rollbackWithdrawalLiquidityPoolAmounts(
@@ -832,7 +952,26 @@ object PricingService {
         for {
           newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
           newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
-        } yield liquidityPool.copy(tokenA = newTokenA, tokenB = newTokenB)
+
+          updatedPool = liquidityPool.copy(tokenA = newTokenA, tokenB = newTokenB)
+          _ = {
+            val logChange = createBalanceChangeLog(
+              operation = "WITHDRAWAL_ROLLBACK",
+              beforePool = liquidityPool,
+              afterPool = updatedPool,
+              epochProgress = Some(lastSyncGlobalEpochProgress),
+              updateHash = Some(updateHash),
+              address = Some(signedUpdate.source),
+              additionalInfo = Map(
+                "tokenAReturned" -> tokenAAmountToReturn.value.toString,
+                "tokenBReturned" -> tokenBAmountToReturn.value.toString,
+                "originalSharesWithdrawn" -> signedUpdate.shareToWithdraw.value.toString
+              )
+            )
+
+            Async[F].start(logger.logBalanceChange(logChange)).void
+          }
+        } yield updatedPool
       }
     }
   }
