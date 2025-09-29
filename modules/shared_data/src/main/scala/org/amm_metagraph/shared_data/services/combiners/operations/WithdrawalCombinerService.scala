@@ -39,6 +39,7 @@ trait WithdrawalCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -119,7 +120,8 @@ object WithdrawalCombinerService {
         updateHash: Hash,
         lastSyncGlobalSnapshotEpoch: EpochProgress,
         maybePricingTokenInfo: Option[PricingTokenInfo],
-        oldState: DataState[AmmOnChainState, AmmCalculatedState]
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        currentSnapshotOrdinal: SnapshotOrdinal
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = maybePricingTokenInfo match {
         case Some(WithdrawalTokenInfo(tokenAIdentifier, tokenAAmount, tokenBIdentifier, tokenBAmount)) =>
           for {
@@ -128,28 +130,31 @@ object WithdrawalCombinerService {
             liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
             liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolCalculatedState.confirmed.value, poolId)
 
-            rollbackResult <- pricingService.rollbackWithdrawalLiquidityPoolAmounts(
-              signedUpdate,
-              updateHash,
-              lastSyncGlobalSnapshotEpoch,
-              liquidityPool,
-              tokenAAmount,
-              tokenBAmount
-            ) match {
-              case Right(updatedLiquidityPool) =>
-                val newLiquidityPoolState = liquidityPoolCalculatedState
-                  .focus(_.confirmed.value)
-                  .modify(_.updated(poolId.value, updatedLiquidityPool))
+            rollbackResult <- pricingService
+              .rollbackWithdrawalLiquidityPoolAmounts(
+                signedUpdate,
+                updateHash,
+                lastSyncGlobalSnapshotEpoch,
+                liquidityPool,
+                tokenAAmount,
+                tokenBAmount,
+                currentSnapshotOrdinal
+              )
+              .flatMap {
+                case Right(updatedLiquidityPool) =>
+                  val newLiquidityPoolState = liquidityPoolCalculatedState
+                    .focus(_.confirmed.value)
+                    .modify(_.updated(poolId.value, updatedLiquidityPool))
 
-                val updatedCalculatedState = oldState.calculated
-                  .focus(_.operations)
-                  .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+                  val updatedCalculatedState = oldState.calculated
+                    .focus(_.operations)
+                    .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
-                val updatedState = oldState.copy(calculated = updatedCalculatedState)
-                logger.debug(s"Successfully rolled back withdrawal liquidity pool amounts") >> updatedState.pure[F]
-              case Left(error) =>
-                logger.warn(s"Failed to rollback withdrawal amounts: $error") >> oldState.pure[F]
-            }
+                  val updatedState = oldState.copy(calculated = updatedCalculatedState)
+                  logger.debug(s"Successfully rolled back withdrawal liquidity pool amounts") >> updatedState.pure[F]
+                case Left(error) =>
+                  logger.warn(s"Failed to rollback withdrawal amounts: $error") >> oldState.pure[F]
+              }
           } yield rollbackResult
         case _ =>
           logger.debug("No withdrawal token info available for rollback") >> oldState.pure[F]
@@ -160,6 +165,7 @@ object WithdrawalCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val withdrawalUpdate = signedUpdate.value
@@ -213,13 +219,14 @@ object WithdrawalCombinerService {
                     s"Withdrawal amounts calculated: tokenA=${withdrawalAmounts.tokenAAmount}, tokenB=${withdrawalAmounts.tokenBAmount}"
                   )
                 )
-                updatedPool <- EitherT.fromEither[F](
+                updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
                     signedUpdate,
                     updateHashed.hash,
                     liquidityPool,
                     withdrawalAmounts,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    currentSnapshotOrdinal
                   )
                 )
 
@@ -451,7 +458,8 @@ object WithdrawalCombinerService {
                       pendingSpendAction.updateHash,
                       globalEpochProgress,
                       pendingSpendAction.pricingTokenInfo,
-                      oldState
+                      oldState,
+                      currentSnapshotOrdinal
                     )
                     result <- handleFailedUpdate(
                       pendingSpendAction.update,

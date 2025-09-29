@@ -138,7 +138,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -149,6 +149,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -256,7 +257,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -267,6 +268,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -344,7 +346,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -356,6 +358,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           state,
           EpochProgress.MinValue,
           SortedMap.empty,
+          SnapshotOrdinal.MinValue,
           CurrencyId(ownerAddress)
         )
         .attempt
@@ -421,7 +424,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -432,6 +435,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -511,7 +515,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
 
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -523,6 +527,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
           state,
           EpochProgress(NonNegLong.unsafeFrom(100L)),
           SortedMap.empty,
+          SnapshotOrdinal.MinValue,
           CurrencyId(ownerAddress)
         )
     } yield
@@ -587,7 +592,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -598,6 +603,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -696,7 +702,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -707,6 +713,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -798,7 +805,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -811,6 +818,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -879,7 +887,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -892,6 +900,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -960,7 +969,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -973,6 +982,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
@@ -1041,7 +1051,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       )
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
       withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
@@ -1054,6 +1064,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         SortedMap.empty,
+        SnapshotOrdinal.MinValue,
         CurrencyId(ownerAddress)
       )
 
