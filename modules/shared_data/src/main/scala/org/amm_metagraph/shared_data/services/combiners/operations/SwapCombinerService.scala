@@ -560,6 +560,7 @@ object SwapCombinerService {
         result.foldF(
           failed =>
             for {
+              _ <- logger.error(s"Failed to process pending spend transaction: ${failed.reason}")
               rolledBackState <- rollbackLiquidityPool(
                 pendingSpendAction,
                 globalEpochProgress,
@@ -578,7 +579,7 @@ object SwapCombinerService {
                 PendingSpendTransactions
               )
             } yield result,
-          _.pure[F]
+          success => logger.info("Successfully processed pending spend transaction") >> success.pure[F]
         )
       }
 
