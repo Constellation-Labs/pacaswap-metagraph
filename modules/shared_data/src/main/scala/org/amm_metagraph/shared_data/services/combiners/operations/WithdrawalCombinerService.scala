@@ -128,28 +128,30 @@ object WithdrawalCombinerService {
             liquidityPoolCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
             liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolCalculatedState.confirmed.value, poolId)
 
-            rollbackResult <- pricingService.rollbackWithdrawalLiquidityPoolAmounts(
-              signedUpdate,
-              updateHash,
-              lastSyncGlobalSnapshotEpoch,
-              liquidityPool,
-              tokenAAmount,
-              tokenBAmount
-            ) match {
-              case Right(updatedLiquidityPool) =>
-                val newLiquidityPoolState = liquidityPoolCalculatedState
-                  .focus(_.confirmed.value)
-                  .modify(_.updated(poolId.value, updatedLiquidityPool))
+            rollbackResult <- pricingService
+              .rollbackWithdrawalLiquidityPoolAmounts(
+                signedUpdate,
+                updateHash,
+                lastSyncGlobalSnapshotEpoch,
+                liquidityPool,
+                tokenAAmount,
+                tokenBAmount
+              )
+              .flatMap {
+                case Right(updatedLiquidityPool) =>
+                  val newLiquidityPoolState = liquidityPoolCalculatedState
+                    .focus(_.confirmed.value)
+                    .modify(_.updated(poolId.value, updatedLiquidityPool))
 
-                val updatedCalculatedState = oldState.calculated
-                  .focus(_.operations)
-                  .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
+                  val updatedCalculatedState = oldState.calculated
+                    .focus(_.operations)
+                    .modify(_.updated(OperationType.LiquidityPool, newLiquidityPoolState))
 
-                val updatedState = oldState.copy(calculated = updatedCalculatedState)
-                logger.debug(s"Successfully rolled back withdrawal liquidity pool amounts") >> updatedState.pure[F]
-              case Left(error) =>
-                logger.warn(s"Failed to rollback withdrawal amounts: $error") >> oldState.pure[F]
-            }
+                  val updatedState = oldState.copy(calculated = updatedCalculatedState)
+                  logger.debug(s"Successfully rolled back withdrawal liquidity pool amounts") >> updatedState.pure[F]
+                case Left(error) =>
+                  logger.warn(s"Failed to rollback withdrawal amounts: $error") >> oldState.pure[F]
+              }
           } yield rollbackResult
         case _ =>
           logger.debug("No withdrawal token info available for rollback") >> oldState.pure[F]
@@ -213,7 +215,7 @@ object WithdrawalCombinerService {
                     s"Withdrawal amounts calculated: tokenA=${withdrawalAmounts.tokenAAmount}, tokenB=${withdrawalAmounts.tokenBAmount}"
                   )
                 )
-                updatedPool <- EitherT.fromEither[F](
+                updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewWithdrawal(
                     signedUpdate,
                     updateHashed.hash,

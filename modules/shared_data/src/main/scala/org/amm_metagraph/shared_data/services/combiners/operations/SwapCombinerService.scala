@@ -154,8 +154,7 @@ object SwapCombinerService {
                   grossReceived,
                   currencyId
                 )
-                .fold(_ => state, pool => updateLiquidityPoolState(state, poolId, pool))
-                .pure[F]
+                .map(_.fold(_ => state, pool => updateLiquidityPoolState(state, poolId, pool)))
             } yield updatedPool
           case None => state.pure[F]
         }
@@ -393,7 +392,7 @@ object SwapCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => pendingAllowSpend.update.toHashed(dataUpdateCodec.serialize))
                 )
 
-                updatedPool <- EitherT.fromEither[F](
+                updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewSwap(
                     updateHashed,
                     liquidityPool,
