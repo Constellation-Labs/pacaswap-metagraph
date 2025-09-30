@@ -261,7 +261,7 @@ object GovernanceCombinerService {
                 lastSyncGlobalSnapshotEpochProgress
               )
             if (updatedInfo.nonEmpty) {
-              val updatedWeight = updatedInfo.map(_.votingPower.value).sum
+              val updatedWeight = updatedInfo.toList.map(_.votingPower.value).sum
               acc.updated(address, VotingPower(updatedWeight.toNonNegLongUnsafe, updatedInfo))
             } else {
               acc.removed(address)

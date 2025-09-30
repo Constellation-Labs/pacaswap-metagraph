@@ -4,37 +4,36 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all._
 
 import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
 import io.constellationnetwork.currency.dataApplication.{DataApplicationValidationError, DataState, L0NodeContext}
+import io.constellationnetwork.currency.schema.currency.CurrencySnapshotInfo
 import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.tokenLock._
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
+import eu.timepit.refined.types.numeric.PosLong
 import monocle.Monocle._
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
-import org.amm_metagraph.shared_data.Shared
-import org.amm_metagraph.shared_data.Shared.{config, getFakeSignedUpdate}
+import org.amm_metagraph.shared_data.Shared.{config, getFakeSigned}
+import org.amm_metagraph.shared_data.app.ApplicationConfig.EpochMetadata
 import org.amm_metagraph.shared_data.refined.Percentage
 import org.amm_metagraph.shared_data.services.combiners.operations.GovernanceCombinerService
-import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, RewardAllocationVoteUpdate, RewardWithdrawUpdate}
-import org.amm_metagraph.shared_data.types.Governance.AllocationCategory.{LiquidityPool, NodeOperator}
+import org.amm_metagraph.shared_data.types.Governance.AllocationCategory.LiquidityPool
 import org.amm_metagraph.shared_data.types.Governance._
-import org.amm_metagraph.shared_data.types.RewardWithdraw.RewardWithdrawReference
-import org.amm_metagraph.shared_data.types.Rewards.RewardType._
-import org.amm_metagraph.shared_data.types.Rewards.{AddressAndRewardType, RewardInfo}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
-import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.types.{DataUpdates, States}
-import org.amm_metagraph.shared_data.validations.{GovernanceValidations, RewardWithdrawValidations}
+import org.amm_metagraph.shared_data.validations.GovernanceValidations
 import weaver.MutableIOSuite
 
 object GovernanceCombinerServiceTest extends MutableIOSuite {
@@ -160,4 +159,80 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
         expect(res.calculated.allocations.frozenUsedUserVotes.votingPowerForAddresses == actualVotingWeights) &&
         expect(res.onChain.governanceVotingResult == voteResult.some)
   }
+
+  test("Double vote shall correctly be saved") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val ammOnChainState = AmmOnChainState.empty
+    val ammCalculatedState = AmmCalculatedState()
+    val appConfig = config.copy(epochInfo = EpochMetadata(1.day, 1L))
+
+    val addr1 = Address("DAG3ZUU4Ke1UgdD2UtRiXxFPMHU4Mmt37opcjFLu")
+
+    val state =
+      DataState(ammOnChainState, ammCalculatedState)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      governanceCombiner = GovernanceCombinerService.make[IO](appConfig, dummyGovernanceValidation)
+
+      tokenLockAmount1 = TokenLockAmount(PosLong(10000000000000L))
+      tokenLock1 = getFakeSigned(
+        TokenLock(
+          addr1,
+          tokenLockAmount1,
+          TokenLockFee(NonNegLong(0L)),
+          TokenLockReference.empty,
+          CurrencyId(Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")).some,
+          EpochProgress(NonNegLong(3467940L)).some
+        )
+      )
+      tokenLocksMap = SortedMap(addr1 -> SortedSet(tokenLock1))
+      snapshot1 = emptyCurrencySnapshotInfo.copy(activeTokenLocks = tokenLocksMap.some)
+      res1 <- governanceCombiner.updateVotingPowers(state.calculated, snapshot1, EpochProgress(NonNegLong(10L))).pure[IO]
+
+      tokenLockAmount2 = TokenLockAmount(PosLong(10000000000000L))
+      tokenLock2 = getFakeSigned(
+        TokenLock(
+          addr1,
+          tokenLockAmount2,
+          TokenLockFee(NonNegLong(0L)),
+          TokenLockReference.empty,
+          CurrencyId(Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")).some,
+          EpochProgress(NonNegLong(3472302L)).some
+        )
+      )
+      tokenLocksMap2 = SortedMap(addr1 -> SortedSet(tokenLock1, tokenLock2))
+      snapshot2 = emptyCurrencySnapshotInfo.copy(activeTokenLocks = tokenLocksMap2.some)
+      state2 = state.calculated
+        .focus(_.votingPowers)
+        .replace(res1)
+      res2 <- governanceCombiner.updateVotingPowers(state2, snapshot2, EpochProgress(NonNegLong(11L))).pure[IO]
+    } yield
+      expect(res1(addr1).total.value == tokenLockAmount1.value.value) &&
+        expect(res2(addr1).total.value == tokenLockAmount1.value.value + tokenLockAmount2.value.value) &&
+        expect(res2(addr1).info.size == 2)
+  }
+
+  val emptyCurrencySnapshotInfo: CurrencySnapshotInfo =
+    CurrencySnapshotInfo(
+      lastTxRefs = SortedMap.empty,
+      balances = SortedMap.empty,
+      lastMessages = None,
+      lastFeeTxRefs = None,
+      lastAllowSpendRefs = None,
+      activeAllowSpends = None,
+      globalSnapshotSyncView = None,
+      lastTokenLockRefs = None,
+      activeTokenLocks = None
+    )
 }
