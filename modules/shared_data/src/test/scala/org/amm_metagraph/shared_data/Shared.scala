@@ -40,7 +40,7 @@ object Shared {
     "NodeValidators",
     Dev,
     Governance(
-      VotingPowerMultipliers(Seq.empty)
+      VotingPowerMultipliers(Seq(LockMultiplier(1L, 1.0)))
     ),
     Rewards(
       Amount.empty,
@@ -102,6 +102,27 @@ object Shared {
   }
 
   def getFakeSignedUpdate[A <: AmmUpdate](
+    update: A
+  ): Signed[A] =
+    Signed(
+      update,
+      NonEmptySet.one(
+        SignatureProof(
+          Id(
+            Hex(
+              "db2faf200159ca3c47924bf5f3bda4f45d681a39f9490053ecf98d788122f7a7973693570bd242e10ab670748e86139847eb682a53c7c5c711b832517ce34860"
+            )
+          ),
+          Signature(
+            Hex(
+              "3045022100fb26702e976a6569caa3507140756fee96b5ba748719abe1b812b17f7279a3dc0220613db28d5c5a30d7353383358b653aa29772151ccf352a2e67a26a74e49eac57"
+            )
+          )
+        )
+      )
+    )
+
+  def getFakeSigned[A](
     update: A
   ): Signed[A] =
     Signed(

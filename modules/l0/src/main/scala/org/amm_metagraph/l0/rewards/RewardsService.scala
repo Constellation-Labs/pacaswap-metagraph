@@ -62,7 +62,7 @@ object RewardsService {
 
     groupedByAddress.toList.traverse {
       case (address, transactions) =>
-        val totalAmount = transactions.map(_.amount.value.value).sum
+        val totalAmount = transactions.toList.map(_.amount.value.value).sum
         PosLong
           .from(totalAmount)
           .bimap(
