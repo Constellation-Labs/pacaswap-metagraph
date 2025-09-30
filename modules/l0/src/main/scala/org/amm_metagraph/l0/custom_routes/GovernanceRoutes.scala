@@ -34,7 +34,7 @@ case class GovernanceRoutes[F[_]: Async](
         calculatedState.state.votingPowers.filter(vw => allocatedAddresses.contains(vw._1)).values.map(v => BigDecimal(v.total.value)).sum
 
       val totalTokenLocked =
-        calculatedState.state.votingPowers.flatMap(_._2.info).map(vw => BigDecimal(vw.tokenLock.amount.value.value)).sum
+        calculatedState.state.votingPowers.toList.flatMap(_._2.info).map(vw => BigDecimal(vw.tokenLock.amount.value.value)).sum
 
       Ok(AllocationStats(totalVpIssued, totalVpAllocated, totalTokenLocked))
     }
