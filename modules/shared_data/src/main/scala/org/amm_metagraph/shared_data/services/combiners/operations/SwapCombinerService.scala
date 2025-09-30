@@ -403,9 +403,7 @@ object SwapCombinerService {
                   pricingService.getUpdatedLiquidityPoolDueNewSwap(
                     updateHashed,
                     liquidityPool,
-                    swapTokenInfo.primaryTokenInformationUpdated,
-                    swapTokenInfo.pairTokenInformationUpdated,
-                    swapTokenInfo.grossReceived,
+                    swapTokenInfo,
                     currencyId,
                     currentSnapshotOrdinal
                   )
