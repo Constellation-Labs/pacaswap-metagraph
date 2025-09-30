@@ -141,7 +141,7 @@ object CombinerTest extends MutableIOSuite {
       governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
       rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
@@ -289,7 +289,7 @@ object CombinerTest extends MutableIOSuite {
       governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
       rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
@@ -447,7 +447,7 @@ object CombinerTest extends MutableIOSuite {
       governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
       rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
 
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
       liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, liquidityPoolValidations, jsonBase64BinaryCodec)
       stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)

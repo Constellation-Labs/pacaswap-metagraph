@@ -98,7 +98,7 @@ object Main
       rewardWithdrawValidations
     )
 
-    pricingService = PricingService.make[IO](config, calculatedStateService)
+    pricingService <- PricingService.make[IO](config, calculatedStateService).toResource
     governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
     liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, liquidityPoolValidations, jsonBase64BinaryCodec)
     stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)

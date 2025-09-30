@@ -40,6 +40,7 @@ trait SwapCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -48,6 +49,7 @@ trait SwapCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -136,6 +138,7 @@ object SwapCombinerService {
         globalEpochProgress: EpochProgress,
         tokenInfo: Option[PricingTokenInfo],
         state: DataState[AmmOnChainState, AmmCalculatedState],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         tokenInfo.collect { case swapInfo: SwapTokenInfo => swapInfo } match {
@@ -152,10 +155,10 @@ object SwapCombinerService {
                   liquidityPool,
                   amountIn,
                   grossReceived,
-                  currencyId
+                  currencyId,
+                  currentSnapshotOrdinal
                 )
-                .fold(_ => state, pool => updateLiquidityPoolState(state, poolId, pool))
-                .pure[F]
+                .map(_.fold(_ => state, pool => updateLiquidityPoolState(state, poolId, pool)))
             } yield updatedPool
           case None => state.pure[F]
         }
@@ -267,6 +270,7 @@ object SwapCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
 
@@ -323,6 +327,7 @@ object SwapCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -345,6 +350,7 @@ object SwapCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
 
@@ -393,14 +399,15 @@ object SwapCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => pendingAllowSpend.update.toHashed(dataUpdateCodec.serialize))
                 )
 
-                updatedPool <- EitherT.fromEither[F](
+                updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewSwap(
                     updateHashed,
                     liquidityPool,
                     swapTokenInfo.primaryTokenInformationUpdated,
                     swapTokenInfo.pairTokenInformationUpdated,
                     swapTokenInfo.grossReceived,
-                    currencyId
+                    currencyId,
+                    currentSnapshotOrdinal
                   )
                 )
 
@@ -469,6 +476,7 @@ object SwapCombinerService {
                 globalEpochProgress,
                 pendingAllowSpend.pricingTokenInfo,
                 oldState,
+                currentSnapshotOrdinal,
                 currencyId
               )
               result <- handleFailure(
@@ -552,11 +560,13 @@ object SwapCombinerService {
         result.foldF(
           failed =>
             for {
+              _ <- logger.error(s"Failed to process pending spend transaction: ${failed.reason}")
               rolledBackState <- rollbackLiquidityPool(
                 pendingSpendAction,
                 globalEpochProgress,
                 pendingSpendAction.pricingTokenInfo,
                 oldState,
+                currentSnapshotOrdinal,
                 currencyId
               )
               result <- handleFailure(
@@ -569,7 +579,7 @@ object SwapCombinerService {
                 PendingSpendTransactions
               )
             } yield result,
-          _.pure[F]
+          success => logger.info("Successfully processed pending spend transaction") >> success.pure[F]
         )
       }
 

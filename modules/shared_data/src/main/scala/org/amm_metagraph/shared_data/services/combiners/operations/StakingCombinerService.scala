@@ -457,16 +457,18 @@ object StakingCombinerService {
                   pricingService.getStakingTokenInfo(signedStakingUpdate, pendingSpendAction.updateHash, poolId, globalEpochProgress)
                 )
 
-                liquidityPoolUpdated <- EitherT.fromEither[F](
+                liquidityPoolUpdated <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueStaking(
                     liquidityPool,
                     signedStakingUpdate,
                     pendingSpendAction.updateHash,
                     sourceAddress,
                     stakingTokenInfo,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    currentSnapshotOrdinal
                   )
                 )
+
                 stakingCalculatedStateAddress = StakingCalculatedStateAddress(
                   stakingUpdate.source,
                   pendingSpendAction.updateHash,

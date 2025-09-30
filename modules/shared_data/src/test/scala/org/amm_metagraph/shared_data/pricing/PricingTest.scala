@@ -51,7 +51,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -93,7 +93,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
@@ -135,7 +135,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         None,
         pairToken.identifier,
@@ -178,7 +178,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -215,7 +215,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       liquidityPoolPrices <- pricingService.getLiquidityPoolPrices(
         poolId
       )
@@ -252,7 +252,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       swapUpdate = getFakeSignedUpdate[SwapUpdate](
         SwapUpdate(
@@ -307,7 +307,7 @@ object PricingTest extends SimpleIOSuite {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
       poolId <- buildLiquidityPoolUniqueIdentifier(primaryToken.identifier, pairToken.identifier)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
 
       stakingUpdate = getFakeSignedUpdate[StakingUpdate](
         StakingUpdate(
@@ -362,7 +362,7 @@ object PricingTest extends SimpleIOSuite {
     for {
       calculatedStateService <- CalculatedStateService.make[IO]
       _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
-      pricingService = PricingService.make[IO](config, calculatedStateService)
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
       swapQuoteResponse <- pricingService.getSwapQuote(
         primaryToken.identifier,
         pairToken.identifier,
