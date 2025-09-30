@@ -14,6 +14,7 @@ import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 
+import eu.timepit.refined.types.all.PosLong
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined.{BigDecimalOps, Percentage}
@@ -69,9 +70,7 @@ trait PricingService[F[_]] {
   def getUpdatedLiquidityPoolDueNewSwap(
     hashedSwapUpdate: Hashed[SwapUpdate],
     liquidityPool: LiquidityPool,
-    fromTokenInfo: TokenInformation,
-    toTokenInfo: TokenInformation,
-    grossAmount: SwapAmount,
+    swapTokenInfo: SwapTokenInfo,
     metagraphId: CurrencyId,
     currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
@@ -242,10 +241,9 @@ object PricingService {
                     if (swapUpdate.swapToPair === liquidityPool.tokenA.identifier) liquidityPool.tokenA
                     else liquidityPool.tokenB
 
-                  import eu.timepit.refined.types.all.PosLong
                   val swapTokenInfo = SwapTokenInfo(
-                    fromTokenInfo.copy(amount = PosLong.unsafeFrom(reservesAndReceived.newInputReserveAfterFee.toLong)),
-                    toTokenInfo.copy(amount = PosLong.unsafeFrom(reservesAndReceived.newOutputReserveAfterFee.toLong)),
+                    fromTokenInfo.copy(amount = PosLong.unsafeFrom(reservesAndReceived.updatedInputReserve.toLong)),
+                    toTokenInfo.copy(amount = PosLong.unsafeFrom(reservesAndReceived.updatedOutputReserve.toLong)),
                     SwapAmount(PosLong.unsafeFrom(reservesAndReceived.swapAmount.toLong)),
                     SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedBeforeFee.toLong)),
                     SwapAmount(PosLong.unsafeFrom(reservesAndReceived.estimatedReceivedAfterFee.toLong))
@@ -323,18 +321,14 @@ object PricingService {
         def getUpdatedLiquidityPoolDueNewSwap(
           hashedSwapUpdate: Hashed[SwapUpdate],
           liquidityPool: LiquidityPool,
-          fromTokenInfo: TokenInformation,
-          toTokenInfo: TokenInformation,
-          grossAmount: SwapAmount,
+          swapTokenInfo: SwapTokenInfo,
           metagraphId: CurrencyId,
           currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           poolOps.updatePoolForSwap(
             hashedSwapUpdate,
             liquidityPool,
-            fromTokenInfo,
-            toTokenInfo,
-            grossAmount,
+            swapTokenInfo,
             metagraphId,
             currencyOrdinal
           )
