@@ -122,14 +122,15 @@ class LiquidityPoolOperations[F[_]: Async](
   def updatePoolForSwap(
     hashedSwapUpdate: Hashed[SwapUpdate],
     liquidityPool: LiquidityPool,
-    fromTokenInfo: TokenInformation,
-    toTokenInfo: TokenInformation,
-    grossAmount: SwapAmount,
+    swapTokenInfo: SwapTokenInfo,
     metagraphId: CurrencyId,
     currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
+    val fromTokenInfo = swapTokenInfo.primaryTokenInformationUpdated
+    val toTokenInfo = swapTokenInfo.pairTokenInformationUpdated
+
     val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
-    val tokenB = if (liquidityPool.tokenB.identifier === toTokenInfo.identifier) toTokenInfo else fromTokenInfo
+    val tokenB = if (liquidityPool.tokenB.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
     val k = BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value)
 
     val updatedPool = liquidityPool
@@ -149,9 +150,10 @@ class LiquidityPoolOperations[F[_]: Async](
         additionalInfo = Map(
           "fromToken" -> fromTokenInfo.identifier.toString,
           "toToken" -> toTokenInfo.identifier.toString,
-          "grossAmount" -> grossAmount.value.toString,
+          "grossAmount" -> swapTokenInfo.grossReceived.value.toString,
           "metagraphId" -> metagraphId.toString,
-          "currencyOrdinal" -> currencyOrdinal.show
+          "currencyOrdinal" -> currencyOrdinal.show,
+          "swapTokenInfo" -> swapTokenInfo.toString
         )
       )
       .as(Right(updatedPool))

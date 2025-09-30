@@ -16,11 +16,9 @@ import org.amm_metagraph.shared_data.types.Swap.{ReverseSwapQuote, SwapQuote}
 
 case class ReservesAndReceived(
   swapAmount: BigInt,
-  newInputReserveBeforeFee: BigInt,
-  newOutputReserveBeforeFee: BigInt,
+  updatedInputReserve: BigInt,
+  updatedOutputReserve: BigInt,
   estimatedReceivedBeforeFee: BigInt,
-  newInputReserveAfterFee: BigInt,
-  newOutputReserveAfterFee: BigInt,
   estimatedReceivedAfterFee: BigInt
 )
 
@@ -57,23 +55,21 @@ object SwapCalculations {
         "Insufficient liquidity in the pool"
       )
 
-      newInputReserveBeforeFee = inputReserve + BigInt(amount.value.value)
+      newInputReserve = inputReserve + BigInt(amount.value.value)
+
       k = BigInt(pool.tokenA.amount) * BigInt(pool.tokenB.amount)
-      newOutputReserveBeforeFee = k / newInputReserveBeforeFee
+      newOutputReserveBeforeFee = k / newInputReserve
       estimatedReceivedBeforeFee = outputReserve - newOutputReserveBeforeFee
 
       fees = FeeDistributor.calculateFeeAmounts(estimatedReceivedBeforeFee, pool.poolFees)
       estimatedReceivedAfterFee = estimatedReceivedBeforeFee - fees.total
-      newOutputReserveAfterFee = newOutputReserveBeforeFee + fees.total
-      newInputReserveAfterFee = newInputReserveBeforeFee
+      newOutputReserve = outputReserve - estimatedReceivedAfterFee
     } yield
       ReservesAndReceived(
         BigInt(amount.value),
-        newInputReserveBeforeFee,
-        newOutputReserveBeforeFee,
+        newInputReserve,
+        newOutputReserve,
         estimatedReceivedBeforeFee,
-        newInputReserveAfterFee,
-        newOutputReserveAfterFee,
         estimatedReceivedAfterFee
       )
 
@@ -167,7 +163,7 @@ object SwapCalculations {
 
       outputReserve = BigInt(outputToken.amount.value)
       outputReserveDecimal = outputReserve.toBigDecimal
-      newOutputReserveDecimal = reservesAndReceived.newOutputReserveAfterFee.toBigDecimal
+      newOutputReserveDecimal = reservesAndReceived.updatedOutputReserve.toBigDecimal
 
       priceImpactPercent =
         if (outputReserve > 0) {

@@ -209,9 +209,7 @@ case class PriceRunner[F[_]: Async](
         pricingService.getUpdatedLiquidityPoolDueNewSwap(
           Hashed[SwapUpdate](swapUpdate, Hash.empty, ProofsHash("")),
           liquidityPool,
-          updatedTokenInformation.primaryTokenInformationUpdated,
-          updatedTokenInformation.pairTokenInformationUpdated,
-          updatedTokenInformation.grossReceived,
+          updatedTokenInformation,
           CurrencyId(owner),
           SnapshotOrdinal.MinValue
         )
