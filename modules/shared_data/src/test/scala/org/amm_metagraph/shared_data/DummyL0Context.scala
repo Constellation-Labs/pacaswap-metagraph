@@ -125,7 +125,7 @@ object DummyL0Context {
 
       def securityProvider: SecurityProvider[F] = ???
       def getCurrencyId: F[CurrencyId] = CurrencyId(ammMetagraphAddress).pure[F]
-      def getLastSynchronizedGlobalSnapshot: F[Option[Hashed[GlobalIncrementalSnapshot]]] = for {
+      def getLastSynchronizedGlobalSnapshot: F[Option[GlobalIncrementalSnapshot]] = for {
         globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
         updated = globalIncrementalSnapshot
           .focus(_.signed.value.ordinal)
@@ -134,7 +134,7 @@ object DummyL0Context {
           .replace(spendActions)
       } yield Some(updated)
 
-      def getLastSynchronizedGlobalSnapshotCombined: F[Option[(Hashed[GlobalIncrementalSnapshot], GlobalSnapshotInfo)]] = for {
+      def getLastSynchronizedGlobalSnapshotCombined: F[Option[(GlobalIncrementalSnapshot, GlobalSnapshotInfo)]] = for {
         globalIncrementalSnapshot <- buildGlobalIncrementalSnapshot[F](keyPair, gsEpochProgress)
         updated = globalIncrementalSnapshot
           .focus(_.signed.value.ordinal)
@@ -145,5 +145,12 @@ object DummyL0Context {
       } yield Some((updated, globalSnapshotInfo))
 
       override def getMetagraphL0Seedlist: Option[Set[SeedlistEntry]] = None
+
+      override def getLastSynchronizedAllowSpends
+        : F[Option[SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]]] =
+        getLastSynchronizedGlobalSnapshotCombined.map(_.flatMap(_._2.activeAllowSpends))
+
+      override def getLastSynchronizedTokenLocks: F[Option[SortedMap[Address, SortedSet[Signed[tokenLock.TokenLock]]]]] =
+        getLastSynchronizedGlobalSnapshotCombined.map(_.flatMap(_._2.activeTokenLocks))
     }
 }
