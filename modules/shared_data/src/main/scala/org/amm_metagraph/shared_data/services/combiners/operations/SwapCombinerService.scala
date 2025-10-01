@@ -469,17 +469,9 @@ object SwapCombinerService {
           failed =>
             for {
               _ <- logger.error(s"Failed to process pending allow spend: ${failed.reason}")
-              rolledBackState <- rollbackLiquidityPool(
-                pendingAllowSpend,
-                globalEpochProgress,
-                pendingAllowSpend.pricingTokenInfo,
-                oldState,
-                currentSnapshotOrdinal,
-                currencyId
-              )
               result <- handleFailure(
                 pendingAllowSpend.update,
-                rolledBackState,
+                oldState,
                 failed,
                 swapCalculatedState,
                 pendingAllowSpend.updateHash,
