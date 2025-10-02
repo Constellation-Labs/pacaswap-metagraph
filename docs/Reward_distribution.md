@@ -41,8 +41,7 @@ Distributed to active voters based on their voting activity during the previous 
 
 #### When rewards are distributed
 
-The rewards system is designed to periodically distribute tokens to various parties based on specific criteria.  Rewards are distributed at regular intervals defined by the config parameter `rewards.reward-calculation-interval`, measured in epochs.
-
+The rewards system is designed to periodically distribute tokens to various parties based on specific criteria.  Rewards are distributed at regular intervals defined by the config parameter `rewards.reward-calculation-interval`, measured in epochs. The current value of that parameter is 60, meaning rewards are distributed every hour. Therefore, an address receives 1/720 of the total monthly reward each hour, assuming the reward amount remains stable throughout the month (as is the case for Governance rewards).
 #### Reward Lifecycle
 
 At each distribution point (i.e., every `rewards.reward-calculation-interval` epochs), a fixed amount of incentive rewards and Governance Rewards are calculated and added to the "Reward Buffer" in a calculated state. There is no way to check the status of that Reward Buffer directly.
@@ -181,15 +180,16 @@ Then the per-epoch reward is:
 
 65,000,000 / 518400 \= 125.385802469 tokens per epoch
 
-With `reward-calculation-interval = 100`, then:
+With `reward-calculation-interval = 60`, then:
 
-Reward per distribution \= 125.385802469 \* 100 \= 12,538.580246 tokens
+Reward per distribution \= 125.385802469 \* 60 \= 7523.14814814 tokens
 
 **Incentive Reward Breakdown:**
 
-* Node Validator: 5% of 12,538.580246 \= 626.9290123 tokens  
-* Vote-Based: 75% of 12,538.580246 \= 9403.9351845 tokens  
-* DAO: 20% of 12,538.580246 \= 2507.7160492 tokens
+
+* Node Validator: 5% of 7,523.148148148148 = 376.1574074074074 tokens
+* Vote-Based: 75% of 7,523.148148148148 = 5,642.361111111111 tokens
+* DAO: 20% of 7,523.148148148148 = 1,504.6296296296296 tokens
 
 ### **4\. Node Validator Rewards**
 
@@ -368,7 +368,7 @@ Then:
 
 Step 1: Calculate allocated tokens  
  The reward per `rewards.reward-calculation-interval` is:  
- 65,000,000 divided by 518,400 (number of epochs in a year), multiplied by 0.75 (75% of rewards go to vote-based distribution), multiplied by 100 (reward interval) \= 9,403.93518 tokens to distribute.
+65,000,000 divided by 518,400 (number of epochs in a year), multiplied by 0.75 (75% of rewards go to vote-based distribution), multiplied by 60 (reward interval) = **5,642.361111111111** tokens to distribute.
 
 Step2: Calculate distribution reward 
 
@@ -380,56 +380,63 @@ The rewards allocation map from the previous example is:
 
 Thus, the rewards are:
 
-1. Approved validator VA (Address5): 9,403.93518 × 20,833% \= 1 959.12181
+1. Approved validator VA (Address5): 5,642.361111111111 × 20.833% = **1,175.4910648145833**
+2. Approved validator VB (Address6): 5,642.361111111111 × 20.833% = **1,175.4910648145833**
+3. Shareholders for LA:
 
-2. Approved validator VB (Address6): 9,403.93518 × 20,833% \= 1 959.12181
+   5,642.361111111111 × 43.3333% = **2,445.023148148148**
 
-3. Shareholders for LA:  
-    9,403.93518 × 43.3333% \= 4,075.03854665  
-    Shareholders receive rewards proportional to their shares. Total shares for LA: 200 \+ 1,200 \+ 600 \= 2,000  
-     
-    Proportions:  
+   Shareholders receive rewards proportional to their shares. Total shares for LA: 200 + 1,200 + 600 = 2,000       
+    
+Proportions:  
 * Address1 → 200 / 2,000 \= 10%  
 * Address3 → 1,200 / 2,000 \= 60%  
 * Address5 → 600 / 2,000 \= 30%  
-    
-  Rewards:  
-* Address1 → 407.50385466  
-* Address3 → 2,445.02312799  
-* Address5 → 1,222.51156399
 
-4. Shareholders for LB:  
-    9,403.93518 × 15% \= 1,410.590277  
-    Shareholders receive rewards proportional to their shares. Total shares for LB: 2,000 \+ 3,000 \+ 5,000 \= 10,000  
-    Proportions:  
-* Address5 → 2,000 / 10,000 \= 20%  
-* Address2 → 3,000 / 10,000 \= 30%  
-* Address4 → 5,000 / 10,000 \= 50%
+  Rewards:
 
-  Rewards:  
-* Address5 → 282.1180554  
-* Address2 → 423.1770831  
-* Address4 → 705.2951385
+* Address1 → 244.5023148148148
+
+* Address3 → 1,467.013888888889
+
+* Address5 → 733.507 (rounded)
+
+
+
+4. Shareholders for LB:
+
+   5,642.361111111111 × 15% = **846.3541666666666**
+
+   Shareholders receive rewards proportional to their shares. Total shares for LB: 2,000 + 3,000 + 5,000 = 10,000
+
+Proportions:
+* Address5 → 2,000 / 10,000 = 20%
+* Address2 → 3,000 / 10,000 = 30%
+* Address4 → 5,000 / 10,000 = 50%
+
+
+
+Rewards:
+
+* Address5 → 169.2708333333333
+* Address2 → 253.90625
+* Address4 → 423.1770833333333
+
+
 
 Step3: Aggregate distribution reward
-
 So, the final Vote-Based Reward distribution is (assume that validators have addresses VA (Address5) and VB (Address6)):
 
-* Address1 → 407.50385466 (Liquidity Pool LA reward)
+* Address1 → 244.5023148148148 (Liquidity Pool LA reward)
+* Address2 → 253.90625 (Liquidity Pool LB reward)
+* Address3 → 1,467.013888888889 (Liquidity Pool LA reward)
+* Address4 → 423.1770833333333 (Liquidity Pool LB reward)
+* Address5 → 1,175.4910648145833 (Validator VA reward) + 733.507 (Liquidity Pool LA reward) + 169.2708333333333 (Liquidity Pool LB reward) = **2,078.2688981489166**
+* Address6 → 1,175.4910648145833 (Validator VB reward)
 
-* Address2 → 423.1770831 (Liquidity Pool LB reward)
+The total Vote-Based Rewards sum up as expected to approximately **5,642.361111111111** tokens.
 
-* Address3 → 2,445.02312799 (Liquidity Pool LA reward)
-
-* Address4 → 705.2951385 (Liquidity Pool LB reward)
-
-* Address5 → 1 959,12181 (Validator VA reward) \+ 1,222.51156399 (Liquidity Pool LA reward) \+ 282.1180554 (Liquidity Pool LB reward) \= 3,463.75137
-
-* Address6 → 1 959,12181 (Validator VB reward)
-
-The total Vote-Based Rewards sum up as expected to approximately 9,403.93518 tokens.
-
- *Note: The token amount precision is up to 8 decimal places; smaller fractions are rounded down.*
+*Note: The token amount precision is up to 8 decimal places; smaller fractions are rounded down.*
 
 ### 6\. DAO Rewards
 
@@ -461,7 +468,7 @@ Available voting powers:
 Only Address2 and Address3 voted in last month → Total active votes \= 10,000
 
 * Address2 share \= 30%  
-  * Address3 share \= 70%
+* Address3 share \= 70%
 
 Step 2: Calculating Governance Rewards distribution per address:
 
@@ -473,9 +480,9 @@ Rewards will be calculated by using formula::
 
 So using that formula give:
 
-Address2 –\>  `(20,000,000 / 518,400) * 0.3 = 11.57407407407407 = 11.57407407 (token amount is rounded down after 8th digit) * 100 = 1157.407407 tokens distributed`
+Address2 –\>  `(20,000,000 / 518,400) * 0.3 = 11.57407407407407 = 11.57407407 (token amount is rounded down after 8th digit) * 60 = 694.4444442 tokens distributed`
 
-Address3 –\> `(20,000,000 / 518,400) * 0.7 = 38.58024691358025 = 38.58024691 (token amount is rounded down after 8th digit) * 100 = 3858.024691 tokens distributed`
+Address3 –\> `(20,000,000 / 518,400) * 0.7 = 38.58024691358025 = 38.58024691 (token amount is rounded down after 8th digit) * 60 = 2314.8148146 tokens distributed`
 
 When splitting Governance Rewards, rounding may leave a small leftover amount (the *remainder*). Instead of discarding it:
 
