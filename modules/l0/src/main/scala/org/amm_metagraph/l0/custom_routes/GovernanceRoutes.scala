@@ -9,10 +9,11 @@ import io.constellationnetwork.schema.address.Address
 
 import derevo.circe.magnolia.{decoder, encoder}
 import derevo.derive
-import io.circe.generic.auto._
+import io.circe.syntax.EncoderOps
+import io.circe.{Encoder, JsonObject}
 import org.amm_metagraph.l0.custom_routes.Responses.SingleResponse
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
-import org.amm_metagraph.shared_data.types.Governance.{Allocation, UserAllocations, VotingPower}
+import org.amm_metagraph.shared_data.types.Governance._
 import org.http4s.circe.CirceEntityCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -20,9 +21,18 @@ import org.http4s.{HttpRoutes, Response}
 case class GovernanceRoutes[F[_]: Async](
   calculatedStateService: CalculatedStateService[F]
 ) extends Http4sDsl[F] {
+
+  private var lastAllocation: (MonthlyReference, GovernanceVotingResultEx) = (MonthlyReference.empty, GovernanceVotingResultEx.empty)
   private def getAllocationsRewards: F[Response[F]] =
     calculatedStateService.get.flatMap { calculatedState =>
-      Ok(SingleResponse(calculatedState.state.allocations.frozenUsedUserVotes))
+      if (lastAllocation._1 != calculatedState.state.allocations.frozenUsedUserVotes.monthlyReference) {
+        val sum =
+          calculatedState.state.allocations.frozenUsedUserVotes.votingPowerForAddresses.values.map(v => BigDecimal(v.total.value)).sum
+        val newVotingResult = GovernanceVotingResultEx(sum, calculatedState.state.allocations.frozenUsedUserVotes)
+        lastAllocation = (calculatedState.state.allocations.frozenUsedUserVotes.monthlyReference, newVotingResult)
+      }
+
+      Ok(SingleResponse(lastAllocation._2))
     }
 
   private def getAllocationStats: F[Response[F]] =
@@ -85,3 +95,15 @@ case class CurrentAllocationsForAddress(address: Address, allocation: CurrentAll
 
 @derive(encoder, decoder)
 case class CurrentAllocations(allocations: List[Allocation], votingPower: VotingPower)
+
+@derive(encoder, decoder)
+case class GovernanceVotingResultEx(totalVotes: BigDecimal, governanceVotingResult: GovernanceVotingResult)
+object GovernanceVotingResultEx {
+  val empty = GovernanceVotingResultEx(BigDecimal(0), GovernanceVotingResult.empty)
+  implicit val enc: Encoder.AsObject[GovernanceVotingResultEx] =
+    Encoder.AsObject.instance { o =>
+      val baseObj: JsonObject =
+        o.governanceVotingResult.asJson.asObject.getOrElse(JsonObject.empty)
+      baseObj.add("total-votes", o.totalVotes.asJson)
+    }
+}
