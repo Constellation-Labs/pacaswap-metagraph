@@ -211,6 +211,7 @@ case class PriceRunner[F[_]: Async](
           liquidityPool,
           updatedTokenInformation,
           CurrencyId(owner),
+          EpochProgress.MaxValue,
           SnapshotOrdinal.MinValue
         )
       )
