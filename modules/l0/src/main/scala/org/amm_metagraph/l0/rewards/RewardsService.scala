@@ -7,6 +7,7 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.DataCalculatedState
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotStateProof}
+import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.node.shared.domain.rewards.Rewards
 import io.constellationnetwork.node.shared.infrastructure.consensus.trigger.ConsensusTrigger
 import io.constellationnetwork.node.shared.snapshot.currency.CurrencySnapshotEvent
@@ -109,7 +110,8 @@ object RewardsService {
       for {
         genesisRewards <- genesisRewardsF
         regularRewards <- regularRewardsF
-        mergedRewards <- mergeRewardsByAddress(genesisRewards, regularRewards) match {
+        oneTimeRewards = OneTimeRewards.loadOneTimeRewards(lastArtifact.ordinal.next)
+        mergedRewards <- mergeRewardsByAddress(genesisRewards, regularRewards, oneTimeRewards) match {
           case Right(rewards) => rewards.pure[F]
           case Left(err) =>
             Async[F].raiseError[SortedSet[RewardTransaction]](
