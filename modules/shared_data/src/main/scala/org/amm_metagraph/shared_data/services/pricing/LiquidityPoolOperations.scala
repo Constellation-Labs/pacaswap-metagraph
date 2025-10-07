@@ -124,39 +124,92 @@ class LiquidityPoolOperations[F[_]: Async](
     liquidityPool: LiquidityPool,
     swapTokenInfo: SwapTokenInfo,
     metagraphId: CurrencyId,
+    lastSyncGlobalEpochProgress: EpochProgress,
     currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
-    val fromTokenInfo = swapTokenInfo.primaryTokenInformationUpdated
-    val toTokenInfo = swapTokenInfo.pairTokenInformationUpdated
+    val expireEpochProgress = getFailureExpireEpochProgress(config, lastSyncGlobalEpochProgress)
+    val swapUpdate = hashedSwapUpdate.signed.value
+    val fromTokenInfo = swapUpdate.swapFromPair
+    val toTokenInfo = swapUpdate.swapToPair
 
-    val tokenA = if (liquidityPool.tokenA.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
-    val tokenB = if (liquidityPool.tokenB.identifier === fromTokenInfo.identifier) fromTokenInfo else toTokenInfo
-    val k = BigInt(tokenA.amount.value) * BigInt(tokenB.amount.value)
+    val (tokenA, tokenB) = if (liquidityPool.tokenA.identifier === fromTokenInfo) {
+      (liquidityPool.tokenA, liquidityPool.tokenB)
+    } else {
+      (liquidityPool.tokenB, liquidityPool.tokenA)
+    }
 
-    val updatedPool = liquidityPool
-      .focus(_.tokenA)
-      .replace(tokenA)
-      .focus(_.tokenB)
-      .replace(tokenB)
-      .focus(_.k)
-      .replace(k)
-
-    logger
-      .logPoolOperation(
-        operation = "SWAP",
-        beforePool = liquidityPool,
-        afterPool = updatedPool,
-        updateHash = Some(hashedSwapUpdate.hash),
-        additionalInfo = Map(
-          "fromToken" -> fromTokenInfo.identifier.toString,
-          "toToken" -> toTokenInfo.identifier.toString,
-          "grossAmount" -> swapTokenInfo.grossReceived.value.toString,
-          "metagraphId" -> metagraphId.toString,
-          "currencyOrdinal" -> currencyOrdinal.show,
-          "swapTokenInfo" -> swapTokenInfo.toString
+    val result = for {
+      newTokenAAmount <- PosLong
+        .from(tokenA.amount.value + swapTokenInfo.amount.value.value)
+        .leftMap(_ =>
+          FailedCalculatedState(
+            ArithmeticError(s"Token A amount overflow: ${tokenA.amount.value} + ${swapTokenInfo.amount.value.value}"),
+            expireEpochProgress,
+            hashedSwapUpdate.hash,
+            hashedSwapUpdate.signed
+          )
         )
-      )
-      .as(Right(updatedPool))
+
+      newTokenBAmount <- PosLong
+        .from(tokenB.amount.value - swapTokenInfo.netReceived.value.value)
+        .leftMap(_ =>
+          FailedCalculatedState(
+            ArithmeticError(s"Token B amount underflow or negative: ${tokenB.amount.value} - ${swapTokenInfo.netReceived.value.value}"),
+            expireEpochProgress,
+            hashedSwapUpdate.hash,
+            hashedSwapUpdate.signed
+          )
+        )
+
+      updatedTokenA = tokenA.copy(amount = newTokenAAmount)
+      updatedTokenB = tokenB.copy(amount = newTokenBAmount)
+
+      k = BigInt(updatedTokenA.amount.value) * BigInt(updatedTokenB.amount.value)
+
+      updatedPool =
+        if (liquidityPool.tokenA.identifier === fromTokenInfo) {
+          liquidityPool
+            .focus(_.tokenA)
+            .replace(updatedTokenA)
+            .focus(_.tokenB)
+            .replace(updatedTokenB)
+            .focus(_.k)
+            .replace(k)
+        } else {
+          liquidityPool
+            .focus(_.tokenA)
+            .replace(updatedTokenB)
+            .focus(_.tokenB)
+            .replace(updatedTokenA)
+            .focus(_.k)
+            .replace(k)
+        }
+    } yield updatedPool
+
+    result match {
+      case Right(pool) =>
+        logger
+          .logPoolOperation(
+            operation = "SWAP",
+            beforePool = liquidityPool,
+            afterPool = pool,
+            updateHash = Some(hashedSwapUpdate.hash),
+            additionalInfo = Map(
+              "fromToken" -> fromTokenInfo.toString,
+              "toToken" -> toTokenInfo.toString,
+              "amountIn" -> swapTokenInfo.amount.value.toString,
+              "grossReceived" -> swapTokenInfo.grossReceived.value.toString,
+              "netReceived" -> swapTokenInfo.netReceived.value.toString,
+              "metagraphId" -> metagraphId.toString,
+              "currencyOrdinal" -> currencyOrdinal.show,
+              "kBefore" -> liquidityPool.k.toString,
+              "kAfter" -> pool.k.toString
+            )
+          )
+          .as(Right(pool))
+
+      case Left(error) => error.asLeft[LiquidityPool].pure
+    }
   }
 
   def updatePoolForWithdrawal(

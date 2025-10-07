@@ -142,9 +142,9 @@ object SwapCombinerService {
         currencyId: CurrencyId
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         tokenInfo.collect { case swapInfo: SwapTokenInfo => swapInfo } match {
-          case Some(SwapTokenInfo(primary, pair, amountIn, grossReceived, _)) =>
+          case Some(SwapTokenInfo(_, _, amountIn, grossReceived, _)) =>
             for {
-              poolId <- buildLiquidityPoolUniqueIdentifier(primary.identifier, pair.identifier)
+              poolId <- buildLiquidityPoolUniqueIdentifier(pendingAction.update.swapFromPair, pendingAction.update.swapToPair)
               liquidityPoolState = getLiquidityPoolCalculatedState(state.calculated)
               liquidityPool <- getLiquidityPoolByPoolId(liquidityPoolState.confirmed.value, poolId)
               updatedPool <- pricingService
@@ -399,30 +399,56 @@ object SwapCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => pendingAllowSpend.update.toHashed(dataUpdateCodec.serialize))
                 )
 
+                // Generate spend action and update state
+                spendAction = generateSpendAction(
+                  allowSpendToken,
+                  swapUpdate.amountIn,
+                  swapUpdate.swapToPair,
+                  swapTokenInfo.netReceived,
+                  currencyId.value
+                )
+
                 updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewSwap(
                     updateHashed,
                     liquidityPool,
                     swapTokenInfo,
                     currencyId,
+                    globalEpochProgress,
                     currentSnapshotOrdinal
                   )
                 )
 
-                // Generate spend action and update state
-                spendAction = generateSpendAction(
-                  allowSpendToken,
-                  swapUpdate.amountIn,
-                  swapTokenInfo.pairTokenInformationUpdated.identifier,
-                  swapTokenInfo.netReceived,
-                  currencyId.value
+                fromTokenInfo = swapUpdate.swapFromPair
+                toTokenInfo = swapUpdate.swapToPair
+
+                (primaryToken, pairToken) =
+                  if (updatedPool.tokenA.identifier === fromTokenInfo) {
+                    (updatedPool.tokenA, updatedPool.tokenB)
+                  } else {
+                    (updatedPool.tokenB, updatedPool.tokenA)
+                  }
+
+                primaryTokenInfo = TokenInformation(
+                  identifier = fromTokenInfo,
+                  amount = primaryToken.amount
+                )
+
+                pairTokenInfo = TokenInformation(
+                  identifier = toTokenInfo,
+                  amount = pairToken.amount
                 )
 
                 pendingSpendAction = PendingSpendAction(
                   pendingAllowSpend.update,
                   pendingAllowSpend.updateHash,
                   spendAction,
-                  pendingAllowSpend.pricingTokenInfo
+                  swapTokenInfo
+                    .copy(
+                      primaryTokenInformationUpdated = primaryTokenInfo,
+                      pairTokenInformationUpdated = pairTokenInfo
+                    )
+                    .some
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {
@@ -438,7 +464,7 @@ object SwapCombinerService {
                   PendingAllowSpends,
                   PendingSpendTransactions,
                   OperationType.Swap,
-                  pendingAllowSpend.update.asInstanceOf[Signed[AmmUpdate]], // Fix type mismatch
+                  pendingAllowSpend.update.asInstanceOf[Signed[AmmUpdate]],
                   pendingAllowSpend.updateHash,
                   Some(pendingSpendAction.asInstanceOf[PendingAction[AmmUpdate]])
                 )
@@ -450,7 +476,7 @@ object SwapCombinerService {
               } yield finalState
 
             case None =>
-              if (pendingAllowSpend.update.value.maxValidGsEpochProgress <= globalEpochProgress) { // Added .value
+              if (pendingAllowSpend.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingAllowSpend.update),
@@ -511,7 +537,7 @@ object SwapCombinerService {
 
           finalState <-
             if (!isAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) { // Added .value
+              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
