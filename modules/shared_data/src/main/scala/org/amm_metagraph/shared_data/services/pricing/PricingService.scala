@@ -72,6 +72,7 @@ trait PricingService[F[_]] {
     liquidityPool: LiquidityPool,
     swapTokenInfo: SwapTokenInfo,
     metagraphId: CurrencyId,
+    lastSyncGlobalEpochProgress: EpochProgress,
     currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]]
 
@@ -323,6 +324,7 @@ object PricingService {
           liquidityPool: LiquidityPool,
           swapTokenInfo: SwapTokenInfo,
           metagraphId: CurrencyId,
+          lastSyncGlobalEpochProgress: EpochProgress,
           currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, LiquidityPool]] =
           poolOps.updatePoolForSwap(
@@ -330,6 +332,7 @@ object PricingService {
             liquidityPool,
             swapTokenInfo,
             metagraphId,
+            lastSyncGlobalEpochProgress,
             currencyOrdinal
           )
 
