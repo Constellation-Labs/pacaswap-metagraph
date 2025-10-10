@@ -45,6 +45,7 @@ object OneTimeFixesHandler {
     val updatePools7Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(127786L))
     val updatePools8Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(129586L))
     val updatePools9Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(139337L))
+    val updatePools10Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(144253L))
     val updateUSDCPool: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116115L))
 
     override def handleOneTimeFixesOrdinals(
@@ -89,6 +90,10 @@ object OneTimeFixesHandler {
         }
       } else if (currentSnapshotOrdinal === updatePools9Ordinal) {
         updatePoolsAtOrdinal(oldState, "updated-pools-9.json").flatMap { updatedState =>
+          currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
+        }
+      } else if (currentSnapshotOrdinal === updatePools10Ordinal) {
+        updatePoolsAtOrdinal(oldState, "updated-pools-10.json").flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
       } else if (currentSnapshotOrdinal === updateUSDCPool) {
