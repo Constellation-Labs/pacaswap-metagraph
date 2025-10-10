@@ -142,7 +142,7 @@ object SwapCombinerService {
         currencyId: CurrencyId
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] =
         tokenInfo.collect { case swapInfo: SwapTokenInfo => swapInfo } match {
-          case Some(SwapTokenInfo(_, _, amountIn, grossReceived, _)) =>
+          case Some(SwapTokenInfo(_, _, amountIn, _, netReceived)) =>
             for {
               poolId <- buildLiquidityPoolUniqueIdentifier(pendingAction.update.swapFromPair, pendingAction.update.swapToPair)
               liquidityPoolState = getLiquidityPoolCalculatedState(state.calculated)
@@ -154,7 +154,7 @@ object SwapCombinerService {
                   globalEpochProgress,
                   liquidityPool,
                   amountIn,
-                  grossReceived,
+                  netReceived,
                   currencyId,
                   currentSnapshotOrdinal
                 )
