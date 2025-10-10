@@ -38,12 +38,16 @@ object ContextHelper {
       state: DataState[AmmOnChainState, AmmCalculatedState]
     )(implicit context: L0NodeContext[F]): F[ProcessingContext] =
       for {
-        (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, lastSyncState) <- OptionT(
-          context.getLastSynchronizedGlobalSnapshotCombined
-        ).map {
-          case (snapshot, info) => (snapshot.epochProgress, snapshot.ordinal, info)
-        }.getOrElseF {
+        (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal) <- OptionT(
+          context.getLastSynchronizedGlobalSnapshot
+        ).map(snapshot => (snapshot.epochProgress, snapshot.ordinal)).getOrElseF {
           val message = "Could not get last synchronized global snapshot data"
+          logger.error(message) >> Async[F].raiseError(new Exception(message))
+        }
+        globalSnapshotSyncAllowSpends <- OptionT(
+          context.getLastSynchronizedAllowSpends
+        ).getOrElseF {
+          val message = "Could not get last synchronized allow spends"
           logger.error(message) >> Async[F].raiseError(new Exception(message))
         }
 
@@ -53,7 +57,6 @@ object ContextHelper {
         _ <- logger.info(s"lastSyncGlobalEpochProgress=$lastSyncGlobalEpochProgress")
         _ <- logger.info(s"lastSyncGlobalOrdinal=$lastSyncGlobalOrdinal")
 
-        globalSnapshotSyncAllowSpends = getAllowSpendsFromGlobalSnapshotState(lastSyncState)
         globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
           state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
