@@ -399,12 +399,7 @@ object LiquidityPoolCombinerService {
           poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
             buildLiquidityPoolUniqueIdentifier(signedLiquidityPoolUpdate.value.tokenAId, signedLiquidityPoolUpdate.value.tokenBId)
           )
-          _ <- EitherT(
-            liquidityPoolValidations.pendingSpendActionsValidation(
-              signedLiquidityPoolUpdate,
-              globalEpochProgress
-            )
-          ).leftWiden[FailedCalculatedState]
+
           sourceAddress = liquidityPoolUpdate.source
           metagraphGeneratedSpendActionHash <- EitherT.liftF[F, FailedCalculatedState, Hash](
             HasherSelector[F].withCurrent(implicit hs => Hasher[F].hash(pendingSpendAction.generatedSpendAction))
@@ -415,6 +410,14 @@ object LiquidityPoolCombinerService {
           allSpendActionsAccepted <- EitherT.liftF[F, FailedCalculatedState, Boolean] {
             checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes).pure[F]
           }
+
+          _ <- EitherT(
+            liquidityPoolValidations.pendingSpendActionsValidation(
+              signedLiquidityPoolUpdate,
+              allSpendActionsAccepted,
+              globalEpochProgress
+            )
+          ).leftWiden[FailedCalculatedState]
 
           fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
           result <-

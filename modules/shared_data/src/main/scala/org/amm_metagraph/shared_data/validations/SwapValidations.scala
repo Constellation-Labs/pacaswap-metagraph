@@ -54,6 +54,7 @@ trait SwapValidations[F[_]] {
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[SwapUpdate],
+    isSpendTransactionAcceptedInGL0: Boolean,
     lastSyncGlobalEpochProgress: EpochProgress
   ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 }
@@ -202,6 +203,7 @@ object SwapValidations {
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[SwapUpdate],
+      isSpendTransactionAcceptedInGL0: Boolean,
       lastSyncGlobalEpochProgress: EpochProgress
     ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
@@ -209,7 +211,7 @@ object SwapValidations {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             signedUpdate.asRight

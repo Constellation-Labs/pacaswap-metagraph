@@ -279,7 +279,7 @@ object SwapCombinerTest extends MutableIOSuite {
         ),
         swapPendingSpendActionResponse,
         EpochProgress.MaxValue,
-        spendActions,
+        List.empty,
         SnapshotOrdinal.MinValue,
         metagraphId
       )

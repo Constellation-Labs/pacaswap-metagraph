@@ -20,7 +20,6 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
-import org.amm_metagraph.shared_data.globalSnapshots.logger
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -337,14 +336,24 @@ object WithdrawalCombinerService {
                     pendingSpendAction.updateHash,
                     pendingSpendAction.update
                   )
-                  handleFailedUpdate(
-                    pendingSpendAction.update,
-                    oldState,
-                    failedState,
-                    withdrawalCalculatedState,
-                    pendingSpendAction.updateHash,
-                    PendingSpendTransactions
-                  )
+                  for {
+                    stateUpdatedByRollback <- rollbackAmountInLPs(
+                      pendingSpendAction.update,
+                      pendingSpendAction.updateHash,
+                      globalEpochProgress,
+                      pendingSpendAction.pricingTokenInfo,
+                      oldState,
+                      currentSnapshotOrdinal
+                    )
+                    result <- handleFailedUpdate(
+                      pendingSpendAction.update,
+                      stateUpdatedByRollback,
+                      failedState,
+                      withdrawalCalculatedState,
+                      pendingSpendAction.updateHash,
+                      PendingSpendTransactions
+                    )
+                  } yield result
                 }
               } else {
                 logger.debug(s"Withdrawal spend action not yet expired, keeping pending") >> oldState.pure[F]
@@ -355,6 +364,7 @@ object WithdrawalCombinerService {
                 _ <- EitherT(
                   withdrawalValidations.pendingSpendActionsValidation(
                     signedWithdrawalUpdate,
+                    allSpendActionsAccepted,
                     globalEpochProgress
                   )
                 ).leftWiden[FailedCalculatedState]

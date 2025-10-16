@@ -47,6 +47,7 @@ trait WithdrawalValidations[F[_]] {
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[WithdrawalUpdate],
+    isSpendTransactionAcceptedInGL0: Boolean,
     lastSyncGlobalEpochProgress: EpochProgress
   ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 }
@@ -159,6 +160,7 @@ object WithdrawalValidations {
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[WithdrawalUpdate],
+      isSpendTransactionAcceptedInGL0: Boolean,
       lastSyncGlobalEpochProgress: EpochProgress
     ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
@@ -166,7 +168,7 @@ object WithdrawalValidations {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             Right(signedUpdate)
