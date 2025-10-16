@@ -620,7 +620,7 @@ object WithdrawalCombinerTest extends MutableIOSuite {
         ),
         withdrawalResponsePendingSpendActionResponse.copy(sharedArtifacts = SortedSet.empty),
         EpochProgress.MaxValue,
-        spendActions,
+        List.empty,
         SnapshotOrdinal.MinValue
       )
 

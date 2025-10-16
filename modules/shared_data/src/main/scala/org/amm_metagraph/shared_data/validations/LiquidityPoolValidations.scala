@@ -54,6 +54,7 @@ trait LiquidityPoolValidations[F[_]] {
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[LiquidityPoolUpdate],
+    isSpendTransactionAcceptedInGL0: Boolean,
     lastSyncGlobalEpochProgress: EpochProgress
   ): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]]
 
@@ -191,6 +192,7 @@ object LiquidityPoolValidations {
 
     def pendingSpendActionsValidation(
       signedUpdate: Signed[LiquidityPoolUpdate],
+      isSpendTransactionAcceptedInGL0: Boolean,
       lastSyncGlobalEpochProgress: EpochProgress
     ): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
@@ -199,7 +201,7 @@ object LiquidityPoolValidations {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress) {
+          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             signedUpdate.asRight

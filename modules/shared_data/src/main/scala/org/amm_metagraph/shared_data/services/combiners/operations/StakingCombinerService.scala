@@ -412,12 +412,6 @@ object StakingCombinerService {
         val stakingUpdate = signedStakingUpdate.value
 
         val combinedState: EitherT[F, FailedCalculatedState, DataState[AmmOnChainState, AmmCalculatedState]] = for {
-          _ <- EitherT(
-            stakingValidations.pendingSpendActionsValidation(
-              pendingSpendAction.update,
-              globalEpochProgress
-            )
-          ).leftWiden[FailedCalculatedState]
           metagraphGeneratedSpendActionHash <- EitherT.liftF[F, FailedCalculatedState, Hash](
             HasherSelector[F].withCurrent(implicit hs => Hasher[F].hash(pendingSpendAction.generatedSpendAction))
           )
@@ -427,6 +421,13 @@ object StakingCombinerService {
           allSpendActionsAccepted <- EitherT.liftF[F, FailedCalculatedState, Boolean] {
             checkIfSpendActionAcceptedInGl0(metagraphGeneratedSpendActionHash, globalSnapshotsHashes).pure[F]
           }
+          _ <- EitherT(
+            stakingValidations.pendingSpendActionsValidation(
+              pendingSpendAction.update,
+              allSpendActionsAccepted,
+              globalEpochProgress
+            )
+          ).leftWiden[FailedCalculatedState]
           result <-
             if (!allSpendActionsAccepted) {
               if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
