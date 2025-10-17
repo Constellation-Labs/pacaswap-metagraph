@@ -522,9 +522,6 @@ object SwapCombinerService {
         val tokenInfo = pendingSpendAction.pricingTokenInfo.collect { case info: SwapTokenInfo => info }
 
         val result = for {
-          _ <- EitherT(swapValidations.pendingSpendActionsValidation(pendingSpendAction.update, globalEpochProgress))
-            .leftWiden[FailedCalculatedState]
-
           metagraphHash <- EitherT.liftF[F, FailedCalculatedState, Hash](
             HasherSelector[F].withCurrent(implicit hs => Hasher[F].hash(pendingSpendAction.generatedSpendAction))
           )
@@ -534,6 +531,9 @@ object SwapCombinerService {
           )
 
           isAccepted = checkIfSpendActionAcceptedInGl0(metagraphHash, globalHashes)
+
+          _ <- EitherT(swapValidations.pendingSpendActionsValidation(pendingSpendAction.update, isAccepted, globalEpochProgress))
+            .leftWiden[FailedCalculatedState]
 
           finalState <-
             if (!isAccepted) {
