@@ -31,6 +31,7 @@ object L0CombinerServiceFactory {
       withdrawalCombinerService,
       governanceCombinerService,
       rewardsCombinerService,
+      rewardsWithdrawService,
       currentSnapshotOrdinalR
     )
 
