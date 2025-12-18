@@ -36,6 +36,7 @@ object StateManager {
     withdrawalCombinerService: WithdrawalCombinerService[F],
     governanceCombinerService: GovernanceCombinerService[F],
     rewardsCombinerService: RewardsDistributionService[F],
+    rewardsWithdrawService: RewardsWithdrawService[F],
     currentSnapshotOrdinalR: SignallingRef[F, SnapshotOrdinal]
   ): StateManager[F] = new StateManager[F] {
 
@@ -94,7 +95,12 @@ object StateManager {
           context.currentSnapshotEpochProgress
         )
 
-        stateUpdatedByLastGlobalSync = governanceRewardsState
+        rewardsCleanedState = rewardsWithdrawService.clearDistributedRewards(
+          governanceRewardsState,
+          context.currentSnapshotEpochProgress
+        )
+
+        stateUpdatedByLastGlobalSync = rewardsCleanedState
           .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
           .replace(context.lastSyncGlobalOrdinal)
 
