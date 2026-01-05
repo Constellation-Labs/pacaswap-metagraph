@@ -31,6 +31,11 @@ trait RewardsWithdrawService[F[_]] {
     currentMetagraphEpochProgress: EpochProgress,
     globalEpochProgress: EpochProgress
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
+
+  def clearDistributedRewards(
+    oldState: DataState[AmmOnChainState, AmmCalculatedState],
+    currentMetagraphEpochProgress: EpochProgress
+  ): DataState[AmmOnChainState, AmmCalculatedState]
 }
 
 object RewardsWithdrawService {
@@ -129,5 +134,24 @@ object RewardsWithdrawService {
         val currentAmount = availableRewards.currentAmount(update.source, update.rewardType)
         FailedCalculatedState(RewardWithdrawAmountError(currentAmount, e.show), currentEpoch, updateHash, update)
       }.toEitherT
+
+      def clearDistributedRewards(
+        oldState: DataState[AmmOnChainState, AmmCalculatedState],
+        currentMetagraphEpochProgress: EpochProgress
+      ): DataState[AmmOnChainState, AmmCalculatedState] = {
+        val rewardsState = oldState.calculated.rewards
+        val calculatedState: RewardWithdrawCalculatedState = rewardsState.withdraws
+        val pending = calculatedState.pending
+        val offsetToRemove = 20L
+
+        val unexpiredPending = pending.filterNot {
+          case (key, _) =>
+            key.value.value + offsetToRemove <= currentMetagraphEpochProgress.value.value
+        }
+
+        oldState
+          .focus(_.calculated.rewards.withdraws.pending)
+          .replace(unexpiredPending)
+      }
     }
 }
