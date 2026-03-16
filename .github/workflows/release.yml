@@ -34,7 +34,7 @@ jobs:
           fi
 
       - name: Check branch and abort if necessary
-        if: env.TAG_EXISTS == 'true' && github.ref_name == 'release/integrationnet'
+        if: env.TAG_EXISTS == 'true'
         run: |
           echo "Aborting the action because the release should already exist."
           exit 1
@@ -93,7 +93,7 @@ jobs:
           echo "Debug: Setting release_tag output to v$VERSION"
 
       - name: Assembly 🚀
-        run: sbt 'currencyL0/assembly;currencyL1/assembly;dataL1/assembly'
+        run: sbt -Dversion.override=${{ steps.get_version.outputs.VERSION }} 'currencyL0/assembly;currencyL1/assembly;dataL1/assembly'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: v${{ steps.get_version.outputs.VERSION }}
