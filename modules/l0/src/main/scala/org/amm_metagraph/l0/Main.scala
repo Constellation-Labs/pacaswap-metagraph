@@ -51,7 +51,7 @@ object Main
   ): Option[SortedSet[SharedArtifact]] = {
     val ordinalToPerformBalanceAdjustments1 = 109991L
     val ordinalToPerformBalanceAdjustments2 = 145000L
-    val ordinalToPerformBalanceAdjustments3 = 473500L
+    val ordinalToPerformBalanceAdjustments3 = 472325L
     if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None
