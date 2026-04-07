@@ -35,6 +35,7 @@ object BalanceAdjustmentLoader {
         case "SpendTransactionNotApplied"            => Right(SpendTransactionNotApplied)
         case "SpendTransactionSourceNotApplied"      => Right(SpendTransactionSourceNotApplied)
         case "SpendTransactionDestinationNotApplied" => Right(SpendTransactionDestinationNotApplied)
+        case "TokenUnlockBugDeduction"               => Right(TokenUnlockBugDeduction)
         case other                                   => Left(s"Unknown BalanceAdjustmentReason: $other")
       }
 
