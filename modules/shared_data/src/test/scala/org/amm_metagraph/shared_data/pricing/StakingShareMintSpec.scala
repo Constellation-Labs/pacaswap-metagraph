@@ -19,11 +19,11 @@ import org.amm_metagraph.shared_data.types.States.{FailedCalculatedState, Stakin
 import org.amm_metagraph.shared_data.validations.Errors.StakingAmountTooSmall
 import weaver.SimpleIOSuite
 
-/** Regression tests for D2-01 (a dust stake that mints 0 LP shares donates the staker's tokens to incumbent LPs)
-  * and D2-02 (the unsafe PosLong conversion throws and the top-level combine catch drops the whole ordinal's batch).
+/** Regression tests for D2-01 (a dust stake that mints 0 LP shares donates the staker's tokens to incumbent LPs) and D2-02 (the unsafe
+  * PosLong conversion throws and the top-level combine catch drops the whole ordinal's batch).
   *
-  * The deterministic BigInt math + dust rejection is gated by `stakingShareMintFix` so a rolling upgrade does not
-  * fork: below the activation epoch the legacy behavior is preserved byte-for-byte.
+  * The deterministic BigInt math + dust rejection is gated by `stakingShareMintFix` so a rolling upgrade does not fork: below the
+  * activation epoch the legacy behavior is preserved byte-for-byte.
   */
 object StakingShareMintSpec extends SimpleIOSuite {
 

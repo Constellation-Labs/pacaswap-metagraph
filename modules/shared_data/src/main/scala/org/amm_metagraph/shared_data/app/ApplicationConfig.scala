@@ -125,6 +125,10 @@ object ApplicationConfig {
     // range, instead of silently treating it as empty (which can fork via a divergent operations.confirmed hash).
     // EPOCH SPACE: the METAGRAPH snapshot epoch (currentSnapshotEpochProgress). Deploy cache persistence first, let
     // caches fill, THEN set this to a future epoch for a watched, coordinated rollout.
-    globalSyncDataIntegrity: EpochProgress = EpochProgress.MaxValue
+    globalSyncDataIntegrity: EpochProgress = EpochProgress.MaxValue,
+    // D2-06: when the epoch advances by more than 1 between combines (catch-up / missed time triggers), distribute
+    // rewards for EVERY scheduled distribution boundary crossed, not just the single observed epoch, so reward
+    // emission is never silently skipped (under-emission). EPOCH SPACE: the METAGRAPH snapshot epoch.
+    rewardEpochCatchUp: EpochProgress = EpochProgress.MaxValue
   )
 }

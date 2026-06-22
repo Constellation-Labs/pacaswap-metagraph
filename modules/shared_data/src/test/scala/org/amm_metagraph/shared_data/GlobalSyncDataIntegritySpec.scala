@@ -10,10 +10,10 @@ import org.amm_metagraph.shared_data.globalSnapshots.getSpendActionsFromGlobalSn
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import weaver.SimpleIOSuite
 
-/** D1-01: when the node-local global-snapshot cache is missing an ordinal STRICTLY ABOVE the previously-processed
-  * lower bound (inside the consensus-agreed sync range), the node must fail-closed (raise) rather than silently treat
-  * it as empty — otherwise it computes a divergent operations.confirmed and forks. A missing lower-bound ordinal is
-  * tolerated (already processed; re-scan is idempotent). Gated, so legacy behavior is preserved when inactive.
+/** D1-01: when the node-local global-snapshot cache is missing an ordinal STRICTLY ABOVE the previously-processed lower bound (inside the
+  * consensus-agreed sync range), the node must fail-closed (raise) rather than silently treat it as empty — otherwise it computes a
+  * divergent operations.confirmed and forks. A missing lower-bound ordinal is tolerated (already processed; re-scan is idempotent). Gated,
+  * so legacy behavior is preserved when inactive.
   */
 object GlobalSyncDataIntegritySpec extends SimpleIOSuite {
 

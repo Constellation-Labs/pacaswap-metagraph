@@ -15,11 +15,11 @@ import org.amm_metagraph.shared_data.types.States.OperationType.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import weaver.SimpleIOSuite
 
-/** D6-04: serialization round-trip — decode(encode(x)) == x for the consensus state types, so a node rebuilding
-  * calculated state from snapshots reconstructs byte-identical data.
+/** D6-04: serialization round-trip — decode(encode(x)) == x for the consensus state types, so a node rebuilding calculated state from
+  * snapshots reconstructs byte-identical data.
   *
-  * D6-03: the calculated-state proof is deterministic and node-independent — two independent service instances hash
-  * the same state to the same value (the property the consensus proof relies on).
+  * D6-03: the calculated-state proof is deterministic and node-independent — two independent service instances hash the same state to the
+  * same value (the property the consensus proof relies on).
   */
 object CalculatedStateSerializationSpec extends SimpleIOSuite {
 
@@ -52,6 +52,6 @@ object CalculatedStateSerializationSpec extends SimpleIOSuite {
       h1 <- s1.hash(populatedState)
       h2 <- s2.hash(populatedState)
       h1again <- s1.hash(populatedState)
-    } yield expect(h1 == h2) and expect(h1 == h1again)
+    } yield expect(h1 == h2).and(expect(h1 == h1again))
   }
 }
