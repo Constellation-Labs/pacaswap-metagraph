@@ -17,6 +17,11 @@ trait GlobalSnapshotsStorage[F[_]] {
 }
 
 object GlobalSnapshotsStorage {
+  // Retain only the newest N global snapshots. The consensus-agreed sync range (lastSync..current) is always at the
+  // TOP of the SortedMap, so keeping the highest N keys can never evict an ordinal the D1-01 integrity check needs,
+  // while bounding memory (the cache was previously unbounded). N is large enough to cover any realistic sync lag.
+  private val RetentionWindow = 10000
+
   def make[F[_]: Async]: F[GlobalSnapshotsStorage[F]] =
     SignallingRef
       .of[F, SortedMap[SnapshotOrdinal, GlobalIncrementalSnapshot]](SortedMap.empty)
@@ -27,7 +32,10 @@ object GlobalSnapshotsStorage {
   ): GlobalSnapshotsStorage[F] =
     new GlobalSnapshotsStorage[F] {
       def set(snapshot: GlobalIncrementalSnapshot): F[Unit] =
-        snapshotsR.update(snapshots => snapshots.updated(snapshot.ordinal, snapshot))
+        snapshotsR.update { snapshots =>
+          val updated = snapshots.updated(snapshot.ordinal, snapshot)
+          if (updated.size > RetentionWindow) updated.takeRight(RetentionWindow) else updated
+        }
 
       def get: F[Option[GlobalIncrementalSnapshot]] = snapshotsR.get.map {
         _.lastOption.map { case (_, snapshot) => snapshot }

@@ -6,7 +6,7 @@ ThisBuild / organizationName := "amm_metagraph"
 ThisBuild / scalaVersion := "2.13.16"
 
 ThisBuild / evictionErrorLevel := Level.Warn
-ThisBuild / scalafixDependencies += Libraries.organizeImports
+ThisBuild / scalafixDependencies += Libraries.scalafixRules
 
 enablePlugins(GitVersioningPlugin)
 
@@ -58,9 +58,7 @@ lazy val sharedData = (project in file("modules/shared_data"))
       CompilerPlugin.kindProjector,
       CompilerPlugin.betterMonadicFor,
       CompilerPlugin.semanticDB,
-      Libraries.tessellationSdk,
-      Libraries.requests,
-      Libraries.upickle
+      Libraries.tessellationSdk
     )
   )
 lazy val currencyL1 = (project in file("modules/l1"))

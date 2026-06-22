@@ -49,20 +49,43 @@ object globalSnapshots {
   def getSpendActionsFromGlobalSnapshots[F[_]: Async](
     lastSyncGlobalOrdinal: SnapshotOrdinal,
     currentSyncGlobalOrdinal: SnapshotOrdinal,
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    failOnMissing: Boolean = false
   ): F[List[SpendAction]] = {
     val ordinals = (lastSyncGlobalOrdinal.value.value to currentSyncGlobalOrdinal.value.value)
       .map(o => SnapshotOrdinal(NonNegLong.unsafeFrom(o)))
       .toList
 
+    // D1-01: the [lastSync..currentSync] range is consensus-agreed (derived from the consensus-validated
+    // globalSyncView), but the per-ordinal DATA is read from a node-local, non-persistent, forward-only cache.
+    // A node whose cache is missing any ordinal in the range would silently compute FEWER accepted spend actions,
+    // hence a different operations.confirmed and a different calculated-state proof hash than the majority -> fork.
+    // When failOnMissing is active we instead raise, so the node does NOT finalize a divergent state: combine falls
+    // back to oldState and retries once the missing global snapshots have been (re)pulled/loaded. Nodes WITH complete
+    // data are unaffected, so the majority's hash is identical either way (the flip is for coordinated rollout).
     ordinals.traverse { ordinal =>
       globalSnapshotsStorage.get(ordinal).map {
         case Some(snapshot) =>
-          snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten)
+          Right(snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten))
         case None =>
-          List.empty[SpendAction]
+          if (failOnMissing) Left(ordinal) else Right(List.empty[SpendAction])
       }
-    }.map(_.flatten)
+    }.flatMap { results =>
+      // Only ordinals STRICTLY ABOVE the lower bound are "critical": the lower bound (lastSyncGlobalOrdinal) was
+      // already processed in the previous combine and its acceptances live in oldState, so re-scanning it is
+      // idempotent and its absence (e.g. right after a restart) cannot change this ordinal's result. Raising only on
+      // genuinely-new missing ordinals catches every fork case while avoiding needless halts.
+      val missingCritical = results.collect { case Left(o) if o.value.value > lastSyncGlobalOrdinal.value.value => o }
+      if (missingCritical.nonEmpty)
+        logger[F].warn(
+          s"Global sync data incomplete: missing global snapshots $missingCritical in consensus-agreed range " +
+            s"($lastSyncGlobalOrdinal..$currentSyncGlobalOrdinal]; not ready to finalize this ordinal."
+        ) *> new IllegalStateException(
+          s"Incomplete global-sync data: missing $missingCritical in ($lastSyncGlobalOrdinal..$currentSyncGlobalOrdinal]"
+        ).raiseError[F, List[SpendAction]]
+      else
+        results.collect { case Right(actions) => actions }.flatten.pure[F]
+    }
   }
 
   private def findAllowSpendInGlobalState[F[_]: Async: Hasher](

@@ -22,6 +22,13 @@ trait CalculatedStateService[F[_]] {
     state: AmmCalculatedState
   ): F[Boolean]
 
+  /** Deterministic consensus proof of the calculated state.
+    *
+    * IMPORTANT: this MUST cover only state that every validator can reproduce byte-identically from the consensus inputs (previous state +
+    * ordered updates) — i.e. the SETTLED `operations.confirmed`. It deliberately EXCLUDES `pending`, `lastSyncGlobalSnapshotOrdinal` and
+    * anything derived from each node's GL0 (hypergraph) sync view: at a given metagraph ordinal those legitimately differ across nodes
+    * (different sync POV) and only converge later, so hashing them would CAUSE forks rather than prevent them.
+    */
   def hash(
     state: AmmCalculatedState
   ): F[Hash]
@@ -79,6 +86,8 @@ object CalculatedStateService {
         override def hash(
           state: AmmCalculatedState
         ): F[Hash] = Async[F].delay {
+          // Only the settled, consensus-reproducible operations. See the trait doc for why pending / GL0-sync-derived
+          // state must stay OUT of the proof.
           val operations = state.operations.map(_._2.confirmed).toList
           val canonicalData = createCanonicalRepresentation(operations)
           val digest = MessageDigest.getInstance("SHA-256")

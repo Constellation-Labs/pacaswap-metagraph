@@ -75,4 +75,6 @@ object ConfigReaders {
   }
 
   implicit val tokenLockLimitsConfig: ConfigReader[ApplicationConfig.TokenLockLimitsConfig] = deriveReader
+
+  implicit val activationEpochsReader: ConfigReader[ApplicationConfig.ActivationEpochs] = deriveReader
 }
