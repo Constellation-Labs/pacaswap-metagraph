@@ -324,6 +324,78 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
 
   }
 
+  test("D2-06: an epoch jump distributes for EVERY scheduled boundary crossed when catch-up is active") { implicit res =>
+    implicit val (h, hs, sp, keys) = res
+    val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
+    val List(a1Id, a2Id, a3Id, a4Id, a5Id) = keys.map(_.toId)
+
+    val interval = Shared.config.rewards.rewardCalculationInterval.value
+    // Last processed = boundary 1 (epoch interval-1). Jump to boundary 3 (epoch 3*interval-1) crosses TWO boundaries
+    // (2*interval-1 and 3*interval-1). Legacy only credits the observed one (3*interval-1) -> the 2*interval-1
+    // boundary is silently skipped (under-emission). Catch-up credits both.
+    val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(3L * interval - 1))
+    val lastProcessed = EpochProgress(NonNegLong.unsafeFrom(interval - 1))
+
+    val baseState = DataState(AmmOnChainState.empty, AmmCalculatedState())
+      .focus(_.calculated.rewards.lastProcessedEpoch)
+      .replace(lastProcessed)
+      .focus(_.calculated.allocations.frozenUsedUserVotes.votingPowerForAddresses)
+      .replace(List(a3, a4).map(_ -> VotingPower(NonNegLong.unsafeFrom(0), SortedSet.empty)).toSortedMap)
+
+    def expectedFor(multiplier: Long): Map[AddressAndRewardType, Amount] = Map(
+      AddressAndRewardType(a1, NodeValidator) -> distributedReward(nodeValidatorReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(a2, NodeValidator) -> distributedReward(nodeValidatorReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(a3, NodeValidator) -> distributedReward(nodeValidatorReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(ownerAddress, Dao) -> distributedReward(daoReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(a3, VoteBased) -> distributedReward(voteBasedReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(a4, VoteBased) -> distributedReward(voteBasedReward, NonNegLong.unsafeFrom(multiplier)),
+      AddressAndRewardType(ownerAddress, Governance) -> distributedReward(governanceReward, NonNegLong.unsafeFrom(multiplier))
+    )
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      voters = NonEmptySet.of(
+        SignatureProof(a1Id, dummySignature),
+        SignatureProof(a2Id, dummySignature),
+        SignatureProof(a3Id, dummySignature)
+      )
+      snap <- context.getLastCurrencySnapshot.map(_.get.signed)
+      snapWithVoters = snap.copy(proofs = voters)
+
+      // High availableRewardsPerSnapshot so the whole distribution flushes in a single call.
+      cfg = Shared.config.rewards.copy(availableRewardsPerSnapshot = NonNegInt.unsafeFrom(100))
+      activeService = RewardsDistributionService.make(rewardDistributionCalculator, cfg, Shared.config.epochInfo, EpochProgress.MinValue)
+      legacyService = RewardsDistributionService.make(rewardDistributionCalculator, cfg, Shared.config.epochInfo, EpochProgress.MaxValue)
+
+      activeState <- activeService.updateRewardsDistribution(snapWithVoters, baseState, currentEpoch)
+      legacyState <- legacyService.updateRewardsDistribution(snapWithVoters, baseState, currentEpoch)
+
+      activeRewards = RewardInfo(activeState.calculated.rewards.availableRewards.info)
+        .addRewards(RewardInfo.fromChunks(activeState.calculated.rewards.rewardsBuffer.data).toOption.get)
+        .toOption
+        .get
+      legacyRewards = RewardInfo(legacyState.calculated.rewards.availableRewards.info)
+        .addRewards(RewardInfo.fromChunks(legacyState.calculated.rewards.rewardsBuffer.data).toOption.get)
+        .toOption
+        .get
+    } yield
+      expect.all(
+        activeRewards == RewardInfo(expectedFor(2L * interval)),
+        legacyRewards == RewardInfo(expectedFor(interval)),
+        2L * interval != interval
+      )
+  }
+
   test("Successfully append reward to rewards buffer; buffer shall be released at least on 10%") { implicit res =>
     implicit val (h, hs, sp, keys) = res
     val List(a1, a2, a3, a4, a5) = keys.map(_.toAddress)
