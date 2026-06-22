@@ -125,7 +125,8 @@ object Main
         swapCombinerService,
         withdrawalCombinerService,
         rewardsCombinerService,
-        rewardsWithdrawService
+        rewardsWithdrawService,
+        config.activationEpochs.globalSyncDataIntegrity
       )
       .toResource
 

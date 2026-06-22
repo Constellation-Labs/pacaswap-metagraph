@@ -27,7 +27,8 @@ trait ContextHelper[F[_]] {
 
 object ContextHelper {
   def make[F[_]: Async](
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    globalSyncDataIntegrityActivation: EpochProgress = EpochProgress.MaxValue
   ): ContextHelper[F] = new ContextHelper[F] {
 
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -60,7 +61,8 @@ object ContextHelper {
         globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
           state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
-          globalSnapshotsStorage
+          globalSnapshotsStorage,
+          failOnMissing = currentSnapshotEpochProgress >= globalSyncDataIntegrityActivation
         )
 
         currencyId <- context.getCurrencyId

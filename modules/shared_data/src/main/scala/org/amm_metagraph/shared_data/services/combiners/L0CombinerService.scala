@@ -85,7 +85,18 @@ object L0CombinerService {
         }
       } yield result
       combined.handleErrorWith { e =>
-        logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
+        // Backstop: on an UNHANDLED throw we fall back to oldState so the chain keeps progressing (the batch is
+        // dropped). This is deterministic — every validator hitting the same deterministic error returns the same
+        // oldState — so it does not fork. The danger is a NON-deterministic error (e.g. node-local I/O) reaching here:
+        // then nodes diverge. Such sources are being removed at the root (see D1-01); this catch must stay loud so a
+        // halt/batch-drop is alertable. Log the full exception (cause + stack), not just getMessage, and tag it.
+        val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
+        logger
+          .error(e)(
+            s"COMBINE_FAILED: dropping ${incomingUpdates.size} update(s) $updateHashes and returning previous state. " +
+              s"If this error is non-deterministic across nodes it WILL fork consensus — investigate immediately."
+          )
+          .as(oldState)
       }
     }
   }
