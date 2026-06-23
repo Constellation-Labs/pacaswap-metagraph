@@ -18,7 +18,10 @@ object ApplicationConfigSpec extends SimpleIOSuite {
     val cfg = ApplicationConfigOps.readDefaultPure
     expect.all(
       cfg.activationEpochs.stakingShareMintFix == rolloutEpoch,
-      cfg.activationEpochs.globalSyncDataIntegrity == rolloutEpoch,
+      // D1-01 is DISABLED (EpochProgress.MaxValue) until GlobalSnapshotsStorage backfills the (lastSync .. tip] gap on
+      // startup; active at 486666 it deadlocked every node on restart/rollback. Re-coordinate a future epoch only
+      // after the backfill ships. Keep this assertion in lockstep with application.conf.
+      cfg.activationEpochs.globalSyncDataIntegrity == EpochProgress.MaxValue,
       cfg.activationEpochs.rewardEpochCatchUp == rolloutEpoch
     )
   }
