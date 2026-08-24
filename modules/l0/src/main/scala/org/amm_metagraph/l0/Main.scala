@@ -52,6 +52,7 @@ object Main
     val ordinalToPerformBalanceAdjustments1 = 109991L
     val ordinalToPerformBalanceAdjustments2 = 145000L
     val ordinalToPerformBalanceAdjustments3 = 472325L
+    val ordinalToPerformBalanceAdjustments4 = 735000L
     if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None
@@ -68,6 +69,13 @@ object Main
       }
     } else if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments3) {
       loadBalanceAdjustments("balance-adjustments-3.json") match {
+        case Failure(_) => None
+        case Success(adjustments) =>
+          val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
+          Some(artifactSet)
+      }
+    } else if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments4) {
+      loadBalanceAdjustments("balance-adjustments-4.json") match {
         case Failure(_) => None
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
