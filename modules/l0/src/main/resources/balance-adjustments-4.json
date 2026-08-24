@@ -1,9 +1,9 @@
 [
   {
-    "address": "DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU",
+    "address": "DAG1kEmLAgnCVBURHrL4AMsfn9TZdk4QCYQ8tUu3",
     "reason": "FeeTransactionBugDeduction",
     "reference": [
-      "d50e8ee719b37f425b0e52d83fd8196f40460fe5b487071321b8deb8339ab131",
+      "3b6284b71a7b0f709af4455e504c06f8df05cefbc83be062ec2c552a7d293ff5",
       "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
     ],
     "deduct": -4611686018427387904
@@ -27,12 +27,116 @@
     "deduct": -4611686018427387904
   },
   {
-    "address": "DAG1kEmLAgnCVBURHrL4AMsfn9TZdk4QCYQ8tUu3",
+    "address": "DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU",
     "reason": "FeeTransactionBugDeduction",
     "reference": [
-      "3b6284b71a7b0f709af4455e504c06f8df05cefbc83be062ec2c552a7d293ff5",
+      "d50e8ee719b37f425b0e52d83fd8196f40460fe5b487071321b8deb8339ab131",
       "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
     ],
     "deduct": -4611686018427387904
+  },
+  {
+    "address": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -355236233753468500
+  },
+  {
+    "address": "DAG6zZakMJrrf25FSvPZAi8QA9wVDdmvFkPvTbKu",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -68015979975787660
+  },
+  {
+    "address": "DAG3sGFqKZ974eoCQeZN3jyhsVakPaEZ9usvvCw7",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -26331919536350375
+  },
+  {
+    "address": "DAG7iLJFTAF1sESqM95TJ3W41ibFN29kMYEBiPzb",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -15989532485473099
+  },
+  {
+    "address": "DAG6pvRsWjTzmPSGgNZUu6MGgsQDNQHdnzNGNhzf",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -14694744594311318
+  },
+  {
+    "address": "DAG4jWvjPdpvUqbpUXUobcQG6Js7XGfzZzhvxFmS",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -9272302435058423
+  },
+  {
+    "address": "DAG8Eyr6SGvLorNU4rQspeUXZLZi3wt84CwbV1Ep",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -2000000000366191
+  },
+  {
+    "address": "DAG4fVZch1qTY2ccA5eHkxe2RMTFsnNDU6Zu6mUU",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -1100000000000000
+  },
+  {
+    "address": "DAG4kfRPpcPSh4cMn8ZgdMuTEfdu3yz4veZFrv3L",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -980712904995178
+  },
+  {
+    "address": "DAG0xNaGuUfhorbRKqjsaDt6BP8eqWW3ZMRo1nRp",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -543508489720562
+  },
+  {
+    "address": "DAG5434oVLFRRTqVSsTv4Y1qvyoMBkb4Tey21YuZ",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -297057079411598
+  },
+  {
+    "address": "DAG7uHRz6stwzsEnSHB2w1VxVHsCq7PDuDhTbjNP",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -103959034616603
+  },
+  {
+    "address": "DAG1DD2bM1hpFyWwa8UNgh3wMLGAe5JDSwpoUS9M",
+    "reason": "FeeTransactionBugDeduction",
+    "reference": [
+      "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
+    ],
+    "deduct": -76630509759390
   }
 ]

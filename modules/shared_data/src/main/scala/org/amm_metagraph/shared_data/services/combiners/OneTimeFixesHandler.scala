@@ -15,7 +15,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.loaders.LiquidityPoolLoader
+import org.amm_metagraph.shared_data.loaders.{LiquidityPoolLoader, PoolReservesLoader}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -49,6 +49,10 @@ object OneTimeFixesHandler {
     val updatePools11Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(150973L))
     val updatePools12Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(161148L))
     val updateUSDCPool: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116115L))
+    // Same ordinal as the fee-transaction balance deductions in Main.customArtifacts. The pool
+    // reserves and the balances backing them have to move in one step or withdrawals in between
+    // would price against reserves the metagraph can no longer pay out.
+    val restorePoolReservesOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(735000L))
 
     override def handleOneTimeFixesOrdinals(
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
@@ -104,6 +108,10 @@ object OneTimeFixesHandler {
         }
       } else if (currentSnapshotOrdinal === updatePools12Ordinal) {
         updatePoolsAtOrdinal(oldState, "updated-pools-12.json").flatMap { updatedState =>
+          currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
+        }
+      } else if (currentSnapshotOrdinal === restorePoolReservesOrdinal) {
+        updatePoolReservesAtOrdinal(oldState, "updated-pools-13.json").flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
       } else if (currentSnapshotOrdinal === updateUSDCPool) {
@@ -230,6 +238,67 @@ object OneTimeFixesHandler {
           }
       }
       _ <- logger.info("Pools successfully loaded")
+    } yield result
+
+    private def updatePoolReservesAtOrdinal(
+      oldState: DataState[AmmOnChainState, AmmCalculatedState],
+      resourcePath: String
+    ): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
+      _ <- logger.info("Starting to load the pool reserves to restore")
+      result <- PoolReservesLoader.loadReserves(resourcePath) match {
+        case Failure(exception) =>
+          logger.error(exception)("Error when restoring the pool reserves") >>
+            oldState.pure[F]
+        case Success(pools) =>
+          pools.toList.traverse {
+            case (_, pool) =>
+              buildLiquidityPoolUniqueIdentifier(pool.tokenA.identifier, pool.tokenB.identifier)
+                .map(uniquePoolId => (uniquePoolId, pool))
+          }.flatMap { poolsWithIds =>
+            poolsWithIds.foldM(oldState) {
+              case (state, (uniquePoolId, pool)) =>
+                val currentCalculated = state.calculated
+                val liquidityPoolOps =
+                  currentCalculated.operations(OperationType.LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
+                val confirmedState = liquidityPoolOps.confirmed
+
+                confirmedState.value.get(uniquePoolId.value) match {
+                  case Some(liquidityPool) =>
+                    // poolShares deliberately left alone: no add or withdraw settled during the
+                    // incident, so the share ledger is the one part of the pool still correct.
+                    val updatedLiquidityPool = liquidityPool.copy(
+                      k = pool.k,
+                      tokenA = pool.tokenA,
+                      tokenB = pool.tokenB
+                    )
+
+                    val updatedConfirmedState = confirmedState
+                      .focus(_.value)
+                      .modify(_.updated(uniquePoolId.value, updatedLiquidityPool))
+
+                    val updatedOperations = currentCalculated.operations.updated(
+                      OperationType.LiquidityPool,
+                      liquidityPoolOps.copy(confirmed = updatedConfirmedState)
+                    )
+
+                    // Pending spends carry prices quoted against the corrupted reserves, so they
+                    // go out with the on-chain state instead of settling afterwards.
+                    val finalState = state
+                      .copy(calculated = currentCalculated.copy(operations = updatedOperations))
+                      .focus(_.onChain)
+                      .replace(AmmOnChainState.empty)
+                      .focus(_.sharedArtifacts)
+                      .replace(SortedSet.empty)
+
+                    finalState.pure[F]
+
+                  case None =>
+                    Async[F].raiseError(new RuntimeException(s"Pool ${uniquePoolId.value} not found in state"))
+                }
+            }
+          }
+      }
+      _ <- logger.info("Pool reserves successfully restored")
     } yield result
 
     private def flipPoolTokens(

@@ -20,17 +20,43 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
     Address("DAG1kEmLAgnCVBURHrL4AMsfn9TZdk4QCYQ8tUu3")
   )
 
-  test("balance-adjustments-4.json deducts exactly 2^62 from each minted wallet") {
+  private val pacaswap = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
+
+  /** PACA the swaps pushed into the pool address on top of its pre-attack reserve. */
+  private val poolSurplus = 355236233753468500L
+
+  /** Phantom PACA still liquid with the addresses that bought it out of the pool, after taking off
+    * what each of them moved into a token lock. Locked phantom is out of reach of a
+    * BalanceAdjustment and is not part of this file.
+    */
+  private val thirdPartyTotal = 139406347045268L
+
+  test("balance-adjustments-4.json covers the mint, the pool and every buyer exactly once") {
     IO.fromTry(loadBalanceAdjustments("balance-adjustments-4.json")).map { adjustments =>
+      val minted = adjustments.filter(a => mintedWallets.contains(a.address))
+      val pool = adjustments.filter(_.address == pacaswap)
+      val thirdParty = adjustments.filterNot(a => mintedWallets.contains(a.address) || a.address == pacaswap)
+
       expect.all(
-        adjustments.size == 4,
-        adjustments.map(_.address).toSet == mintedWallets,
+        adjustments.size == 17,
+        // Main folds these into a SortedSet, so two entries for one address would both survive
+        // and deduct twice.
+        adjustments.groupBy(_.address).forall { case (_, entries) => entries.size == 1 },
         adjustments.forall(_.reason == FeeTransactionBugDeduction),
         adjustments.forall(_.increase.isEmpty),
+        adjustments.forall(_.deduct.exists(_.value.value > 0L)),
+        adjustments.forall(_.reference.nonEmpty),
+        minted.size == 4,
+        minted.map(_.address).toSet == mintedWallets,
         // Exact match matters: tessellation's validateRequiredAdjustments compares Amounts
         // exactly, so a float round-trip in the JSON would silently fail the pairing.
-        adjustments.forall(_.deduct.exists(_.value.value == mintedAmount)),
-        adjustments.forall(_.reference.nonEmpty)
+        minted.forall(_.deduct.exists(_.value.value == mintedAmount)),
+        // Each mint wallet's entry names its own fee transaction alongside the mint snapshot.
+        minted.forall(_.reference.size == 2),
+        pool.size == 1,
+        pool.forall(_.deduct.exists(_.value.value == poolSurplus)),
+        thirdParty.size == 12,
+        thirdParty.flatMap(_.deduct.map(_.value.value)).sum == thirdPartyTotal
       )
     }
   }
