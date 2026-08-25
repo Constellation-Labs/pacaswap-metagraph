@@ -62,4 +62,26 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
       )
     }
   }
+
+  pureTest("Main emits the incident artifacts only at ordinal 731650") {
+    val atFix = Main.customArtifactsAt(731650L)
+
+    expect.all(
+      atFix.exists(_.size == 17),
+      atFix.exists(_.forall {
+        case adjustment: io.constellationnetwork.schema.artifact.BalanceAdjustment =>
+          adjustment.reason == FeeTransactionBugDeduction
+        case _ => false
+      }),
+      Main.customArtifactsAt(731649L).isEmpty,
+      Main.customArtifactsAt(731651L).isEmpty
+    )
+  }
+
+  pureTest("Long.MinValue cannot be normalized into a positive deduction") {
+    val json =
+      s"""[{"address":"${pacaswap.value}","reason":"FeeTransactionBugDeduction","reference":[],"deduct":${Long.MinValue}}]"""
+
+    expect(io.circe.parser.decode[List[io.constellationnetwork.schema.artifact.BalanceAdjustment]](json).isLeft)
+  }
 }

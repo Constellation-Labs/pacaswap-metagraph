@@ -111,8 +111,8 @@ object PoolReservesFixSpec extends SimpleIOSuite {
     for {
       ordinalR <- SignallingRef.of[IO, SnapshotOrdinal](SnapshotOrdinal.MinValue)
       handler = OneTimeFixesHandler.make[IO](ordinalR)
-      before <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(734999L)))
-      after <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(735001L)))
+      before <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(731649L)))
+      after <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(731651L)))
     } yield expect.all(before.isEmpty, after.isEmpty)
   }
 

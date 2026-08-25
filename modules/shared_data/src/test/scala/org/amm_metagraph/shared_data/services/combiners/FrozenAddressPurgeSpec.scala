@@ -80,8 +80,9 @@ object FrozenAddressPurgeSpec extends MutableIOSuite {
         !pool.poolShares.addressShares.contains(frozenA),
         !pool.poolShares.addressShares.contains(frozenB),
         pool.poolShares.addressShares.get(bystander).map(_.value.value.value).contains(500L),
-        // denominator shrinks by exactly what was removed, so the bystander still owns 100%
-        pool.poolShares.totalShares.value == 500L,
+        // totalShares is left at 1000 on purpose: the removed 500 becomes unclaimable rather than
+        // being handed to the bystander, who stays at 500/1000 instead of jumping to 500/500.
+        pool.poolShares.totalShares.value == 1000L,
         // voting power, allocations and rewards
         !purged.votingPowers.contains(frozenA),
         purged.votingPowers.contains(bystander),

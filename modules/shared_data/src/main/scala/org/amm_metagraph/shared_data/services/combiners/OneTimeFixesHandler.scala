@@ -271,8 +271,8 @@ object OneTimeFixesHandler {
       _ <- logger.info("Starting to load the pool reserves to restore")
       result <- PoolReservesLoader.loadReserves(resourcePath) match {
         case Failure(exception) =>
-          logger.error(exception)("Error when restoring the pool reserves") >>
-            oldState.pure[F]
+          logger.error(exception)("Error when restoring the pool reserves") >> exception
+            .raiseError[F, DataState[AmmOnChainState, AmmCalculatedState]]
         case Success(pools) =>
           pools.toList.traverse {
             case (_, pool) =>
@@ -320,9 +320,8 @@ object OneTimeFixesHandler {
                     Async[F].raiseError(new RuntimeException(s"Pool ${uniquePoolId.value} not found in state"))
                 }
             }
-          }
+          }.flatTap(_ => logger.info("Pool reserves successfully restored"))
       }
-      _ <- logger.info("Pool reserves successfully restored")
     } yield result
 
     private def flipPoolTokens(
@@ -374,21 +373,18 @@ object OneTimeFixesHandler {
     // no need to recover addresses from proofs here.
     def signedByFrozen(update: Signed[_ <: AmmUpdate]): Boolean = isFrozen(update.value.source)
 
-    // Removing an address's shares without shrinking the denominator would silently reprice every
-    // remaining provider's claim on the pool, so totalShares drops by the same amount.
+    // The frozen holder's shares are dropped and totalShares is deliberately left alone, so those
+    // shares become unclaimable rather than redistributed.
+    //
+    // Shrinking the denominator instead would hand the attacker's claim to the remaining providers: a
+    // holder at 500 of 1000 would become 500 of 500 and own the whole pool, taking reserve that no
+    // deduction burned. Leaving the denominator overstated keeps the sum of individual shares below
+    // totalShares, so the reserve stays over-collateralised and nobody can withdraw value that was
+    // never theirs. It also avoids the PosLong.from(0) case when every holder in a pool is frozen.
     def purgePool(pool: LiquidityPool): LiquidityPool = {
-      val (removed, kept) = pool.poolShares.addressShares.partition { case (address, _) => isFrozen(address) }
-      if (removed.isEmpty) pool
-      else {
-        val removedShares = removed.values.map(_.value.value.value).sum
-        val remaining = pool.poolShares.totalShares.value - removedShares
-        pool.copy(poolShares =
-          pool.poolShares.copy(
-            totalShares = PosLong.from(remaining).getOrElse(pool.poolShares.totalShares),
-            addressShares = kept
-          )
-        )
-      }
+      val kept = pool.poolShares.addressShares.filterNot { case (address, _) => isFrozen(address) }
+      if (kept.size === pool.poolShares.addressShares.size) pool
+      else pool.copy(poolShares = pool.poolShares.copy(addressShares = kept))
     }
 
     def purgeOffChain(opType: OperationType, opState: AmmOffChainState): AmmOffChainState =

@@ -7,8 +7,9 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      # Hardcoding mainnet commit hash
-      tessellation_commit_hash: "fa8fc292e140aecbd52f572402b47a7f4ff8d62f"
+      # Paired consensus changes from tessellation#1575. Unit tests consume the SDK version
+      # published from this exact commit through TESSELLATION_VERSION.
+      tessellation_commit_hash: "8dd9362ed82ae5a21c9d60a2fc30159eccb8cf58"
       use_merge_commit: true
     secrets: inherit
 

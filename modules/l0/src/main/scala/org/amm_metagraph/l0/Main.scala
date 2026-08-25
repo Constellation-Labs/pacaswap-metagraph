@@ -48,35 +48,40 @@ object Main
 
   override def customArtifacts(
     lastCurrencySnapshot: Signed[CurrencyIncrementalSnapshot]
-  ): Option[SortedSet[SharedArtifact]] = {
+  ): Option[SortedSet[SharedArtifact]] =
+    customArtifactsAt(lastCurrencySnapshot.ordinal.value.value + 1)
+
+  private[l0] def customArtifactsAt(nextOrdinal: Long): Option[SortedSet[SharedArtifact]] = {
     val ordinalToPerformBalanceAdjustments1 = 109991L
     val ordinalToPerformBalanceAdjustments2 = 145000L
     val ordinalToPerformBalanceAdjustments3 = 472325L
     val ordinalToPerformBalanceAdjustments4 = 731650L
-    if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments1) {
+    if (nextOrdinal == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
           Some(artifactSet)
       }
-    } else if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments2) {
+    } else if (nextOrdinal == ordinalToPerformBalanceAdjustments2) {
       loadBalanceAdjustments("balance-adjustments-2.json") match {
         case Failure(_) => None
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
           Some(artifactSet)
       }
-    } else if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments3) {
+    } else if (nextOrdinal == ordinalToPerformBalanceAdjustments3) {
       loadBalanceAdjustments("balance-adjustments-3.json") match {
         case Failure(_) => None
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
           Some(artifactSet)
       }
-    } else if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments4) {
+    } else if (nextOrdinal == ordinalToPerformBalanceAdjustments4) {
       loadBalanceAdjustments("balance-adjustments-4.json") match {
-        case Failure(_) => None
+        // At the remediation ordinal, emitting no artifacts would let calculated-state changes
+        // proceed without the paired balance deductions. A packaging/resource failure must halt.
+        case Failure(exception) => throw exception
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
           Some(artifactSet)
