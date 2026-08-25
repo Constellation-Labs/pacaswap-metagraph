@@ -52,7 +52,7 @@ object Main
     val ordinalToPerformBalanceAdjustments1 = 109991L
     val ordinalToPerformBalanceAdjustments2 = 145000L
     val ordinalToPerformBalanceAdjustments3 = 472325L
-    val ordinalToPerformBalanceAdjustments4 = 735000L
+    val ordinalToPerformBalanceAdjustments4 = 731650L
     if (lastCurrencySnapshot.ordinal.value.value + 1 == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None

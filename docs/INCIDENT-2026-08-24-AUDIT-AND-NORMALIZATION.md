@@ -257,7 +257,7 @@ Verify the balance on-chain before proceeding.
 
 ### Step 4 — Set the ordinal
 
-`735000` is a placeholder chosen for a slow rollout. Retarget it close to the restart tip once the window is known.
+`731650` is a placeholder chosen for a slow rollout. Retarget it close to the restart tip once the window is known.
 
 **Three places move together:**
 
@@ -352,7 +352,7 @@ This used to be unschedulable. `convertToAdjustmentEntries` ended in `.toMap` ke
 so a currency held exactly one live block and the newest silently retired the rest — meaning a second
 block could not be added at all. **That is fixed in `#1575` / `#1576`:** blocks are grouped per
 currency and the acceptance path selects the one matching the ordinal being produced. All four
-Pacaswap blocks (109991, 145000, 472325, 735000) are now live simultaneously, which also closes the
+Pacaswap blocks (109991, 145000, 472325, 731650) are now live simultaneously, which also closes the
 silent replay divergence on the three older ordinals.
 
 **Procedure when the locks release**, roughly 6 and 24 months out:

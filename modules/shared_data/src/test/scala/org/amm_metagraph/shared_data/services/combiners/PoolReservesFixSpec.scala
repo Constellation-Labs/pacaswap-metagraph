@@ -25,7 +25,7 @@ import weaver.SimpleIOSuite
 object PoolReservesFixSpec extends SimpleIOSuite {
 
   private val paca = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
-  private val restoreOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(735000L))
+  private val restoreOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(731650L))
 
   // Counterfactual reserves: where the pool would be had the mint never happened but the ten
   // legitimate purchases had. Slightly below the pre-attack PACA because buyers took some out,
