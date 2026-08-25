@@ -9,7 +9,7 @@ jobs:
     with:
       # Paired consensus changes from tessellation#1575. Unit tests consume the SDK version
       # published from this exact commit through TESSELLATION_VERSION.
-      tessellation_commit_hash: "160561ae7a128681adce897d8cf95657b11c21e4"
+      tessellation_commit_hash: "4d4c4515339f0f7ad7c51f1f20d84bb6083b0250"
       use_merge_commit: true
     secrets: inherit
 
