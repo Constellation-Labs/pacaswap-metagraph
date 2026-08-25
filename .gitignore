@@ -10,3 +10,5 @@ target/
 project/project/
 node_modules/
 data/
+# audit captures under docs/data are committed deliberately; scripts/verify_remediation.py reads them
+!docs/data/

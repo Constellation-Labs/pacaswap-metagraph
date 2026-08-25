@@ -33,12 +33,14 @@ The mint was then sold into the PACA/DAG pool. The price collapsed from **4.2133
 | Event | Currency ordinal | Global ordinal | Time (UTC) |
 |---|---|---|---|
 | Mint — 4 fee transactions | 731261 | 6814499 | 15:56:24 |
-| First corrupted swap | — | 6814575 | ~16:05 |
-| Attacker extraction begins | — | 6814722 | ~16:28 |
-| Last third-party purchase | — | 6815439 | ~19:32 |
+| First legitimate purchase | — | 6814844 | ~16:35 |
+| Attacker extraction begins | — | 6814575 | ~16:05 |
+| Last legitimate purchase | — | 6815462 | ~19:44 |
 | Metagraph stopped | 731646 | ~6815495 | ~19:50 |
 
-Window: **385 currency snapshots**, of which **60 contain pool activity**, totalling **132 spend-transaction legs**. All 60 were fetched and parsed. None are missing.
+Window: **385 currency snapshots**. Of those, **60 global ordinals carried metagraph spend activity**, holding **132 spend-transaction legs**. Legs pair into swaps — one leg is what the user paid, the other what the pool returned — giving **62 paired swaps**, of which **44 are against the PACA/DAG pool**. The remaining **8 legs** do not pair cleanly, because several ordinals carry more than one action; they are listed in `docs/data/swaps.json` marked `note`, and none of them affects a deduction.
+
+Every figure in this document is regenerated and checked by `scripts/verify_remediation.py`, which reads the raw captures in `docs/data/`. It exits non-zero if any published number fails to reproduce.
 
 ---
 
@@ -64,7 +66,7 @@ The four mint transaction hashes are in Appendix C.
 
 Together they paid **175,181.66 DAG** and received **1,377,628,385.56 PACA**.
 
-| Address | DAG paid | PACA received | **Keeps** | Removed | Overpayment |
+| Address | DAG paid, net | PACA received, net of anything sold back | **Keeps** | Removed | Received ÷ fair |
 |---|---|---|---|---|---|
 | `DAG6zZakMJrrf25FSvPZAi8QA9wVDdmvFkPvTbKu` | 90,000.00 | 680,159,799.76 | **371,605.05** | 679,788,194.70 | 1,830x |
 | `DAG3sGFqKZ974eoCQeZN3jyhsVakPaEZ9usvvCw7` | 20,000.00 | 263,319,195.36 | **81,867.01** | 263,237,328.35 | 3,216x |
@@ -128,14 +130,14 @@ The original plan computed each holder's deduction as **the full net PACA receiv
 
 Under that plan, `DAG3sGF…` loses all 263,319,195.36 PACA *and* the 20,000 DAG they paid. Same for the other nine.
 
-The corrected plan replays the 10 legitimate purchases against the **pre-attack constant-product curve** — 51,120,803.29 PACA / 12,133,263.92 DAG, 0.3% fee — in ordinal order, with all attacker trades excluded. Each buyer keeps exactly what that replay gives them.
+The corrected plan replays the **26 legitimate purchases made by these 10 addresses** against the **pre-attack constant-product curve** — 51,120,803.29 PACA / 12,133,263.92 DAG, 0.3% fee — in ordinal order, with all attacker trades excluded. Each buyer keeps exactly what that replay gives them.
 
 | | PACA removed |
 |---|---|
 | Original plan (nominal) | 189,413,866,545.09 |
 | **Corrected plan (nominal)** | **189,413,903,467.12** |
 | Actual removed after saturation | **184,027,281,696.42** |
-| Difference | **+36,922.03** |
+| Difference | **+36,922.04** |
 
 **Per-address comparison**
 
@@ -163,9 +165,9 @@ The corrected total is **higher**, not lower. That is the reconciliation working
 
 ```
   +761,181.31   more removed from the pool reserve
-  −724,259.28   returned to the 10 legitimate buyers
+  −724,259.28   retained by the 10 addresses that still hold PACA
   ─────────────
-   +36,922.03   trading fees the pool legitimately earned on those trades
+   +36,922.04   trading fees the pool legitimately earned on those trades
 ```
 
 Supply balances to the unit. Nothing is being given away.
@@ -183,7 +185,7 @@ Supply balances to the unit. Nothing is being given away.
 
 The original target restores PACA but not the drained DAG, leaving the pool at **274 PACA/DAG — still 65× below pre-attack**. That is not a healthy pool; the first arbitrageur to touch it takes the difference.
 
-The corrected target is the **counterfactual**: where the pool would be had the attack never happened but the 10 legitimate trades had. It is slightly below pre-attack PACA (buyers took some out) and slightly above pre-attack DAG (buyers paid some in) — which is exactly right.
+The corrected target is the **counterfactual**: where the pool would be had the attack never happened but those 26 purchases had. It is slightly below pre-attack PACA (buyers took some out) and slightly above pre-attack DAG (buyers paid some in) — which is exactly right.
 
 **DAG injection required: 11,974,147.51** (12,308,553.85 minus the 334,406.34 still there). The 12M treasury injection covers this with **25,852.49 DAG to spare**.
 
@@ -321,12 +323,13 @@ removed by this remediation           184,027,281,696.42 PACA
 still held in token locks                 440,195,962.71 PACA
                                       ──────────────────
 removed + locked                      184,467,477,659.13 PACA
-minus minted                                  +36,922.03 PACA
+minus minted                                  +36,922.04 PACA
 ```
 
-The residual is **+36,922.03 PACA**, and it is not slack — it is exactly the trading fees the pool
-earned on the ten legitimate purchases, which is the same figure that appears in §5. Every unit of
-the mint is accounted for.
+The residual is **+36,922.04 PACA**. It is not zero and is not claimed to be: it is the trading fee
+the pool retained on the 26 legitimate purchases, which stays with the pool as real supply rather
+than being deducted. Every unit of the mint is accounted for, and the only excess is fee income the
+pool genuinely earned.
 
 **Phantom PACA in circulation after this applies: zero.** Everything not removed is locked.
 
@@ -416,7 +419,7 @@ Every purchase, from global-snapshot `spendActions`.
 | `DAG1DD2bM1hpFy…` | 6815420 | 10.00 DAG | 222,799.79 PACA | 22,280.0 |
 | `DAG1DD2bM1hpFy…` | 6815453 | 10.00 DAG | 195,619.34 PACA | 19,561.9 |
 
-The rate column is the audit trail: it climbs from 26 to 19,929 PACA per DAG as the attacker dumped. A healthy pool quotes **4.21**.
+The rate column is the audit trail. Across the 26 purchases it runs from **3,179.6** to **22,282.5** PACA per DAG. A healthy pool quotes **4.21**, so even the cheapest of these was paying roughly 755x the fair rate, and the worst 5,289x. Nobody buying here could have been getting a fair price.
 
 ## Appendix B — Attacker extraction
 
@@ -471,4 +474,4 @@ curl -s "$BE/currency/$M/addresses/<ADDR>/balance"
 
 The load balancer returns **HTTP 403** under aggressive parallel fetching. Sixty sequential requests spaced ~1s completes cleanly.
 
-Raw data backing every figure here is in `data/`: `legs_full.json` (132 legs across 60 ordinals), `swaps.json` (70 reconstructed swaps), `replay.json` (curve replay), `corrected_plan.json` (final per-address figures).
+Raw data backing every figure here is committed in `docs/data/` and checked by `scripts/verify_remediation.py`: `legs_full.json` (132 legs across 60 ordinals), `swaps.json` (70 reconstructed swaps), `replay.json` (curve replay), `corrected_plan.json` (final per-address figures).
