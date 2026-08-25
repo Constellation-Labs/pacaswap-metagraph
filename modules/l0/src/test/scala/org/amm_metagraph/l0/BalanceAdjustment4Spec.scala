@@ -22,12 +22,14 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
 
   private val pacaswap = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
 
-  /** PACA the swaps pushed into the pool address on top of its pre-attack reserve. */
-  private val poolSurplus = 355236233753468500L
+  /** PACA the swaps pushed into the pool address, taken down to the counterfactual reserve: where the pool would sit had the mint never
+    * happened but the ten legitimate purchases had.
+    */
+  private val poolSurplus = 355312351884858115L
 
-  /** Phantom PACA removed from the addresses that bought it out of the pool, net of what each of them is entitled to keep at the
-    * pre-attack price, and after taking off what they moved into a token lock. Locked phantom is out of reach of a BalanceAdjustment
-    * and is not part of this file.
+  /** Phantom PACA removed from the addresses that bought it out of the pool, net of what each of them is entitled to keep at the pre-attack
+    * price, and after taking off what they moved into a token lock. Locked phantom is out of reach of a BalanceAdjustment and is not part
+    * of this file.
     */
   private val thirdPartyTotal = 139333921117902392L
 

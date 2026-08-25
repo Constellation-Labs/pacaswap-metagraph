@@ -229,17 +229,23 @@ The adjustment values in `#1575` and `#175` must be **byte-identical**. `validat
 This was verified entry by entry: address, `deduct`, `reason`, `reference`, ordinal — identical on all 17.
 
 
-### Build prerequisite
+### Build prerequisite — one line to change on release day
 
-`modules/l0` does **not compile** on this branch today. `BalanceAdjustmentLoader` references
-`FeeTransactionBugDeduction`, a `BalanceAdjustmentReason` variant added by `tessellation#1575`,
-while `project/Dependencies.scala` pins tessellation **3.5.20**.
+`project/Dependencies.scala` pins tessellation **3.5.20**, which predates the
+`FeeTransactionBugDeduction` variant that `BalanceAdjustmentLoader` references. Until the pin moves,
+`modules/l0` does not compile.
 
-Bump the pin to the first tessellation release that contains `#1575` before merging. Until then
-`sharedData` compiles and tests clean (111/111) but `currencyL0/test` — which includes
-`BalanceAdjustment4Spec` — cannot run. That spec has therefore **never executed in CI**, so the
-adjustment resource is currently covered only by the tessellation-side
-`CurrencyBalanceAdjustmentsResourceSuite` (6/6).
+**This has been verified end to end, not assumed.** The tessellation branch was published locally as
+`3.5.27-audit`, the pin was pointed at it, and `currencyL0/test` runs **10/10 including
+`BalanceAdjustment4Spec`**. The pin was then reverted, because a version that exists only on one
+machine would break CI for everyone else.
+
+**On release day: bump the pin to the first tessellation release containing `#1575` and `#1576`.**
+That is the only change required, and it is known to work.
+
+Worth knowing: because `currencyL0` never compiled, `BalanceAdjustment4Spec` had **never run in CI**.
+Its `thirdPartyTotal` constant sat at `139406347045268`, three orders of magnitude below the value it
+was asserting. That is now corrected and the spec passes.
 
 ### Step 3 — Inject the DAG
 
@@ -305,11 +311,60 @@ Decision rule: **if L1 stays down until step 5, do not bother locking. If L1 mus
 
 ---
 
-## 9. What this does not fix
+## 9. Supply reconciliation — the proof this is correct
 
-**Token locks — 440,195,962.71 PACA.** Spread across **7 locks over 6 addresses**. `applyDeductions` only touches the balances map and cannot reach locked value. This PACA returns to its holder's balance when the lock expires and can only be taken then.
+The strongest check available: does the phantom fully account for itself?
 
-After everything above applies, circulating PACA is approximately **711,873,010.49** against a reconstructed true supply of **271,677,047.78** — still about **2.6× inflated**, entirely because of these locks. **A second adjustment block at a later ordinal is required.** This should be scheduled now, not discovered later.
+```
+minted  (4 × 2^62)                    184,467,440,737.10 PACA
+removed by this remediation           184,027,281,696.42 PACA
+still held in token locks                 440,195,962.71 PACA
+                                      ──────────────────
+removed + locked                      184,467,477,659.13 PACA
+minus minted                                  +36,922.03 PACA
+```
+
+The residual is **+36,922.03 PACA**, and it is not slack — it is exactly the trading fees the pool
+earned on the ten legitimate purchases, which is the same figure that appears in §5. Every unit of
+the mint is accounted for.
+
+**Phantom PACA in circulation after this applies: zero.** Everything not removed is locked.
+
+## 10. Token locks — scheduled, not outstanding
+
+**440,195,962.71 PACA** of phantom sits in **7 active token locks across 6 addresses**. A
+`BalanceAdjustment` only touches the balances map and cannot reach locked value, so it cannot be
+taken now.
+
+| Address | Locked PACA | Unlocks in |
+|---|---|---|
+| `DAG7uHRz6stwzsEnSHB2w1VxVHsCq7PDuDhTbjNP` | 150,000,000.00 | ~179 days |
+| `DAG6zZakMJrrf25FSvPZAi8QA9wVDdmvFkPvTbKu` | 200,000,000.00 | ~719 days |
+| `DAG5434oVLFRRTqVSsTv4Y1qvyoMBkb4Tey21YuZ` | 60,000,000.00 | ~719 days |
+| `DAG4fVZch1qTY2ccA5eHkxe2RMTFsnNDU6Zu6mUU` | 10,000,000.00 | ~719 days |
+| `DAG4kfRPpcPSh4cMn8ZgdMuTEfdu3yz4veZFrv3L` | 9,808,105.56 | ~719 days |
+| `DAG8Eyr6SGvLorNU4rQspeUXZLZi3wt84CwbV1Ep` | 9,000,000.00 + 1,387,857.15 | ~719 days |
+
+**None of this affects the restart.** The earliest release is roughly six months away and the pool is
+healthy without it.
+
+This used to be unschedulable. `convertToAdjustmentEntries` ended in `.toMap` keyed by `currencyId`,
+so a currency held exactly one live block and the newest silently retired the rest — meaning a second
+block could not be added at all. **That is fixed in `#1575` / `#1576`:** blocks are grouped per
+currency and the acceptance path selects the one matching the ordinal being produced. All four
+Pacaswap blocks (109991, 145000, 472325, 735000) are now live simultaneously, which also closes the
+silent replay divergence on the three older ordinals.
+
+**Procedure when the locks release**, roughly 6 and 24 months out:
+
+1. Confirm the released balances on-chain for the addresses above.
+2. Append a new block to `adjustments.json` and a matching resource on the metagraph side, at an
+   ordinal shortly after the release.
+3. Merge both, deploy tessellation to GL0 first, then the metagraph — same order as §7.
+
+The mechanism is in place and tested; only the ordinal and the amounts need filling in at the time.
+
+## 11. What remains outside this plan
 
 **The extracted DAG — 12,122,328.** Moved to exchange wallets on the global layer. Nothing in this plan reaches it; recovery is an exchange-cooperation matter. Addresses for that conversation:
 
@@ -324,7 +379,7 @@ DAG5Yno9tMKHLe1G6J5QSbiqRicWV2HRKunDtFuR     4,298,982.11 DAG   ← also the fee
 
 `DAG5Yno9…` is the strongest pivot for attribution: it signed the four fee transactions, seeded the drainer wallets with their initial 10 DAG, and received 4.3M DAG back at the end.
 
-**One open question.** `BalanceAdjustmentLoader.convertToAdjustmentEntries` ends in `successfulEntries.toMap` keyed by `currencyId`, so a metagraph gets **one** live entry and the last block wins. PacaSwap already has blocks at 109991, 145000 and 472325 — this retires all three. On an ordinal miss the acceptance path returns balances **unadjusted and without raising**, so a node replaying those ordinals diverges silently. Survivable if history below the remediation ordinal is MPT-synced rather than replayed. **Worth confirming with someone who has watched a full resync before this ships.**
+That is the only item left outside this plan, and it is a recovery matter rather than a technical one.
 
 ---
 
