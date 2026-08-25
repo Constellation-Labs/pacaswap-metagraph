@@ -3,20 +3,23 @@ package org.amm_metagraph.shared_data.services.combiners
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.util.{Failure, Success}
 
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.loaders.{LiquidityPoolLoader, PoolReservesLoader}
+import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
+import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -53,6 +56,22 @@ object OneTimeFixesHandler {
     // reserves and the balances backing them have to move in one step or withdrawals in between
     // would price against reserves the metagraph can no longer pay out.
     val restorePoolReservesOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(735000L))
+
+    // The four wallets the fee-transaction mint credited, plus the address that signed the four
+    // fee transactions. The BalanceAdjustment artifacts emitted at this same ordinal zero their
+    // balances; calculated state is separate from the balance map, so anything they left behind
+    // there -- a pending swap, an LP share, voting power, an unclaimed reward -- survives the
+    // deduction and can still be settled after the restart. This removes all of it.
+    //
+    // Deliberately only the attacker-controlled addresses. The other twelve in the deduction set
+    // are third parties who bought phantom PACA out of the pool; they keep their positions.
+    val frozenAddresses: Set[Address] = Set(
+      Address("DAG5Yno9tMKHLe1G6J5QSbiqRicWV2HRKunDtFuR"),
+      Address("DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU"),
+      Address("DAG4w5mUqNNxQNS4hgdpx3E8FGgiu2UCRsJxHwhX"),
+      Address("DAG7ZjENTP4T36PPSp3skJdTHtQbcuLfpEaAFWdn"),
+      Address("DAG1kEmLAgnCVBURHrL4AMsfn9TZdk4QCYQ8tUu3")
+    )
 
     override def handleOneTimeFixesOrdinals(
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
@@ -111,9 +130,14 @@ object OneTimeFixesHandler {
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
       } else if (currentSnapshotOrdinal === restorePoolReservesOrdinal) {
-        updatePoolReservesAtOrdinal(oldState, "updated-pools-13.json").flatMap { updatedState =>
-          currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
-        }
+        // Reserves and the frozen-address purge land in the same snapshot as the balance
+        // deductions. Splitting them across ordinals would leave a window where the attacker's
+        // calculated state is still actionable against already-corrected reserves.
+        updatePoolReservesAtOrdinal(oldState, "updated-pools-13.json")
+          .map(st => st.copy(calculated = OneTimeFixesHandler.purgeFrozenAddresses(st.calculated, frozenAddresses)))
+          .flatMap { updatedState =>
+            currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
+          }
       } else if (currentSnapshotOrdinal === updateUSDCPool) {
         val usdcPool = CurrencyId(Address("DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh")).some
         val newAmount = PosLong.unsafeFrom(1200116577579L)
@@ -336,5 +360,95 @@ object OneTimeFixesHandler {
         )
 
       } yield updatedState
+  }
+
+  /** Strips every reference to `frozenAddresses` out of calculated state.
+    *
+    * Balance deductions and calculated state are independent: zeroing a wallet's PACA does not cancel a pending swap it signed, release the
+    * LP shares it holds, or clear voting power and unclaimed rewards attributed to it. Each of those is a separate claim on the pool that
+    * would become actionable again the moment the metagraph restarts.
+    */
+  def purgeFrozenAddresses(state: AmmCalculatedState, frozen: Set[Address]): AmmCalculatedState = {
+    def isFrozen(address: Address): Boolean = frozen.contains(address)
+    // AmmUpdate carries the declared source, which is what every validator and combiner keys on;
+    // no need to recover addresses from proofs here.
+    def signedByFrozen(update: Signed[_ <: AmmUpdate]): Boolean = isFrozen(update.value.source)
+
+    // Removing an address's shares without shrinking the denominator would silently reprice every
+    // remaining provider's claim on the pool, so totalShares drops by the same amount.
+    def purgePool(pool: LiquidityPool): LiquidityPool = {
+      val (removed, kept) = pool.poolShares.addressShares.partition { case (address, _) => isFrozen(address) }
+      if (removed.isEmpty) pool
+      else {
+        val removedShares = removed.values.map(_.value.value.value).sum
+        val remaining = pool.poolShares.totalShares.value - removedShares
+        pool.copy(poolShares =
+          pool.poolShares.copy(
+            totalShares = PosLong.from(remaining).getOrElse(pool.poolShares.totalShares),
+            addressShares = kept
+          )
+        )
+      }
+    }
+
+    def purgeOffChain(opType: OperationType, opState: AmmOffChainState): AmmOffChainState =
+      (opType, opState) match {
+        case (_, s: SwapCalculatedState) =>
+          s.copy(
+            confirmed = s.confirmed.copy(value = s.confirmed.value.filterNot { case (a, _) => isFrozen(a) }),
+            pending = s.pending.filterNot(p => signedByFrozen(p.update)),
+            failed = s.failed.filterNot(f => signedByFrozen(f.update))
+          )
+        case (_, s: StakingCalculatedState) =>
+          s.copy(
+            confirmed = s.confirmed.copy(value = s.confirmed.value.filterNot { case (a, _) => isFrozen(a) }),
+            pending = s.pending.filterNot(p => signedByFrozen(p.update)),
+            failed = s.failed.filterNot(f => signedByFrozen(f.update))
+          )
+        case (_, s: WithdrawalCalculatedState) =>
+          s.copy(
+            confirmed = s.confirmed.copy(value = s.confirmed.value.filterNot { case (a, _) => isFrozen(a) }),
+            pending = s.pending.filterNot(p => signedByFrozen(p.update)),
+            failed = s.failed.filterNot(f => signedByFrozen(f.update))
+          )
+        case (_, s: LiquidityPoolCalculatedState) =>
+          s.copy(
+            confirmed = s.confirmed.copy(value = s.confirmed.value.view.mapValues(purgePool).to(SortedMap)),
+            pending = s.pending.filterNot(p => signedByFrozen(p.update)),
+            failed = s.failed.filterNot(f => signedByFrozen(f.update))
+          )
+        case (_, other) => other
+      }
+
+    val purgedOperations = state.operations.map { case (k, v) => k -> purgeOffChain(k, v) }
+
+    val purgedRewards = state.rewards.copy(
+      availableRewards = RewardInfo(state.rewards.availableRewards.info.filterNot { case (k, _) => isFrozen(k.address) }),
+      rewardsBuffer = state.rewards.rewardsBuffer.copy(
+        data = state.rewards.rewardsBuffer.data.filterNot(chunk => isFrozen(chunk.receiver))
+      ),
+      withdraws = state.rewards.withdraws.copy(
+        confirmed = state.rewards.withdraws.confirmed.filterNot { case (a, _) => isFrozen(a) },
+        pending = state.rewards.withdraws.pending.view
+          .mapValues(info => RewardInfo(info.info.filterNot { case (k, _) => isFrozen(k.address) }))
+          .to(SortedMap)
+      )
+    )
+
+    val purgedAllocations = state.allocations.copy(
+      usersAllocations = state.allocations.usersAllocations.filterNot { case (a, _) => isFrozen(a) },
+      frozenUsedUserVotes = state.allocations.frozenUsedUserVotes.copy(
+        votingPowerForAddresses = state.allocations.frozenUsedUserVotes.votingPowerForAddresses.filterNot { case (a, _) => isFrozen(a) }
+      )
+    )
+
+    val purged = state.copy(
+      operations = purgedOperations,
+      votingPowers = state.votingPowers.filterNot { case (a, _) => isFrozen(a) },
+      allocations = purgedAllocations,
+      rewards = purgedRewards
+    )
+
+    purged
   }
 }
