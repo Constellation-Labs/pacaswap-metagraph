@@ -55,7 +55,7 @@ object OneTimeFixesHandler {
     // Same ordinal as the fee-transaction balance deductions in Main.customArtifacts. The pool
     // reserves and the balances backing them have to move in one step or withdrawals in between
     // would price against reserves the metagraph can no longer pay out.
-    val restorePoolReservesOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(731650L))
+    val restorePoolReservesOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(731647L))
 
     // The four wallets the fee-transaction mint credited, plus the address that signed the four
     // fee transactions. The BalanceAdjustment artifacts emitted at this same ordinal zero their

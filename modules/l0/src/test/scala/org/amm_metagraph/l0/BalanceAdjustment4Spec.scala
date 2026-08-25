@@ -63,8 +63,8 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
     }
   }
 
-  pureTest("Main emits the incident artifacts only at ordinal 731650") {
-    val atFix = Main.customArtifactsAt(731650L)
+  pureTest("Main emits the incident artifacts only at ordinal 731647") {
+    val atFix = Main.customArtifactsAt(731647L)
 
     expect.all(
       atFix.exists(_.size == 17),
@@ -73,8 +73,8 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
           adjustment.reason == FeeTransactionBugDeduction
         case _ => false
       }),
-      Main.customArtifactsAt(731649L).isEmpty,
-      Main.customArtifactsAt(731651L).isEmpty
+      Main.customArtifactsAt(731646L).isEmpty,
+      Main.customArtifactsAt(731648L).isEmpty
     )
   }
 

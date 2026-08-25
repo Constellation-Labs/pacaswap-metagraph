@@ -158,7 +158,7 @@ runs:
 
     # A resource missing from the assembled jar is the one failure mode the unit tests cannot see:
     # the test classpath serves src/main/resources directly, while a restart reads it from this jar.
-    # Both resources are fail-closed at ordinal 731650, so a packaging regression would halt the
+    # Both resources are fail-closed at ordinal 731647, so a packaging regression would halt the
     # metagraph at the remediation snapshot. Runs on cache hits too, since the jar is checked either way.
     - name: Verify remediation resources are packaged in the L0 jar
       if: inputs.TEMPLATE_NAME == ''
