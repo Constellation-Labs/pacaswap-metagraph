@@ -156,6 +156,24 @@ runs:
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
         TESSELLATION_VERSION: ${{ inputs.TESSELLATION_VERSION }}
 
+    # A resource missing from the assembled jar is the one failure mode the unit tests cannot see:
+    # the test classpath serves src/main/resources directly, while a restart reads it from this jar.
+    # Both resources are fail-closed at ordinal 731650, so a packaging regression would halt the
+    # metagraph at the remediation snapshot. Runs on cache hits too, since the jar is checked either way.
+    - name: Verify remediation resources are packaged in the L0 jar
+      if: inputs.TEMPLATE_NAME == ''
+      shell: bash
+      run: |
+        JAR=.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
+        for resource in balance-adjustments-4.json updated-pools-13.json; do
+          if unzip -l "$JAR" | grep -q "$resource"; then
+            echo "OK: $resource is packaged in $JAR"
+          else
+            echo "::error::$resource is missing from $JAR"
+            exit 1
+          fi
+        done
+
     - name: Copy data layer JARs if needed - AMM
       if: ${{ inputs.TEMPLATE_NAME == '' && inputs.INCLUDE_DATA_LAYER == 'true' && steps.cache-data-l1.outputs.cache-hit != 'true' }}
       shell: bash
