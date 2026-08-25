@@ -25,11 +25,11 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
   /** PACA the swaps pushed into the pool address on top of its pre-attack reserve. */
   private val poolSurplus = 355236233753468500L
 
-  /** Phantom PACA still liquid with the addresses that bought it out of the pool, after taking off
-    * what each of them moved into a token lock. Locked phantom is out of reach of a
-    * BalanceAdjustment and is not part of this file.
+  /** Phantom PACA removed from the addresses that bought it out of the pool, net of what each of them is entitled to keep at the
+    * pre-attack price, and after taking off what they moved into a token lock. Locked phantom is out of reach of a BalanceAdjustment
+    * and is not part of this file.
     */
-  private val thirdPartyTotal = 139406347045268L
+  private val thirdPartyTotal = 139333921117902392L
 
   test("balance-adjustments-4.json covers the mint, the pool and every buyer exactly once") {
     IO.fromTry(loadBalanceAdjustments("balance-adjustments-4.json")).map { adjustments =>
