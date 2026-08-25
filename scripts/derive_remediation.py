@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""Derive the FeeTransaction-bug remediation inputs from mainnet snapshot data.
-
-The mint at metagraph ordinal 731261 credited four wallets 2^62 PACA each out of
-nothing. This walks every currency snapshot from the mint to the freeze, follows
-the phantom through swaps, token locks and plain transfers, and writes the static
-resources the remediation needs:
-
-  balance-adjustments-4.json   deductions emitted by Main.customArtifacts
-  adjustments.json.fragment    the matching tessellation block, must agree exactly
-  updated-pools-13.json        pre-attack pool reserves for OneTimeFixesHandler
-
-Value only ever rests in three places: the global-layer balances map, the
-global-layer activeTokenLocks map, and the pool reserves in the calculated state.
-Swaps, stakes, locks and transfers are edges between those, so following the edges
-out of the mint is enough to place every unit of the phantom.
-
-Usage:
-  derive_remediation.py fetch  --out DIR [--gl0 URL]
-  derive_remediation.py derive --snapshots DIR [--emit DIR]
-  derive_remediation.py verify --tessellation-resource PATH
-"""
 import argparse
 import brotli
 import collections
@@ -32,16 +11,9 @@ from concurrent.futures import ThreadPoolExecutor
 PACA = "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W"
 MINT_ORDINAL = 731261
 FREEZE_ORDINAL = 731646
-# The snapshot the mint landed in, referenced by every deduction so the artifact
-# carries its own provenance.
 MINT_SNAPSHOT_HASH = "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
-# Pre-attack reserves, recovered by inverting the pricing info on the attacker's
-# first swap. Asserted against the derived flow in check_reserves().
 PRE_ATTACK_PACA = 5112080329000000
 PRE_ATTACK_DAG = 1213326392000000
-# Hashes of the four minting fee transactions. Snapshots carry the signed
-# transaction but not its hash, so these come from hashing them separately and the
-# derivation asserts the destination set matches what it found on chain.
 FEE_TX_HASHES = {
     "DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU": "d50e8ee719b37f425b0e52d83fd8196f40460fe5b487071321b8deb8339ab131",
     "DAG4w5mUqNNxQNS4hgdpx3E8FGgiu2UCRsJxHwhX": "c1db013c80c0ea526a7774034b471b8d5b6f071bf697df656dfa3b85a786be00",
@@ -98,14 +70,13 @@ def one(d):
 
 
 def walk(docs):
-    """Collect every value-moving event, keyed by the three resting places."""
-    mints = []          # (address, amount, feeTxHash)
-    pool_paca = 0       # signed PACA flow into the pool address
+    mints = []
+    pool_paca = 0
     pool_dag = 0
-    gained = collections.Counter()   # PACA received from the pool, net of PACA sent in
-    locked = collections.Counter()   # PACA moved into activeTokenLocks
-    lock_refs = []                   # (ordinal, address, amount, unlockEpoch)
-    transfers = []                   # (source, destination, amount) plain L1 edges
+    gained = collections.Counter()
+    locked = collections.Counter()
+    lock_refs = []
+    transfers = []
 
     for doc in docs:
         v = doc["value"]
@@ -154,15 +125,6 @@ def walk(docs):
 
 
 def derive(flow, balances):
-    """Split the phantom into what is deductible now and what is stuck in locks.
-
-    A holder's phantom sits in up to three places: liquid balance, its own token
-    locks, and whatever it forwarded to someone else. Only the liquid part is
-    reachable by BalanceAdjustment, so the deduction is
-      phantom - locked - forwarded
-    and the forwarded part is chased to whoever holds it now. Anything above that
-    is the holder's own pre-attack PACA and is left alone.
-    """
     minted = sum(a for _, a in flow["mints"])
     mint_wallets = sorted({addr for addr, _ in flow["mints"]})
     escaped = minted - sum(balances.get(a, 0) for a in mint_wallets)
@@ -171,9 +133,6 @@ def derive(flow, balances):
                  if v > 0 and a not in mint_wallets and a != PACA}
     held = dict(from_pool)
 
-    # Follow plain transfers out of tainted addresses in ordinal order. A transfer
-    # between two addresses that never took PACA out of the pool carries no
-    # phantom and must not drag its recipient into the deduction set.
     forwarded = collections.Counter()
     for src, dst, amount in flow["transfers"]:
         if src not in held:
@@ -203,7 +162,6 @@ def derive(flow, balances):
 
 
 def check(flow, d, balances):
-    """The derivation is only trustworthy if the phantom accounts for itself."""
     fails = []
     if len(flow["mints"]) != 4:
         fails.append(f"expected 4 fee transactions, saw {len(flow['mints'])}")
@@ -221,14 +179,10 @@ def check(flow, d, balances):
         fails.append(f"third-party split does not close: {accounted} "
                      f"!= {sum(d['from_pool'].values())}")
 
-    # Every lock has to belong to an address the phantom actually reached, or the
-    # transfer chase missed a hop.
     for _, addr, _, _ in flow["lock_refs"]:
         if addr not in d["held"]:
             fails.append(f"token lock at {addr} is not reachable from the mint")
 
-    # After deducting the surplus the metagraph address has to still cover the
-    # reserve being written, or LP withdrawals outrun the balance backing them.
     left = balances.get(PACA, 0) - d["pool_surplus"]
     if left < PRE_ATTACK_PACA:
         fails.append(f"metagraph address would be left at {left}, short of the "
@@ -254,8 +208,6 @@ def emit(flow, d, balances, out):
         json.dump(entries, fh, indent=2)
         fh.write("\n")
 
-    # Tessellation parses the same shape, takes math.abs of deduct and matches on
-    # address plus Amount only, so it gets the entries verbatim minus the reason.
     tess = [dict(address=e["address"], reason=e["reason"], deduct=e["deduct"],
                  reference=e["reference"]) for e in entries]
     with open(f"{out}/adjustments.json.fragment", "w") as fh:
@@ -275,19 +227,11 @@ def emit(flow, d, balances, out):
 
 
 def verify(metagraph_path, tessellation_path):
-    """Cross-check the two shipped resources.
-
-    The metagraph emits the artifacts and tessellation demands them. Both sides match on
-    address plus Amount, and a mismatch either way stalls the metagraph at the fix ordinal
-    rather than failing anything earlier, so the files have to be compared before release.
-    """
     mg = json.load(open(metagraph_path))
     blocks = json.load(open(tessellation_path))
     paca_at = [i for i, b in enumerate(blocks) if b["currencyId"] == PACA]
     if not paca_at:
         sys.exit(f"no Pacaswap block in {tessellation_path}")
-    # loadAndCreateAdjustmentEntries collects with .toMap, so only the last block for a
-    # currency is ever live. An earlier 735000 block would be silently dead.
     tess = blocks[paca_at[-1]]
 
     def key(entries):

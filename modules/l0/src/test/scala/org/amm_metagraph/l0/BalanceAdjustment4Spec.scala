@@ -11,7 +11,7 @@ import weaver.SimpleIOSuite
 
 object BalanceAdjustment4Spec extends SimpleIOSuite {
 
-  private val mintedAmount = 4611686018427387904L // 2^62, the per-wallet FeeTransaction amount
+  private val mintedAmount = 4611686018427387904L
 
   private val mintedWallets = Set(
     Address("DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU"),
@@ -22,13 +22,8 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
 
   private val pacaswap = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
 
-  /** PACA the swaps pushed into the pool address on top of its pre-attack reserve. */
   private val poolSurplus = 355236233753468500L
 
-  /** Phantom PACA still liquid with the addresses that bought it out of the pool, after taking off
-    * what each of them moved into a token lock. Locked phantom is out of reach of a
-    * BalanceAdjustment and is not part of this file.
-    */
   private val thirdPartyTotal = 139406347045268L
 
   test("balance-adjustments-4.json covers the mint, the pool and every buyer exactly once") {
@@ -39,8 +34,6 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
 
       expect.all(
         adjustments.size == 17,
-        // Main folds these into a SortedSet, so two entries for one address would both survive
-        // and deduct twice.
         adjustments.groupBy(_.address).forall { case (_, entries) => entries.size == 1 },
         adjustments.forall(_.reason == FeeTransactionBugDeduction),
         adjustments.forall(_.increase.isEmpty),
@@ -48,10 +41,7 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
         adjustments.forall(_.reference.nonEmpty),
         minted.size == 4,
         minted.map(_.address).toSet == mintedWallets,
-        // Exact match matters: tessellation's validateRequiredAdjustments compares Amounts
-        // exactly, so a float round-trip in the JSON would silently fail the pairing.
         minted.forall(_.deduct.exists(_.value.value == mintedAmount)),
-        // Each mint wallet's entry names its own fee transaction alongside the mint snapshot.
         minted.forall(_.reference.size == 2),
         pool.size == 1,
         pool.forall(_.deduct.exists(_.value.value == poolSurplus)),

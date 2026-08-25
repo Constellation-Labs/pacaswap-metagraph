@@ -49,9 +49,6 @@ object OneTimeFixesHandler {
     val updatePools11Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(150973L))
     val updatePools12Ordinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(161148L))
     val updateUSDCPool: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(116115L))
-    // Same ordinal as the fee-transaction balance deductions in Main.customArtifacts. The pool
-    // reserves and the balances backing them have to move in one step or withdrawals in between
-    // would price against reserves the metagraph can no longer pay out.
     val restorePoolReservesOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(735000L))
 
     override def handleOneTimeFixesOrdinals(
@@ -264,8 +261,6 @@ object OneTimeFixesHandler {
 
                 confirmedState.value.get(uniquePoolId.value) match {
                   case Some(liquidityPool) =>
-                    // poolShares deliberately left alone: no add or withdraw settled during the
-                    // incident, so the share ledger is the one part of the pool still correct.
                     val updatedLiquidityPool = liquidityPool.copy(
                       k = pool.k,
                       tokenA = pool.tokenA,
@@ -281,8 +276,6 @@ object OneTimeFixesHandler {
                       liquidityPoolOps.copy(confirmed = updatedConfirmedState)
                     )
 
-                    // Pending spends carry prices quoted against the corrupted reserves, so they
-                    // go out with the on-chain state instead of settling afterwards.
                     val finalState = state
                       .copy(calculated = currentCalculated.copy(operations = updatedOperations))
                       .focus(_.onChain)

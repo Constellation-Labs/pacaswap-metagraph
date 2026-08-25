@@ -9,10 +9,6 @@ import io.circe.parser._
 import io.circe.refined._
 import org.amm_metagraph.shared_data.types.LiquidityPool.TokenInformation
 
-/** Reserves without the share ledger. LiquidityPoolFromJson carries poolShares and every historical
-  * updated-pools-*.json replaces them, which is right when the shares themselves drifted. The fee
-  * transaction bug never touched shares, so restoring the reserves has to leave them where they are.
-  */
 @derive(encoder, decoder)
 case class PoolReservesFromJson(
   poolId: String,

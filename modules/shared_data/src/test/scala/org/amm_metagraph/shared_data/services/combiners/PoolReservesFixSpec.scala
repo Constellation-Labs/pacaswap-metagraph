@@ -30,9 +30,6 @@ object PoolReservesFixSpec extends SimpleIOSuite {
   private val preAttackPaca = 5112080329000000L
   private val remainingDag = 18646624000000L
 
-  /** The PACA/DAG pool as the swaps left it: reserves wrecked, share ledger untouched because no
-    * add or withdraw ever settled during the incident.
-    */
   private val corruptedPool = LiquidityPool(
     Hash.empty,
     PoolId(paca.value.value),
@@ -79,11 +76,7 @@ object PoolReservesFixSpec extends SimpleIOSuite {
       expect.all(
         result.isDefined,
         fixed.exists(_.tokenA.amount.value == preAttackPaca),
-        // The DAG the pool paid out is gone from the metagraph, so the pair side stays at what
-        // the metagraph still actually holds rather than the pre-attack reserve.
         fixed.exists(_.tokenB.amount.value == remainingDag),
-        // SwapCalculations prices off k directly instead of deriving it, so a k left over from
-        // the corrupted reserves would keep quoting the attack price.
         fixed.exists(_.k == BigInt(preAttackPaca) * BigInt(remainingDag)),
         fixed.exists(_.poolShares == corruptedPool.poolShares),
         fixed.exists(_.owner == corruptedPool.owner)
