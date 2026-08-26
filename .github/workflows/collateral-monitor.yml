@@ -4,18 +4,27 @@ name: collateral-monitor
 #
 # The metagraph checks the same invariant internally every snapshot, but it only writes to the
 # node log, and a log nobody reads is not an alert. This runs outside the node so a mismatch
-# reaches people: the job fails, and GitHub notifies on a failing scheduled workflow.
+# reaches people.
 #
 # Read-only. It queries two public APIs and writes nothing.
 #
 # The accepted shortfall per ledger lives in scripts/collateral-baseline.json, so the alert fires
 # on the gap GROWING rather than on the gap existing. Once the treasury top-up lands and every
 # ledger reads 1:1, set every baseline to 0 and this becomes a strict check.
+#
+# TO TEST THE ALERT WITHOUT WAITING FOR A REAL BREACH: run this workflow manually with
+# simulate_breach = true. It fabricates a breach, reads nothing, and exercises the whole path
+# through to Slack. An alert nobody has seen fire is an alert nobody can trust.
 
 on:
   schedule:
     - cron: "*/15 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      simulate_breach:
+        description: "Drill: fabricate a breach to prove the alert path works"
+        type: boolean
+        default: false
 
 concurrency:
   group: collateral-monitor
@@ -25,6 +34,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Job level, not step level: a step's `if` cannot see that step's own env block.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,15 +45,68 @@ jobs:
           python-version: "3.11"
 
       - name: Compare pool reserves against the wallet
+        id: check
         env:
           METAGRAPH_L0_URL: ${{ secrets.METAGRAPH_L0_URL }}
+          SIMULATE: ${{ inputs.simulate_breach }}
         run: |
-          if [ -z "$METAGRAPH_L0_URL" ]; then
-            echo "METAGRAPH_L0_URL is not set. Add it as a repository secret pointing at a"
-            echo "reachable ML0 public host, otherwise this monitor cannot read the book."
-            exit 1
+          set +e
+          if [ "$SIMULATE" = "true" ]; then
+            python3 scripts/monitor_collateral.py --simulate-breach 2>&1 | tee /tmp/out.txt
+          else
+            if [ -z "$METAGRAPH_L0_URL" ]; then
+              echo "METAGRAPH_L0_URL is not set. Add it as a repository secret pointing at a"
+              echo "reachable ML0 public host, otherwise this monitor cannot read the book." | tee /tmp/out.txt
+              exit 1
+            fi
+            # A reserve is credited when the SpendAction is generated and the wallet only moves on
+            # settlement, so a single sample can show a false shortfall mid-swap. Re-sample before
+            # failing, and report only a breach that persists.
+            python3 scripts/monitor_collateral.py --confirm-after 45 2>&1 | tee /tmp/out.txt
           fi
-          # A reserve is credited when the SpendAction is generated and the wallet only moves on
-          # settlement, so a single sample can show a false shortfall mid-swap. Re-sample before
-          # failing, and only report a breach that persists.
-          python3 scripts/monitor_collateral.py --confirm-after 45
+          status=${PIPESTATUS[0]}
+          {
+            echo "report<<EOF"
+            cat /tmp/out.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $status
+
+      - name: Alert Slack
+        # Fires only on failure, and only if the webhook is configured. Without the secret the
+        # job still fails and GitHub still notifies, so a missing webhook degrades rather than
+        # silences.
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          REPORT: ${{ steps.check.outputs.report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          report = os.environ.get("REPORT", "").strip() or "(no output captured)"
+          drill = "SIMULATED" in report
+          title = ("Collateral monitor DRILL - this is a test, nothing is wrong"
+                   if drill else
+                   "PacaSwap collateral mismatch: the book no longer matches the wallet")
+          payload = {
+              "text": title,
+              "blocks": [
+                  {"type": "header", "text": {"type": "plain_text", "text": title}},
+                  {"type": "section", "text": {"type": "mrkdwn",
+                   "text": "The pools claim more than the custody address holds, beyond the "
+                           "accepted baseline. Investigate before allowing further withdrawals."
+                           if not drill else
+                           "Triggered manually to verify the alert path. No reading was taken."}},
+                  {"type": "section", "text": {"type": "mrkdwn", "text": f"```{report[:2800]}```"}},
+                  {"type": "context", "elements": [
+                      {"type": "mrkdwn", "text": f"<{os.environ['RUN_URL']}|View the run>"}]},
+              ],
+          }
+          req = urllib.request.Request(
+              os.environ["SLACK_WEBHOOK_URL"],
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              print("slack:", r.status, r.read().decode()[:200])
+          PY

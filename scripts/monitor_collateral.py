@@ -114,7 +114,20 @@ def main():
     ap.add_argument("--pools-file", help="read the book from a file instead (testing, or while stopped)")
     ap.add_argument("--confirm-after", type=int, default=0,
                     help="seconds to wait before re-sampling; only a breach seen twice is reported")
+    ap.add_argument("--simulate-breach", action="store_true",
+                    help="fabricate a breach and exit non-zero, to prove the alerting path works "
+                         "without waiting for a real one. Touches nothing and reads nothing.")
     args = ap.parse_args()
+
+    if args.simulate_breach:
+        # A drill. An alert nobody has ever seen fire is an alert nobody can trust.
+        print("SIMULATED BREACH - this is a drill, no real reading was taken\n")
+        print(f"{'ledger':<26}{'book':>22}{'wallet':>22}{'shortfall':>20}{'accepted':>20}")
+        print(f"{'DAG':<26}{21585973.95064077:>22,.8f}{19944845.99137282:>22,.8f}"
+              f"{1641127.95926795:>20,.8f}{0.0:>20,.8f}  BREACH")
+        print("\nBREACH DAG: the book promises 1,641,127.95926795 more than accepted.")
+        print("\nThis is a SIMULATION triggered by --simulate-breach. Nothing is wrong.")
+        return 1
 
     if not args.pools_url and not args.pools_file:
         raise SystemExit("set METAGRAPH_L0_URL, or pass --pools-url / --pools-file")
