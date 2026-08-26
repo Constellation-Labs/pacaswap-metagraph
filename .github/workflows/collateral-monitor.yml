@@ -1,0 +1,47 @@
+name: collateral-monitor
+
+# Does the AMM's book still match its wallet?
+#
+# The metagraph checks the same invariant internally every snapshot, but it only writes to the
+# node log, and a log nobody reads is not an alert. This runs outside the node so a mismatch
+# reaches people: the job fails, and GitHub notifies on a failing scheduled workflow.
+#
+# Read-only. It queries two public APIs and writes nothing.
+#
+# The accepted shortfall per ledger lives in scripts/collateral-baseline.json, so the alert fires
+# on the gap GROWING rather than on the gap existing. Once the treasury top-up lands and every
+# ledger reads 1:1, set every baseline to 0 and this becomes a strict check.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: collateral-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compare pool reserves against the wallet
+        env:
+          METAGRAPH_L0_URL: ${{ secrets.METAGRAPH_L0_URL }}
+        run: |
+          if [ -z "$METAGRAPH_L0_URL" ]; then
+            echo "METAGRAPH_L0_URL is not set. Add it as a repository secret pointing at a"
+            echo "reachable ML0 public host, otherwise this monitor cannot read the book."
+            exit 1
+          fi
+          # A reserve is credited when the SpendAction is generated and the wallet only moves on
+          # settlement, so a single sample can show a false shortfall mid-swap. Re-sample before
+          # failing, and only report a breach that persists.
+          python3 scripts/monitor_collateral.py --confirm-after 45
