@@ -245,20 +245,23 @@ def main():
           fmt8(pool_row["bal"] - CORRUPTED_PACA), "35,621.37389104")
     adjustments = json.loads(
         (ROOT / "modules/l0/src/main/resources/balance-adjustments-4.json").read_text())
+    # The deduction is derived here rather than trusted: whatever the address holds,
+    # minus the reserve the remediation writes. An earlier revision sized it against
+    # the target rounded to the cent, which left 0.00493271 PACA stranded on the
+    # address above the reserve. Deriving it makes the 1:1 the resource has to meet.
+    expected_deduction = pool_row["bal"] - written["tokenA"]["amount"]
+    check("pool deduction is the balance minus the reserve that gets written",
+          by_addr_pool(adjustments), expected_deduction)
+    check("pool deduction, in datum units", expected_deduction, 355312351885351386)
     left_on_address = pool_row["bal"] - by_addr_pool(adjustments)
-    # The deduction was sized against the target rounded to the cent, 50,395,243.35,
-    # while updated-pools-13.json writes the exact replay figure. The address is
-    # therefore left holding 0.00493271 PACA more than the reserve claims. The
-    # invariant that matters is the direction: the address must be able to back the
-    # reserve, and over-backing by half a cent is safe. Sizing the deduction on the
-    # exact figure instead would move the published nominal total, so it is left
-    # alone and disclosed here.
-    check("the deduction leaves the rounded target on the address",
-          left_on_address, 5039524335000000)
-    check("the address can back the PACA reserve that gets written",
-          left_on_address >= written["tokenA"]["amount"], True)
-    check("slack between the two, in PACA",
-          fmt8(left_on_address - written["tokenA"]["amount"]), "0.00493271")
+    check("what the address is left holding equals the reserve exactly, 1:1",
+          left_on_address, written["tokenA"]["amount"])
+    check("nothing stranded above the reserve",
+          left_on_address - written["tokenA"]["amount"], 0)
+    # It must not saturate: a deduction larger than the balance would clamp at zero
+    # and silently under-remove.
+    check("the deduction does not exceed the balance",
+          by_addr_pool(adjustments) <= pool_row["bal"], True)
 
     print("\nTreasury injection")
     injection = written["tokenB"]["amount"] - CORRUPTED_DAG
@@ -283,7 +286,7 @@ def main():
         check(f"{a[:14]}... deducted the full 2^62", by_addr.get(a), TWO_POW_62)
 
     nominal = sum(by_addr.values())
-    check("nominal deduction total", fmt(nominal), "189,413,903,467.12")
+    check("nominal deduction total", fmt(nominal), "189,413,903,467.13")
 
     print("\nSupply reconciliation")
     # Deductions saturate at zero, so the nominal total overstates what is actually
@@ -292,7 +295,7 @@ def main():
     saturation = sum(max(0, by_addr[a] - observed.get(a, 0))
                      for a in by_addr if a in ATTACKER)
     actual_removed = nominal - saturation
-    check("actually removed after saturation", fmt(actual_removed), "184,027,281,696.42")
+    check("actually removed after saturation", fmt(actual_removed), "184,027,281,696.43")
 
     locks = 44019596271000000  # 7 active locks created after the mint, see section 10
     overage = (actual_removed + locks) - 4 * TWO_POW_62

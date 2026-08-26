@@ -119,9 +119,9 @@ The PACA/DAG pool entry in the calculated state at currency ordinal 731646 holds
 
 Both figures are read from the pool, not from `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`. That address is shared by all four pools, so its balance does not describe this one — the distinction is what §6 turns on.
 
-The address balance is a separate, also-needed number: it held **3,603,518,762.19858122 PACA** when the data was captured, 35,621.37 above the pool's reserve. §5 deducts against the *balance*, not the reserve — the pool row there removes 3,553,123,518.84858115, leaving 50,395,243.35000000 on the address.
+The address balance is a separate, also-needed number: it held **3,603,518,762.19858122 PACA** when the data was captured, 35,621.37 above the pool's reserve. §5 deducts against the *balance*, not the reserve — the pool row there removes 3,553,123,518.84858115, leaving 50,395,243.34506729 on the address.
 
-That is the corrected target **rounded to the cent**, while §6 writes the exact replay figure 50,395,243.34506729 into the reserve. The address is therefore left backing the reserve with **0.00493271 PACA to spare**. The direction is the safe one and the amount is negligible, so the deduction is left as it is rather than restated — resizing it would move the 189,413,903,467.12 nominal total published above. It is recorded here so the two resources are not read as disagreeing.
+The deduction is sized as the balance minus the exact reserve §6 writes, so the address is left holding **50,395,243.34506729 PACA — the reserve figure to the unit, 1:1**. An earlier revision sized it against the target rounded to the cent, which stranded 0.00493271 PACA on the address above the reserve; that is corrected, and `verify_remediation.py` now derives the deduction from the balance and the reserve rather than trusting the resource, so the two cannot drift apart again.
 
 ---
 
@@ -153,8 +153,8 @@ The corrected plan replays the **26 legitimate purchases made by these 10 addres
 | | PACA removed |
 |---|---|
 | Original plan (nominal) | 189,413,866,545.09 |
-| **Corrected plan (nominal)** | **189,413,903,467.12** |
-| Actual removed after saturation | **184,027,281,696.42** |
+| **Corrected plan (nominal)** | **189,413,903,467.13** |
+| Actual removed after saturation | **184,027,281,696.43** |
 | Difference | **+36,922.04** |
 
 **Per-address comparison**
@@ -182,7 +182,7 @@ The corrected plan replays the **26 legitimate purchases made by these 10 addres
 The corrected total is **higher**, not lower. That is the reconciliation working:
 
 ```
-  +761,181.31   more removed from the pool reserve
+  +761,181.32   more removed from the pool reserve
   −724,259.28   retained by the 10 addresses that still hold PACA
   ─────────────
    +36,922.04   trading fees the pool legitimately earned on those trades
@@ -293,7 +293,7 @@ The calculated-state purge reuses `restorePoolReservesOrdinal`, so there is no f
 
 At the chosen ordinal, in **one atomic snapshot**, three things happen:
 
-1. **17 balance deductions** — 189,413,903,467.12 PACA removed
+1. **17 balance deductions** — 189,413,903,467.13 PACA removed
 2. **Pool reserves and `k` restored** — 50,395,243.35 PACA / 12,308,553.85 DAG
 3. **Calculated-state purge** — every reference to the 5 attacker addresses stripped
 
@@ -339,10 +339,10 @@ The strongest check available: does the phantom fully account for itself?
 
 ```
 minted  (4 × 2^62)                    184,467,440,737.10 PACA
-removed by this remediation           184,027,281,696.42 PACA
+removed by this remediation           184,027,281,696.43 PACA
 still held in token locks                 440,195,962.71 PACA
                                       ──────────────────
-removed + locked                      184,467,477,659.13 PACA
+removed + locked                      184,467,477,659.14 PACA
 minus minted                                  +36,922.04 PACA
 ```
 
