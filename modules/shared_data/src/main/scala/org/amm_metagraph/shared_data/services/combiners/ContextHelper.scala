@@ -78,6 +78,8 @@ object ContextHelper {
             )
           else Async[F].unit
 
+        lastSyncGlobalSnapshotInfo <- context.getLastSynchronizedGlobalSnapshotCombined.map(_.map(_._2))
+
         currencyId <- context.getCurrencyId
 
       } yield
@@ -94,7 +96,8 @@ object ContextHelper {
             !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,
-          lastCurrencySnapshotInfo = lastCurrencySnapshotInfo
+          lastCurrencySnapshotInfo = lastCurrencySnapshotInfo,
+          lastSyncGlobalSnapshotInfo = lastSyncGlobalSnapshotInfo
         )
   }
 }

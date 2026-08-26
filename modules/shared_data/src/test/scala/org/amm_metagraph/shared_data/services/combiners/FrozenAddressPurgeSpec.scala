@@ -42,7 +42,7 @@ object FrozenAddressPurgeSpec extends MutableIOSuite {
       BigInt(1000L) * BigInt(1000L),
       PoolShares(
         totalShares = PosLong.unsafeFrom(1000L),
-        addressShares = Map(frozenA -> share(300L), frozenB -> share(200L), bystander -> share(500L))
+        addressShares = SortedMap(frozenA -> share(300L), frozenB -> share(200L), bystander -> share(500L))
       ),
       FeeDistributor.empty
     )
@@ -59,7 +59,7 @@ object FrozenAddressPurgeSpec extends MutableIOSuite {
       ),
       rewards = RewardsState().copy(
         availableRewards = RewardInfo(
-          Map(
+          SortedMap(
             AddressAndRewardType(frozenA, RewardType.Governance) -> Amount(NonNegLong.unsafeFrom(111L)),
             AddressAndRewardType(bystander, RewardType.Governance) -> Amount(NonNegLong.unsafeFrom(222L))
           )

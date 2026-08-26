@@ -4,7 +4,7 @@ import cats.MonadThrow
 import cats.effect.Async
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.ext.derevo.ordering
 import io.constellationnetwork.schema.address.Address
@@ -47,7 +47,11 @@ object LiquidityPool {
   @derive(encoder, decoder)
   case class PoolShares(
     totalShares: PosLong,
-    addressShares: Map[Address, ShareAmount]
+    // SortedMap, not Map: this is iterated into value-bearing reward output
+    // (RewardCalculator), where iteration order decides which rewards land in which
+    // snapshot. A hash-ordered Map made that deterministic only by accident of the
+    // collection implementation. Proof-neutral - it serialises to the same JSON object.
+    addressShares: SortedMap[Address, ShareAmount]
   )
 
   object PoolShares {

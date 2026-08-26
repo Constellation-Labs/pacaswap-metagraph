@@ -25,7 +25,8 @@ object L0CombinerService {
     updateProcessor: NewUpdatesProcessor[F],
     pendingOperationsProcessor: PendingOperationsProcessor[F],
     oneTimeFixesHandler: OneTimeFixesHandler[F],
-    contextHelper: ContextHelper[F]
+    contextHelper: ContextHelper[F],
+    collateralInvariant: CollateralInvariant[F]
   ): L0CombinerService[F] = new L0CombinerService[F] {
 
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -75,6 +76,9 @@ object L0CombinerService {
                       finalState,
                       processingContext
                     )
+                    // The book must always equal the wallet. Checked every snapshot, so a
+                    // divergence is visible in one snapshot rather than after months.
+                    _ <- collateralInvariant.check(cleanedState, processingContext)
                   } yield cleanedState
               }
             } yield result

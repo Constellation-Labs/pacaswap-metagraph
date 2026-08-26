@@ -14,9 +14,8 @@ import weaver.SimpleIOSuite
 
 /** Backward compatibility of the calculated state, and determinism of the proof.
   *
-  * A node must be able to rebuild itself from genesis. It replays every ordinal and accepts a
-  * state only where the recomputed proof equals the proof recorded in that snapshot. So two
-  * things must hold for any schema change: old serialised states must still decode, and the
+  * A node must be able to rebuild itself from genesis. It replays every ordinal and accepts a state only where the recomputed proof equals
+  * the proof recorded in that snapshot. So two things must hold for any schema change: old serialised states must still decode, and the
   * proof must not move for any state that existed before the change.
   */
 object CalculatedStateCompatibilitySpec extends SimpleIOSuite {

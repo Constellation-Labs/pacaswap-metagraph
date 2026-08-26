@@ -457,7 +457,7 @@ object LiquidityPoolCombinerService {
                   BigInt(amountA) * BigInt(amountB),
                   PoolShares(
                     poolTotalShares,
-                    Map(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
+                    SortedMap(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
                   ),
                   fees
                 )

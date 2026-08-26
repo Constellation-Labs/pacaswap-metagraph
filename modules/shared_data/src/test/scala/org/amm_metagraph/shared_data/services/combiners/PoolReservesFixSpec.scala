@@ -47,7 +47,7 @@ object PoolReservesFixSpec extends SimpleIOSuite {
     BigInt(360348314082469011L) * BigInt(18646623956291L),
     PoolShares(
       PosLong.unsafeFrom(952679463L),
-      Map(
+      SortedMap(
         Address("DAG62QdFnvW8xX3uGmo6F3yB2CT5i25hZoVmN6za") -> ShareAmount(Amount(PosLong.unsafeFrom(100000000L))),
         Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9w5") -> ShareAmount(Amount(PosLong.unsafeFrom(494L)))
       )

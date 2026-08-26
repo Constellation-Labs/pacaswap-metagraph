@@ -1,7 +1,7 @@
 package org.amm_metagraph.shared_data.types
 
-import cats.Show
 import cats.implicits._
+import cats.{Order, Show}
 
 import scala.collection.immutable.SortedMap
 import scala.util.Try
@@ -123,6 +123,12 @@ object Rewards {
   case class AddressAndRewardType(address: Address, rewardType: RewardType)
 
   object AddressAndRewardType {
+    // Required so RewardInfo can be a SortedMap: reward payout order must not depend on
+    // collection internals.
+    implicit val order: Order[AddressAndRewardType] =
+      Order.by[AddressAndRewardType, (String, String)](v => (v.address.value.value, v.rewardType.entryName))
+    implicit val ordering: Ordering[AddressAndRewardType] = order.toOrdering
+
     implicit val keyEncode: KeyEncoder[AddressAndRewardType] =
       tupleKeyEncoder[Address, RewardType].contramap[AddressAndRewardType](v => (v.address, v.rewardType))
     implicit val keyDecode: KeyDecoder[AddressAndRewardType] =
@@ -140,7 +146,7 @@ object Rewards {
   }
 
   @derive(encoder, decoder, show)
-  case class RewardInfo(info: Map[AddressAndRewardType, Amount]) {
+  case class RewardInfo(info: SortedMap[AddressAndRewardType, Amount]) {
     def addReward(
       address: Address,
       rewardType: RewardType,
@@ -187,7 +193,7 @@ object Rewards {
   }
 
   object RewardInfo {
-    val empty: RewardInfo = RewardInfo(Map.empty)
+    val empty: RewardInfo = RewardInfo(SortedMap.empty)
 
     def fromChunks(that: Iterable[RewardDistributionChunk]): Either[BalanceArithmeticError, RewardInfo] = {
       val asAddressAndReward =
