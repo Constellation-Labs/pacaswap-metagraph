@@ -68,6 +68,10 @@ class RollbackOperations[F[_]: Async](
         .replace(newTokenA)
         .focus(_.tokenB)
         .replace(newTokenB)
+        // Every other pool mutation recomputes k; the rollbacks did not, so k stayed
+        // frozen at the post-operation product while A and B reverted.
+        .focus(_.k)
+        .replace(BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value))
     } yield updatedPool
 
     result match {
@@ -119,7 +123,11 @@ class RollbackOperations[F[_]: Async](
     val result = for {
       newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
       newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
-      updatedPool = liquidityPool.copy(tokenA = newTokenA, tokenB = newTokenB)
+      updatedPool = liquidityPool.copy(
+        tokenA = newTokenA,
+        tokenB = newTokenB,
+        k = BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value)
+      )
     } yield updatedPool
 
     result match {
