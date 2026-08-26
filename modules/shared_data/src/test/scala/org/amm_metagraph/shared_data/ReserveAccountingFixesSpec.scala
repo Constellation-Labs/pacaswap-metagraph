@@ -20,9 +20,8 @@ import weaver.SimpleIOSuite
 
 /** Covers the POST-activation behaviour of the reserve-accounting fixes.
   *
-  * The rest of the suite runs at SnapshotOrdinal.MinValue and therefore exercises the
-  * pre-activation path, which by design reproduces the original behaviour so history replays.
-  * These tests pin the behaviour that actually applies from ordinal 731647 onward.
+  * The rest of the suite runs at SnapshotOrdinal.MinValue and therefore exercises the pre-activation path, which by design reproduces the
+  * original behaviour so history replays. These tests pin the behaviour that actually applies from ordinal 731647 onward.
   */
 object ReserveAccountingFixesSpec extends SimpleIOSuite {
 
