@@ -60,6 +60,98 @@ NAMES = {
 }
 
 
+
+# ---------------------------------------------------------------------------- alerting
+
+# Slack renders a coloured bar down the left of an attachment. It is the strongest visual signal
+# available and the only one that reads at a glance from a phone notification, so severity is
+# carried there rather than in an emoji alone.
+COLOUR_BREACH = "#A93226"   # deep red, a real divergence
+COLOUR_DRILL = "#E67E22"    # amber, a test - must never be mistaken for an incident
+COLOUR_OK = "#1F6B5B"       # green, a breach that has cleared
+
+# A breach does not fix itself, so a 15-minute cron would post the same alert 96 times a day and
+# the channel would be muted within one. Alert on the TRANSITION instead: once when it starts,
+# once when it clears, and a quiet reminder every REMIND_EVERY runs while it persists.
+REMIND_EVERY = 16   # at */15 that is roughly four hours
+
+
+def slack_payload(breaches, reserves, wallet, shortfall, accepted, run_url=None, drill=False):
+    """Built from the measured values, never from scraped console text."""
+    if drill:
+        title = ":test_tube: Collateral monitor drill (not an incident)"
+        colour = COLOUR_DRILL
+        lead = ("*This is a test.* Nothing is wrong and no reading was taken. "
+                "It exists to prove this alert reaches you before it has to.")
+    else:
+        title = ":rotating_light: PacaSwap collateral breach"
+        colour = COLOUR_BREACH
+        n = len(breaches)
+        lead = (f"*{n} ledger{'s' if n != 1 else ''} short beyond the accepted baseline.* "
+                "The pools claim more than the custody address holds, so withdrawals can fail "
+                "and the first out is paid before the last. Investigate before allowing more.")
+
+    # Two columns of ledger -> overage. Slack allows ten fields; more than that gets summarised.
+    fields = []
+    for led in sorted(breaches, key=lambda l: -breaches[l])[:8]:
+        over = breaches[led] - int(accepted.get(led, 0))
+        fields.append({"type": "mrkdwn",
+                       "text": f"*{NAMES.get(led, led)}*\n`{over / 1e8:,.8f}` over"})
+    if len(breaches) > 8:
+        fields.append({"type": "mrkdwn", "text": f"*+{len(breaches) - 8} more*\nsee the run"})
+
+    table = [f"{'ledger':<26}{'book':>22}{'wallet':>22}{'short':>20}"]
+    for led in sorted(shortfall, key=lambda l: NAMES.get(l, l)):
+        flag = "  <-- BREACH" if led in breaches else ""
+        table.append(f"{NAMES.get(led, led):<26}{reserves[led] / 1e8:>22,.8f}"
+                     f"{wallet[led] / 1e8:>22,.8f}{shortfall[led] / 1e8:>20,.8f}{flag}")
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": title, "emoji": True}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": lead}},
+    ]
+    if fields:
+        blocks.append({"type": "section", "fields": fields})
+    blocks += [
+        {"type": "divider"},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "```" + "\n".join(table) + "```"}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text":
+            "DAG is summed across all four pools because it is shared by one custody address. "
+            "Each token belongs to one pool, so those are exact."}]},
+    ]
+    if run_url:
+        blocks.append({"type": "actions", "elements": [
+            {"type": "button", "text": {"type": "plain_text", "text": "View the run", "emoji": True},
+             "url": run_url, "style": "danger" if not drill else "primary"}]})
+
+    return {"text": title, "attachments": [{"color": colour, "blocks": blocks}]}
+
+
+def recovery_payload(shortfall, accepted, run_url=None):
+    """Told as loudly as the breach was. A channel that only ever receives bad news teaches
+    people that silence means nothing, when silence should mean resolved."""
+    table = [f"{'ledger':<26}{'shortfall':>20}{'accepted':>20}"]
+    for led in sorted(shortfall, key=lambda l: NAMES.get(l, l)):
+        table.append(f"{NAMES.get(led, led):<26}{shortfall[led] / 1e8:>20,.8f}"
+                     f"{int(accepted.get(led, 0)) / 1e8:>20,.8f}")
+    return {"text": ":white_check_mark: PacaSwap collateral recovered", "attachments": [{"color": COLOUR_OK, "blocks": [
+        {"type": "header", "text": {"type": "plain_text", "text": ":white_check_mark: Collateral recovered", "emoji": True}},
+        {"type": "section", "text": {"type": "mrkdwn", "text":
+            "*Every ledger is back within the accepted baseline.* The book and the wallet agree "
+            "again. No action needed."}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "```" + "\n".join(table) + "```"}},
+    ] + ([{"type": "actions", "elements": [
+        {"type": "button", "text": {"type": "plain_text", "text": "View the run"}, "url": run_url}]}]
+         if run_url else [])}]}
+
+
+def post_slack(webhook, payload):
+    req = urllib.request.Request(webhook, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.status, r.read().decode()[:200]
+
+
 def get(url, timeout=30):
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -114,6 +206,15 @@ def main():
     ap.add_argument("--pools-file", help="read the book from a file instead (testing, or while stopped)")
     ap.add_argument("--confirm-after", type=int, default=0,
                     help="seconds to wait before re-sampling; only a breach seen twice is reported")
+    ap.add_argument("--slack-webhook", default=os.environ.get("SLACK_WEBHOOK_URL"),
+                    help="post the alert here on breach. Defaults to $SLACK_WEBHOOK_URL.")
+    ap.add_argument("--run-url", default=os.environ.get("RUN_URL"),
+                    help="link included in the alert, normally the CI run")
+    ap.add_argument("--previous-state", choices=["success", "failure", "unknown"], default="unknown",
+                    help="conclusion of the previous run, so the alert fires on the transition "
+                         "rather than every 15 minutes for as long as the breach lasts")
+    ap.add_argument("--run-number", type=int, default=0,
+                    help="used to send a quiet reminder every REMIND_EVERY runs while a breach persists")
     ap.add_argument("--simulate-breach", action="store_true",
                     help="fabricate a breach and exit non-zero, to prove the alerting path works "
                          "without waiting for a real one. Touches nothing and reads nothing.")
@@ -127,6 +228,17 @@ def main():
               f"{1641127.95926795:>20,.8f}{0.0:>20,.8f}  BREACH")
         print("\nBREACH DAG: the book promises 1,641,127.95926795 more than accepted.")
         print("\nThis is a SIMULATION triggered by --simulate-breach. Nothing is wrong.")
+        if args.slack_webhook:
+            demo = {"DAG": 164112795926795}
+            st, body = post_slack(args.slack_webhook, slack_payload(
+                breaches=demo,
+                reserves={"DAG": 2158597395064077},
+                wallet={"DAG": 1994484599137282},
+                shortfall=demo,
+                accepted={"DAG": 0},
+                run_url=args.run_url,
+                drill=True))
+            print(f"slack: {st} {body}")
         return 1
 
     if not args.pools_url and not args.pools_file:
@@ -162,9 +274,20 @@ def main():
                   f"accepted. Reserve {reserves[led]}, wallet {wallet[led]}, shortfall {s}.")
         print("\nThe book has moved further from the wallet than the accepted baseline. "
               "Investigate before allowing further withdrawals.")
+        ongoing = args.previous_state == "failure"
+        remind = ongoing and args.run_number and args.run_number % REMIND_EVERY == 0
+        if args.slack_webhook and (not ongoing or remind):
+            st, body = post_slack(args.slack_webhook, slack_payload(
+                breaches, reserves, wallet, shortfall, accepted, args.run_url))
+            print(f"slack: {st} {body}" + (" (periodic reminder)" if remind else ""))
+        elif ongoing:
+            print("slack: suppressed, this breach was already reported and has not cleared")
         return 1
 
     print("\nevery ledger is within the accepted baseline")
+    if args.slack_webhook and args.previous_state == "failure":
+        st, body = post_slack(args.slack_webhook, recovery_payload(shortfall, accepted, args.run_url))
+        print(f"slack: {st} {body} (recovered)")
     return 0
 
 
