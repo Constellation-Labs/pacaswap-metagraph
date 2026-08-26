@@ -11,6 +11,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.globalSnapshots._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
@@ -62,7 +63,10 @@ object ContextHelper {
           state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
           globalSnapshotsStorage,
-          fallbackSnapshot
+          // Gated: below the activation ordinal the cold-cache read stays empty, so all
+          // existing history replays exactly as it was recorded.
+          if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal)) fallbackSnapshot
+          else None
         )
 
         currencyId <- context.getCurrencyId

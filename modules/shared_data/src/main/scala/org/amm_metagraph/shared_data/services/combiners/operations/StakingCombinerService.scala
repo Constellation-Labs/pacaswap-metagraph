@@ -17,6 +17,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -459,15 +460,27 @@ object StakingCombinerService {
                 // reserves, so recomputing here credits the pool an amount the ledger never
                 // moved whenever the pool changed between request and confirmation. The swap
                 // path already reads the persisted info; staking was the only one recomputing.
-                stakingTokenInfo <- EitherT.fromOption[F](
-                  pendingSpendAction.pricingTokenInfo.collect { case info: StakingTokenInfo => info },
-                  FailedCalculatedState(
-                    MissingStakingTokenInfo(),
-                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
-                    pendingSpendAction.updateHash,
-                    pendingSpendAction.update
-                  ): FailedCalculatedState
-                )
+                stakingTokenInfo <-
+                  if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal))
+                    EitherT.fromOption[F](
+                      pendingSpendAction.pricingTokenInfo.collect { case info: StakingTokenInfo => info },
+                      FailedCalculatedState(
+                        MissingStakingTokenInfo(),
+                        getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                        pendingSpendAction.updateHash,
+                        pendingSpendAction.update
+                      ): FailedCalculatedState
+                    )
+                  else
+                    // Pre-activation: reproduce the original recompute so history replays byte for byte.
+                    EitherT(
+                      pricingService.getStakingTokenInfo(
+                        signedStakingUpdate,
+                        pendingSpendAction.updateHash,
+                        poolId,
+                        globalEpochProgress
+                      )
+                    )
 
                 liquidityPoolUpdated <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueStaking(

@@ -11,6 +11,7 @@ import io.constellationnetwork.security.signature.Signed
 
 import eu.timepit.refined.types.all.PosLong
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined._
@@ -68,11 +69,13 @@ class RollbackOperations[F[_]: Async](
         .replace(newTokenA)
         .focus(_.tokenB)
         .replace(newTokenB)
-        // Every other pool mutation recomputes k; the rollbacks did not, so k stayed
-        // frozen at the post-operation product while A and B reverted.
-        .focus(_.k)
-        .replace(BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value))
-    } yield updatedPool
+      // Every other pool mutation recomputes k; the rollbacks did not, so k stayed frozen at
+      // the post-operation product while A and B reverted. Gated so history replays as recorded.
+      withK =
+        if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal))
+          updatedPool.focus(_.k).replace(BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value))
+        else updatedPool
+    } yield withK
 
     result match {
       case Right(updatedPool) =>
@@ -123,11 +126,11 @@ class RollbackOperations[F[_]: Async](
     val result = for {
       newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
       newTokenB <- newTokenBAmountEither.map(amount => liquidityPool.tokenB.copy(amount = amount))
-      updatedPool = liquidityPool.copy(
-        tokenA = newTokenA,
-        tokenB = newTokenB,
-        k = BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value)
-      )
+      base = liquidityPool.copy(tokenA = newTokenA, tokenB = newTokenB)
+      updatedPool =
+        if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal))
+          base.copy(k = BigInt(newTokenA.amount.value) * BigInt(newTokenB.amount.value))
+        else base
     } yield updatedPool
 
     result match {
