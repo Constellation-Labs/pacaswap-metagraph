@@ -15,8 +15,7 @@ import org.amm_metagraph.shared_data.services.pricing.PoolLogger
 import org.amm_metagraph.shared_data.services.pricing.models.PoolBalanceChange
 import weaver.SimpleIOSuite
 
-/** PoolLogger is called from inside `combine`, which runs inside consensus. It must never make
-  * the caller wait on a disk.
+/** PoolLogger is called from inside `combine`, which runs inside consensus. It must never make the caller wait on a disk.
   */
 object PoolLoggerSpec extends SimpleIOSuite {
 

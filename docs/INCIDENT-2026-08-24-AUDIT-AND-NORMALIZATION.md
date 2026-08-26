@@ -227,13 +227,13 @@ The remediation fires **once**, at a fixed ordinal, against **hardcoded addresse
 
 The ordinal is not a safety mechanism. The only thing holding this window closed is L1 being down.
 
-### Step 1 — Ship Tessellation v3.5.26 to every GL0 node
+### Step 1 — Ship Tessellation v3.5.28 to every GL0 node
 
 Not just PacaSwap's nodes — **every** GL0 node.
 
 GL0 re-executes each currency snapshot through the same acceptance path with `dataApplicationSnapshotAcceptanceManager = None`. A GL0 node without this release rejects the adjustment snapshot even if PacaSwap's own L0 nodes accept it. The metagraph then stalls at that exact ordinal.
 
-Verify: every GL0 node reports v3.5.26 before proceeding.
+Verify: every GL0 node reports v3.5.28 before proceeding.
 
 ### Step 2 — Merge and deploy the remediation
 
@@ -255,7 +255,7 @@ This was verified entry by entry: address, `deduct`, `reason`, `reference`, ordi
 
 ### Build prerequisite — one line to change on release day
 
-`project/Dependencies.scala` pins tessellation **3.5.20**, which predates the
+`project/Dependencies.scala` now defaults to tessellation **3.5.28**, the released incident build. It previously pinned 3.5.20, which predates the
 `FeeTransactionBugDeduction` variant that `BalanceAdjustmentLoader` references. Until the pin moves,
 `modules/l0` does not compile.
 
@@ -281,7 +281,7 @@ Verify the balance on-chain before proceeding.
 
 ### Step 4 — Set the ordinal
 
-`731650` is a placeholder chosen for a slow rollout. Retarget it close to the restart tip once the window is known.
+**The remediation ordinal is 731647**, the first snapshot after the recorded stop at 731646. An earlier revision of this runbook used `731650` as a placeholder for a slow rollout; the implementation uses 731647 throughout — `ProtocolActivation`, `OneTimeFixesHandler.restorePoolReservesOrdinal`, and `Main.customArtifactsAt`.
 
 **Three places move together:**
 
@@ -377,7 +377,7 @@ This used to be unschedulable. `convertToAdjustmentEntries` ended in `.toMap` ke
 so a currency held exactly one live block and the newest silently retired the rest — meaning a second
 block could not be added at all. **That is fixed in `#1575` / `#1576`:** blocks are grouped per
 currency and the acceptance path selects the one matching the ordinal being produced. All four
-Pacaswap blocks (109991, 145000, 472325, 731650) are now live simultaneously, which also closes the
+Pacaswap blocks (109991, 145000, 472325, 731647) are now live simultaneously, which also closes the
 silent replay divergence on the three older ordinals.
 
 **Procedure when the locks release**, roughly 6 and 24 months out:

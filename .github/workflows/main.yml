@@ -7,9 +7,10 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      # Paired consensus changes from tessellation#1575. Unit tests consume the SDK version
-      # published from this exact commit through TESSELLATION_VERSION.
-      tessellation_commit_hash: "4d4c45153d5afc5acf15e47793419714e1283ac5"
+      # The released incident build, tessellation v3.5.28. CI must compile and test against the
+      # exact artifact the deployment will run: a green build against a candidate commit does not
+      # prove the release build works, and this is a one-shot remediation.
+      tessellation_commit_hash: "58e10642a570324409411416aa4a4cd0486ad0e0"
       use_merge_commit: true
     secrets: inherit
 

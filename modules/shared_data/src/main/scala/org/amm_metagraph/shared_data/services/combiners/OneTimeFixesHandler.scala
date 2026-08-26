@@ -29,6 +29,14 @@ trait OneTimeFixesHandler[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Option[DataState[AmmOnChainState, AmmCalculatedState]]]
+
+  /** True at an ordinal that applies a one-time state rewrite.
+    *
+    * At such an ordinal the calculated-state change is paired with balance artifacts emitted on a different path (Main.customArtifacts),
+    * and the two must land together or not at all. The combiner uses this to decide that a failure must halt the snapshot rather than be
+    * swallowed.
+    */
+  def isOneTimeFixOrdinal(ordinal: SnapshotOrdinal): Boolean
 }
 
 object OneTimeFixesHandler {
@@ -72,6 +80,27 @@ object OneTimeFixesHandler {
       Address("DAG7ZjENTP4T36PPSp3skJdTHtQbcuLfpEaAFWdn"),
       Address("DAG1kEmLAgnCVBURHrL4AMsfn9TZdk4QCYQ8tUu3")
     )
+
+    private val oneTimeFixOrdinals: Set[Long] = Set(
+      updatePoolsOrdinal,
+      flipTokensOrdinal,
+      updatePools2Ordinal,
+      updatePools3Ordinal,
+      updatePools4Ordinal,
+      updatePools5Ordinal,
+      updatePools6Ordinal,
+      updatePools7Ordinal,
+      updatePools8Ordinal,
+      updatePools9Ordinal,
+      updatePools10Ordinal,
+      updatePools11Ordinal,
+      updatePools12Ordinal,
+      updateUSDCPool,
+      restorePoolReservesOrdinal
+    ).map(_.value.value)
+
+    override def isOneTimeFixOrdinal(ordinal: SnapshotOrdinal): Boolean =
+      oneTimeFixOrdinals.contains(ordinal.value.value)
 
     override def handleOneTimeFixesOrdinals(
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
