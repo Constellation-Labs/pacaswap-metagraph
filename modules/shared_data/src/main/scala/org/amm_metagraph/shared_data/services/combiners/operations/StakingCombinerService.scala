@@ -20,7 +20,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -454,8 +454,19 @@ object StakingCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
                 )
                 sourceAddress = signedStakingUpdate.source
-                stakingTokenInfo <- EitherT(
-                  pricingService.getStakingTokenInfo(signedStakingUpdate, pendingSpendAction.updateHash, poolId, globalEpochProgress)
+                // Use the token info captured when the SpendAction was generated, never a fresh
+                // computation. getStakingTokenInfo derives the pair amount from the CURRENT
+                // reserves, so recomputing here credits the pool an amount the ledger never
+                // moved whenever the pool changed between request and confirmation. The swap
+                // path already reads the persisted info; staking was the only one recomputing.
+                stakingTokenInfo <- EitherT.fromOption[F](
+                  pendingSpendAction.pricingTokenInfo.collect { case info: StakingTokenInfo => info },
+                  FailedCalculatedState(
+                    MissingStakingTokenInfo(),
+                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                    pendingSpendAction.updateHash,
+                    pendingSpendAction.update
+                  ): FailedCalculatedState
                 )
 
                 liquidityPoolUpdated <- EitherT(
