@@ -17,7 +17,7 @@ object SurplusSweepSpec extends SimpleIOSuite {
   private val AMM = "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W"
   private val UP = "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1"
   private val SURPLUS = 7170622458112005L
-  private val DESTINATION = "DAG36xfcqvP1fe1JgKLs739LsCnqMzKt3DRhbCLz"
+  private val DESTINATION = "DAG471pakWWz3ZAFvX5uhA7uyufSkv7E41Lh77Ge"
 
   test("the shipped resource loads, and sends the surplus where it was told to") {
     // The destination was validated before it was set: 40 characters, DAG prefix, the checksum
