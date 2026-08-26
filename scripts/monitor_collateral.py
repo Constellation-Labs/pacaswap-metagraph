@@ -154,8 +154,27 @@ def post_slack(webhook, payload):
 
 def get(url, timeout=30):
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 404 and url.endswith("/liquidity-pools"):
+            # The base URL either includes the API version prefix or it does not, and getting it
+            # wrong looks identical to the metagraph being down. Say which it is.
+            base = url[: -len("/liquidity-pools")]
+            alt = base[: -len("/v1")] if base.endswith("/v1") else base + "/v1"
+            raise SystemExit(
+                f"404 from {url}\n"
+                f"METAGRAPH_L0_URL is probably wrong. Try {alt} instead.\n"
+                f"The script appends /liquidity-pools, so set the API base and nothing more."
+            )
+        raise SystemExit(f"HTTP {e.code} from {url}: {e.reason}")
+    except urllib.error.URLError as e:
+        raise SystemExit(
+            f"cannot reach {url}: {e.reason}\n"
+            "If the metagraph is stopped this is expected. If it is running, check that the host "
+            "is reachable from here and that its TLS certificate is valid for that name."
+        )
 
 
 def unwrap(payload):
