@@ -42,6 +42,19 @@ PRE_ATTACK_PACA = 5112080329 * 10**6
 PRE_ATTACK_DAG = 1213326392 * 10**6
 FEE = 0.003
 
+# Pool state as the attack left it, read from the PACA/DAG entry in the currency
+# calculated state at currency ordinal 731646 / global ordinal 6815497. These are
+# the reserves the remediation overwrites, and the DAG figure is what the treasury
+# injection has to top up. An earlier revision of the document derived the DAG side
+# by subtracting the net DAG that left the metagraph *address* from the pre-attack
+# reserve; that address is shared by all four pools, so the result was 147,940.10
+# DAG too high. Read the pool, not the address.
+CORRUPTED_PACA = 360348314082469011
+CORRUPTED_DAG = 18646623956291
+
+# What the treasury was originally expected to send, for the shortfall check.
+PLANNED_INJECTION = 12_000_000 * 10**8
+
 # The five attacker-controlled addresses: four mint recipients plus the address
 # that signed all four fee transactions.
 ATTACKER = {
@@ -69,6 +82,11 @@ def check(label, actual, expected):
 
 def fmt(datum):
     return f"{datum / 1e8:,.2f}"
+
+
+def fmt8(datum):
+    """Full precision. The injection is a transfer instruction, not a summary."""
+    return f"{datum / 1e8:,.8f}"
 
 
 def main():
@@ -158,6 +176,53 @@ def main():
           fmt(buyer_total), "724,259.28")
     check("difference is the forwarded address holding nothing",
           fmt(replay_total - buyer_total), "1,300.67")
+
+    print("\nThe DAG side: what the pool lost and what has to go back")
+    # Three DAG totals that are easy to conflate. Each is checked against its own
+    # source so a reviewer can see they are different quantities, not a discrepancy.
+    attacker_dag_out = sum(s["out_amt"] for s in paired
+                           if s["who"] in ATTACKER and s["out_cur"] == "DAG")
+    attacker_dag_in = sum(s["in_amt"] for s in paired
+                          if s["who"] in ATTACKER and s["in_cur"] == "DAG")
+    attacker_proceeds = attacker_dag_out - attacker_dag_in
+    pool_dag_loss = PRE_ATTACK_DAG - CORRUPTED_DAG
+
+    check("attacker net DAG proceeds, from the paired swaps",
+          fmt8(attacker_proceeds), "12,122,329.77157270")
+    check("PACA/DAG pool net DAG loss, pre-attack reserve minus what is left",
+          fmt8(pool_dag_loss), "11,946,797.68043709")
+    check("the gap is DAG legitimate buyers paid back into the pool",
+          fmt8(attacker_proceeds - pool_dag_loss), "175,532.09113561")
+    # The address figure quoted in the document, 11,798,857.58, is the net DAG that
+    # left the shared metagraph address. It is smaller than the pool's loss because
+    # the other three pools took DAG in over the same window.
+    check("other three pools' net DAG receipt reconciles the address figure",
+          fmt8(pool_dag_loss - 1179885758000000), "147,940.10043709")
+
+    print("\nThe pool resource the remediation writes")
+    pools = json.loads(
+        (ROOT / "modules/shared_data/src/main/resources/updated-pools-13.json").read_text())
+    check("the resource carries exactly the PACA/DAG pool", list(pools), [PACA])
+    written = pools[PACA]
+    check("PACA reserve written equals the replay", written["tokenA"]["amount"], pa)
+    check("DAG reserve written equals the replay", written["tokenB"]["amount"], dg)
+    check("DAG side of the pool is native DAG", written["tokenB"]["identifier"], None)
+    # SwapCalculations prices off k directly rather than deriving it from the
+    # reserves, so a k left over from the corrupted state keeps quoting the attack
+    # price no matter what the reserves say.
+    check("k is recomputed from the written reserves",
+          written["k"], written["tokenA"]["amount"] * written["tokenB"]["amount"])
+
+    print("\nTreasury injection")
+    injection = written["tokenB"]["amount"] - CORRUPTED_DAG
+    check("DAG to send to the metagraph address, in datum units",
+          injection, 1212208760812058)
+    check("DAG to send to the metagraph address", fmt8(injection),
+          "12,122,087.60812058")
+    # This must land before the remediation ordinal. Writing a reserve the address
+    # cannot back leaves the pool insolvent and the first withdrawal fails.
+    check("the 12M planned injection falls short",
+          fmt8(injection - PLANNED_INJECTION), "122,087.60812058")
 
     print("\nDeduction resources agree across repositories")
     paca_res = json.loads(

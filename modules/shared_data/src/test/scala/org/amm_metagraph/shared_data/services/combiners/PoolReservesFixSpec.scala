@@ -41,10 +41,10 @@ object PoolReservesFixSpec extends SimpleIOSuite {
   private val corruptedPool = LiquidityPool(
     Hash.empty,
     PoolId(paca.value.value),
-    TokenInformation(CurrencyId(paca).some, PosLong.unsafeFrom(360348314082000000L)),
-    TokenInformation(none, PosLong.unsafeFrom(33440634000000L)),
+    TokenInformation(CurrencyId(paca).some, PosLong.unsafeFrom(360348314082469011L)),
+    TokenInformation(none, PosLong.unsafeFrom(18646623956291L)),
     Address("DAG62QdFnvW8xX3uGmo6F3yB2CT5i25hZoVmN6za"),
-    BigInt(360348314082000000L) * BigInt(33440634000000L),
+    BigInt(360348314082469011L) * BigInt(18646623956291L),
     PoolShares(
       PosLong.unsafeFrom(952679463L),
       Map(
@@ -84,8 +84,9 @@ object PoolReservesFixSpec extends SimpleIOSuite {
       expect.all(
         result.isDefined,
         fixed.exists(_.tokenA.amount.value == targetPaca),
-        // The DAG side is restored in full, backed by the 11,974,147.51 DAG treasury injection.
-        // Writing a reserve the metagraph address cannot cover leaves the pool insolvent.
+        // The DAG side is restored in full, backed by the 12,122,087.60812058 DAG treasury
+        // injection: targetDag minus the 18646623956291 the pool actually still holds. Writing a
+        // reserve the metagraph address cannot cover leaves the pool insolvent.
         fixed.exists(_.tokenB.amount.value == targetDag),
         // SwapCalculations prices off k directly instead of deriving it, so a k left over from
         // the corrupted reserves would keep quoting the attack price.

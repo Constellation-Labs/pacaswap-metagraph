@@ -24,7 +24,9 @@ tx 4    0                            ← back to start
 
 **A corrected end-state guard would not have caught this.** The end state is entirely valid. The check has to happen per transaction. Fixed in `tessellation#1571` / `#1572`, shipped in **v3.5.26**.
 
-The mint was then sold into the PACA/DAG pool. The price collapsed from **4.2133** to **22,282** PACA/DAG — a factor of **5,289** — and **11,798,857.58 DAG** was drained.
+The mint was then sold into the PACA/DAG pool. The price collapsed from **4.2133** to **22,282** PACA/DAG — a factor of **5,289** — and **11,946,797.68 DAG** was drained from the pool.
+
+Three DAG figures in this document are distinct and must not be interchanged. The attacker's net proceeds are **12,122,329.77**. The PACA/DAG pool's net loss is **11,946,797.68** — smaller, because legitimate buyers paid 175,532.09 back in. The net DAG that left the metagraph *address* is **11,798,857.58** — smaller still, because the address is shared by all four pools and the other three were net receivers of 147,940.10 during the window. Only the middle figure describes the pool.
 
 ---
 
@@ -103,7 +105,9 @@ Four addresses traded during the window but hold **zero PACA** today — they bo
 
 ### 3.5 The pool itself
 
-`DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W` holds **3,603,518,762.20 PACA** against a pre-attack reserve of 51,120,803.29. The phantom the attacker sold sits here.
+The PACA/DAG pool entry in the calculated state at currency ordinal 731646 holds **3,603,483,140.82469011 PACA** against a pre-attack reserve of 51,120,803.29, and **186,466.23956291 DAG** against a pre-attack 12,133,263.92. The phantom the attacker sold sits on the PACA side; the DAG side is what he carried out.
+
+Both figures are read from the pool, not from `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`. That address is shared by all four pools, so its balance does not describe this one — the distinction is what §6 turns on.
 
 ---
 
@@ -179,7 +183,7 @@ Supply balances to the unit. Nothing is being given away.
 | | PACA | DAG | Price (PACA/DAG) |
 |---|---|---|---|
 | Pre-attack | 51,120,803.29 | 12,133,263.92 | 4.2133 |
-| Now | 3,603,518,762.20 | 334,406.34 | 10,775 |
+| Now | 3,603,483,140.82 | 186,466.24 | 19,325 |
 | Original plan target | 51,120,803.29 | 186,466.24 | **274.1** ❌ |
 | **Corrected target** | **50,395,243.35** | **12,308,553.85** | **4.0943** ✅ |
 
@@ -187,7 +191,9 @@ The original target restores PACA but not the drained DAG, leaving the pool at *
 
 The corrected target is the **counterfactual**: where the pool would be had the attack never happened but those 26 purchases had. It is slightly below pre-attack PACA (buyers took some out) and slightly above pre-attack DAG (buyers paid some in) — which is exactly right.
 
-**DAG injection required: 11,974,147.51** (12,308,553.85 minus the 334,406.34 still there). The 12M treasury injection covers this with **25,852.49 DAG to spare**.
+**DAG injection required: 12,122,087.60812058** (12,308,553.84768349 minus the 186,466.23956291 still there). The 12M treasury injection does **not** cover this — it falls short by 122,087.61 DAG.
+
+The `Now` row above is read from the pool's calculated state at currency ordinal 731646 / global 6815497: `tokenB.amount = 18646623956291`. An earlier revision of this document put it at 334,406.34, computed as the pre-attack reserve minus the net DAG that left the *address*. That conflated all four pools and understated the injection by 147,940.10 DAG.
 
 `k` must be recomputed as `5039524334506729 × 1230855384768349 = 6202925663798737856772846720421`. `SwapCalculations` prices off `k` directly rather than deriving it from reserves, so a stale `k` keeps quoting the attack price no matter what the reserves say.
 
@@ -251,7 +257,7 @@ was asserting. That is now corrected and the spec passes.
 
 ### Step 3 — Inject the DAG
 
-Send **11,974,147.51 DAG** from treasury to `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`.
+Send **12,122,087.60812058 DAG** from treasury to `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`.
 
 This must land **before** the remediation ordinal. The pool reserve figure written in step 5 asserts the DAG is there; writing a reserve the address cannot back leaves the pool insolvent and the first withdrawal fails.
 
@@ -369,7 +375,7 @@ The mechanism is in place and tested; only the ordinal and the amounts need fill
 
 ## 11. What remains outside this plan
 
-**The extracted DAG — 12,122,328.** Moved to exchange wallets on the global layer. Nothing in this plan reaches it; recovery is an exchange-cooperation matter. Addresses for that conversation:
+**The extracted DAG — 12,122,329.77157270.** Moved to exchange wallets on the global layer. Nothing in this plan reaches it; recovery is an exchange-cooperation matter. Addresses for that conversation:
 
 ```
 DAG6cgAhAYiYgyFbB8QokzQ816trwRHPpw28Datj     5,380,000.00 DAG
