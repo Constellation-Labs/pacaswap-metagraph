@@ -108,12 +108,15 @@ object PoolReservesFixSpec extends SimpleIOSuite {
     }
   }
 
-  test("the fix does not fire on the surrounding ordinals") {
+  test("the reserve fix does not fire on the surrounding ordinals") {
+    // 731648 is no longer "surrounding": it now applies updated-pools-14.json, the normalization
+    // that brings every pool to reserve == wallet. 731649 is the first ordinal after which
+    // nothing one-time happens.
     for {
       ordinalR <- SignallingRef.of[IO, SnapshotOrdinal](SnapshotOrdinal.MinValue)
       handler = OneTimeFixesHandler.make[IO](ordinalR)
       before <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(731646L)))
-      after <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(731648L)))
+      after <- handler.handleOneTimeFixesOrdinals(stateBeforeFix, SnapshotOrdinal(NonNegLong.unsafeFrom(731649L)))
     } yield expect.all(before.isEmpty, after.isEmpty)
   }
 

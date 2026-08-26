@@ -23,17 +23,15 @@ import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
 
-/** A one-time state rewrite is paired with balance artifacts emitted on a different path
-  * (`Main.customArtifacts`), and that path already fails closed — it throws rather than emitting
-  * nothing.
+/** A one-time state rewrite is paired with balance artifacts emitted on a different path (`Main.customArtifacts`), and that path already
+  * fails closed — it throws rather than emitting nothing.
   *
-  * If the combiner swallowed a failure in the state rewrite, the deductions would ship WITHOUT the
-  * reserve restoration and the frozen-state purge: a partial snapshot with the balances taken and
-  * the corrupted reserves left in place, and no automatic retry. The two must land together, or
-  * the snapshot must not be built at all.
+  * If the combiner swallowed a failure in the state rewrite, the deductions would ship WITHOUT the reserve restoration and the frozen-state
+  * purge: a partial snapshot with the balances taken and the corrupted reserves left in place, and no automatic retry. The two must land
+  * together, or the snapshot must not be built at all.
   *
-  * These tests go through `L0CombinerService.combine`, the production path. Exercising
-  * `OneTimeFixesHandler` directly cannot catch this, because the swallow lives in the caller.
+  * These tests go through `L0CombinerService.combine`, the production path. Exercising `OneTimeFixesHandler` directly cannot catch this,
+  * because the swallow lives in the caller.
   */
 object OneTimeFixFailClosedSpec extends MutableIOSuite {
 
@@ -106,8 +104,16 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
       kp <- KeyPairGenerator.makeKeyPair[IO]
       // The dummy context puts the last currency snapshot at MinValue, so the next ordinal is 1.
       // Declaring 1 as a fix ordinal exercises the incident branch through the production path.
-      ctx = buildL0NodeContext[IO](kp, SortedMap.empty, EpochProgress.MinValue, SnapshotOrdinal.MinValue,
-              SortedMap.empty, EpochProgress.MinValue, SnapshotOrdinal.MinValue, AMM)
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        AMM
+      )
       r <- combinerWith(handler(Set(1L))).combine(emptyState, List.empty)(ctx).attempt
     } yield
       expect.all(
@@ -121,8 +127,16 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
     implicit val (h, sp) = res
     for {
       kp <- KeyPairGenerator.makeKeyPair[IO]
-      ctx = buildL0NodeContext[IO](kp, SortedMap.empty, EpochProgress.MinValue, SnapshotOrdinal.MinValue,
-              SortedMap.empty, EpochProgress.MinValue, SnapshotOrdinal.MinValue, AMM)
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        AMM
+      )
       // Same failure, but no ordinal is declared a fix ordinal: the ordinary product behaviour is
       // preserved, so the change is scoped to the incident branch only.
       r <- combinerWith(handler(Set.empty, raiseAlways = true)).combine(emptyState, List.empty)(ctx).attempt
@@ -138,8 +152,9 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         real.isOneTimeFixOrdinal(ord(731647L)),
         real.isOneTimeFixOrdinal(ord(111700L)),
         real.isOneTimeFixOrdinal(ord(161148L)),
-        !real.isOneTimeFixOrdinal(ord(731646L)),
-        !real.isOneTimeFixOrdinal(ord(731648L))
+        real.isOneTimeFixOrdinal(ord(731648L)), // normalization, updated-pools-14
+        !real.isOneTimeFixOrdinal(ord(731646L)), // the last ordinal before the stop
+        !real.isOneTimeFixOrdinal(ord(731649L)) // and ordinary ordinals after
       )
   }
 }
