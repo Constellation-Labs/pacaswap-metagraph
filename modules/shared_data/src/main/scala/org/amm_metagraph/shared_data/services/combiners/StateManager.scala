@@ -13,7 +13,7 @@ import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
-import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
+import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState, PendingSpendAction}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -30,6 +30,17 @@ trait StateManager[F[_]] {
 }
 
 object StateManager {
+  private[shared_data] def nextGlobalEvidenceCursor(
+    current: SnapshotOrdinal,
+    synchronized: SnapshotOrdinal,
+    evidenceComplete: Boolean,
+    hasPendingSpendActions: Boolean,
+    currentCurrencyOrdinal: SnapshotOrdinal
+  ): SnapshotOrdinal =
+    if (!ProtocolActivation.reserveAccountingFixesActive(currentCurrencyOrdinal) || evidenceComplete || !hasPendingSpendActions)
+      synchronized
+    else current
+
   def make[F[_]: Async](
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
     stakingCombinerService: StakingCombinerService[F],
@@ -111,9 +122,23 @@ object StateManager {
           context.currentSnapshotEpochProgress
         )
 
+        // An incomplete read is not evidence that a SpendAction was absent. While a generated
+        // SpendAction remains pending, keep the beginning of the unresolved interval in calculated
+        // state so the next combine retries it. Advancing to the synchronized head here would make
+        // the missing ordinals unreachable forever and eventually allow a settled operation to be
+        // expired and rolled back again. With no pending SpendAction, advance normally so an old,
+        // irrelevant gap cannot poison the evidence range for future operations.
+        nextEvidenceCursor = StateManager.nextGlobalEvidenceCursor(
+          rewardsCleanedState.calculated.lastSyncGlobalSnapshotOrdinal,
+          context.lastSyncGlobalOrdinal,
+          context.spendActionsEvidenceComplete,
+          rewardsCleanedState.calculated.operations.values.exists(_.pending.exists(_.isInstanceOf[PendingSpendAction[_]])),
+          context.currentSnapshotOrdinal
+        )
+
         stateUpdatedByLastGlobalSync = rewardsCleanedState
           .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
-          .replace(context.lastSyncGlobalOrdinal)
+          .replace(nextEvidenceCursor)
 
         _ <- logger.info(s"spendTxnProduced=${stateUpdatedByLastGlobalSync.sharedArtifacts}")
 
