@@ -43,12 +43,20 @@ object globalSnapshots {
     globalSnapshotState.activeAllowSpends
       .getOrElse(SortedMap.empty[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]])
 
+  /** Spend actions read from the global chain, plus whether the read was COMPLETE.
+    *
+    * `complete = false` means at least one ordinal in the requested range could not be resolved, so an empty or partial `actions` list is
+    * not evidence that nothing was accepted. Callers must never conclude "not accepted" from an incomplete read: the spend action may well
+    * have settled on the global ledger, and rolling the pool back on that assumption desynchronises the book from the ledger permanently.
+    */
+  case class SpendActionsRead(actions: List[SpendAction], complete: Boolean)
+
   def getSpendActionsFromGlobalSnapshots[F[_]: Async](
     lastSyncGlobalOrdinal: SnapshotOrdinal,
     currentSyncGlobalOrdinal: SnapshotOrdinal,
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     fallbackSnapshot: Option[GlobalIncrementalSnapshot] = None
-  ): F[List[SpendAction]] = {
+  ): F[SpendActionsRead] = {
     val ordinals = (lastSyncGlobalOrdinal.value.value to currentSyncGlobalOrdinal.value.value)
       .map(o => SnapshotOrdinal(NonNegLong.unsafeFrom(o)))
       .toList
@@ -56,19 +64,19 @@ object globalSnapshots {
     ordinals.traverse { ordinal =>
       globalSnapshotsStorage.get(ordinal).flatMap {
         case Some(snapshot) =>
-          snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten).pure[F]
+          (snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten), true).pure[F]
         case None =>
           // After a restart/rollback the in-memory cache is empty. Fall back to the last synchronized
           // snapshot (read from disk by LastSyncGlobalSnapshotStorage) when the ordinal matches, so we
           // don't silently miss spend actions and fork from the majority.
           fallbackSnapshot match {
             case Some(s) if s.ordinal === ordinal =>
-              s.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten).pure[F]
+              (s.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten), true).pure[F]
             case _ =>
-              List.empty[SpendAction].pure[F]
+              (List.empty[SpendAction], false).pure[F]
           }
       }
-    }.map(_.flatten)
+    }.map(rs => SpendActionsRead(rs.flatMap(_._1), rs.forall(_._2)))
   }
 
   private def findAllowSpendInGlobalState[F[_]: Async: Hasher](

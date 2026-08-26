@@ -15,6 +15,7 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined._
@@ -405,7 +406,8 @@ class LiquidityPoolOperations[F[_]: Async](
     signedUpdate: Signed[StakingUpdate],
     updateHash: Hash,
     liquidityPool: LiquidityPool,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): Either[FailedCalculatedState, StakingTokenInfo] = {
     val stakingUpdate = signedUpdate.value
     val expireEpochProgress = getFailureExpireEpochProgress(config, lastSyncGlobalEpochProgress)
@@ -425,15 +427,24 @@ class LiquidityPoolOperations[F[_]: Async](
         currentPrimaryTokenAmount
       )
 
+    // Reserves are 8-decimal fixed point and routinely exceed 2^53, so Double arithmetic here
+    // silently dropped mantissa bits and under-issued shares to the depositor, with the residual
+    // accruing to the existing LPs. Exact integer maths, floor rounding (dust stays in the pool).
+    val newlyIssuedSharesExact =
+      (BigInt(incomingPrimaryAmount) * BigInt(liquidityPool.poolShares.totalShares.value)) /
+        BigInt(currentPrimaryTokenAmount)
     val relativeDepositIncrease = incomingPrimaryAmount.toDouble / currentPrimaryTokenAmount
-    val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
+    val newlyIssuedSharesLegacy = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
+    val newlyIssuedShares: Long =
+      if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal)) newlyIssuedSharesExact.toLong
+      else newlyIssuedSharesLegacy.toLong
 
     Right(
       StakingTokenInfo(
         primaryToken.copy(amount = incomingPrimaryAmount.toPosLongUnsafe),
         pairToken.copy(amount = incomingPairAmount.toLong.toPosLongUnsafe),
         SwapAmount(incomingPairAmount.toLong.toPosLongUnsafe),
-        newlyIssuedShares.toLong
+        newlyIssuedShares
       )
     )
   }

@@ -59,7 +59,7 @@ object ContextHelper {
         _ <- logger.info(s"lastSyncGlobalEpochProgress=$lastSyncGlobalEpochProgress")
         _ <- logger.info(s"lastSyncGlobalOrdinal=$lastSyncGlobalOrdinal")
 
-        globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
+        spendActionsRead <- getSpendActionsFromGlobalSnapshots(
           state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
           globalSnapshotsStorage,
@@ -68,6 +68,15 @@ object ContextHelper {
           if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal)) fallbackSnapshot
           else None
         )
+
+        _ <-
+          if (!spendActionsRead.complete)
+            logger.warn(
+              s"Spend-action evidence INCOMPLETE for range " +
+                s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
+                "No pending operation will be expired this snapshot."
+            )
+          else Async[F].unit
 
         currencyId <- context.getCurrencyId
 
@@ -78,7 +87,11 @@ object ContextHelper {
           currentSnapshotEpochProgress = currentSnapshotEpochProgress,
           currentSnapshotOrdinal = currentSnapshotOrdinal,
           globalSnapshotSyncAllowSpends = globalSnapshotSyncAllowSpends,
-          globalSnapshotsSyncSpendActions = globalSnapshotsSyncSpendActions,
+          globalSnapshotsSyncSpendActions = spendActionsRead.actions,
+          spendActionsEvidenceComplete =
+            // Pre-activation the flag is forced true so the old (unsafe) expiry behaviour is
+            // reproduced exactly and history replays byte for byte.
+            !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,
           lastCurrencySnapshotInfo = lastCurrencySnapshotInfo

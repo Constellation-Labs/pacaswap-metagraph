@@ -255,7 +255,8 @@ case class PriceRunner[F[_]: Async](
           stakingUpdate,
           Hash.empty,
           poolId,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          SnapshotOrdinal.MinValue
         )
       )
 

@@ -7,6 +7,7 @@ import cats.syntax.all._
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
@@ -195,9 +196,12 @@ object StakingCombinerService {
           poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
             buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           )
+          currentOrdinal <- EitherT.liftF[F, FailedCalculatedState, SnapshotOrdinal](
+            context.getLastCurrencySnapshot.map(_.fold(SnapshotOrdinal.MinValue)(_.ordinal.next))
+          )
           stakingTokenInfo <- EitherT(
             pricingService
-              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress)
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal)
           )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -478,7 +482,8 @@ object StakingCombinerService {
                         signedStakingUpdate,
                         pendingSpendAction.updateHash,
                         poolId,
-                        globalEpochProgress
+                        globalEpochProgress,
+                        currentSnapshotOrdinal
                       )
                     )
 

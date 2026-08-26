@@ -18,6 +18,9 @@ case class ProcessingContext(
   currentSnapshotOrdinal: SnapshotOrdinal,
   globalSnapshotSyncAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
   globalSnapshotsSyncSpendActions: List[SpendAction],
+  // False when the spend-action read could not resolve every ordinal in the range. An empty
+  // list then proves nothing, so no pending operation may be expired on the strength of it.
+  spendActionsEvidenceComplete: Boolean,
   currencyId: CurrencyId,
   lastCurrencySnapshot: Hashed[CurrencyIncrementalSnapshot],
   lastCurrencySnapshotInfo: CurrencySnapshotInfo
