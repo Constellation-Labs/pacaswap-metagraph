@@ -225,7 +225,14 @@ def main():
         (ROOT / "modules/shared_data/src/main/resources/updated-pools-13.json").read_text())
     check("the resource carries exactly the PACA/DAG pool", list(pools), [PACA])
     written = pools[PACA]
-    check("PACA reserve written equals the replay", written["tokenA"]["amount"], pa)
+    # The written reserve is the replay rounded up to the cent, 493271 datum units, so
+    # that it lands exactly on what the frozen deduction leaves on the address. The
+    # replay is a counterfactual estimate, not a measured quantity, and half a cent of
+    # PACA is far inside its own precision.
+    check("PACA reserve written is the replay rounded to the cent",
+          written["tokenA"]["amount"], 5039524335000000)
+    check("the rounding is under one cent of PACA",
+          written["tokenA"]["amount"] - pa, 493271)
     check("DAG reserve written equals the replay", written["tokenB"]["amount"], dg)
     check("DAG side of the pool is native DAG", written["tokenB"]["identifier"], None)
     # SwapCalculations prices off k directly rather than deriving it from the
@@ -245,14 +252,15 @@ def main():
           fmt8(pool_row["bal"] - CORRUPTED_PACA), "35,621.37389104")
     adjustments = json.loads(
         (ROOT / "modules/l0/src/main/resources/balance-adjustments-4.json").read_text())
-    # The deduction is derived here rather than trusted: whatever the address holds,
-    # minus the reserve the remediation writes. An earlier revision sized it against
-    # the target rounded to the cent, which left 0.00493271 PACA stranded on the
-    # address above the reserve. Deriving it makes the 1:1 the resource has to meet.
-    expected_deduction = pool_row["bal"] - written["tokenA"]["amount"]
-    check("pool deduction is the balance minus the reserve that gets written",
-          by_addr_pool(adjustments), expected_deduction)
-    check("pool deduction, in datum units", expected_deduction, 355312351885351386)
+    # The deduction is frozen: tessellation v3.5.28 shipped with this exact value in
+    # adjustments.json, and validateRequiredAdjustments compares Amounts exactly. A
+    # metagraph emitting anything else stalls at this ordinal with "not authorized".
+    # So the reserve is fitted to the deduction, not the other way round.
+    RELEASED_DEDUCTION = 355312351884858115
+    check("pool deduction matches what tessellation v3.5.28 authorizes",
+          by_addr_pool(adjustments), RELEASED_DEDUCTION)
+    check("the reserve is fitted to what the frozen deduction leaves behind",
+          written["tokenA"]["amount"], pool_row["bal"] - RELEASED_DEDUCTION)
     left_on_address = pool_row["bal"] - by_addr_pool(adjustments)
     check("what the address is left holding equals the reserve exactly, 1:1",
           left_on_address, written["tokenA"]["amount"])
@@ -286,7 +294,7 @@ def main():
         check(f"{a[:14]}... deducted the full 2^62", by_addr.get(a), TWO_POW_62)
 
     nominal = sum(by_addr.values())
-    check("nominal deduction total", fmt(nominal), "189,413,903,467.13")
+    check("nominal deduction total", fmt(nominal), "189,413,903,467.12")
 
     print("\nSupply reconciliation")
     # Deductions saturate at zero, so the nominal total overstates what is actually
@@ -295,7 +303,7 @@ def main():
     saturation = sum(max(0, by_addr[a] - observed.get(a, 0))
                      for a in by_addr if a in ATTACKER)
     actual_removed = nominal - saturation
-    check("actually removed after saturation", fmt(actual_removed), "184,027,281,696.43")
+    check("actually removed after saturation", fmt(actual_removed), "184,027,281,696.42")
 
     locks = 44019596271000000  # 7 active locks created after the mint, see section 10
     overage = (actual_removed + locks) - 4 * TWO_POW_62

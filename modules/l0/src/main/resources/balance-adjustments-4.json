@@ -38,7 +38,7 @@
   {
     "address": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
     "reason": "FeeTransactionBugDeduction",
-    "deduct": -355312351885351386,
+    "deduct": -355312351884858115,
     "reference": [
       "0200028940b285045a40b3f2176b3dcd33f2a94821d24ecfa12ab6db1103e358"
     ]

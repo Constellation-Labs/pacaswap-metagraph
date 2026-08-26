@@ -29,7 +29,7 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
     * has to be the exact reserve and not the figure rounded to the cent: the deduction acts on the address balance while the reserve is
     * written separately, so any gap between them strands PACA on the address that no pool reserve accounts for.
     */
-  private val poolSurplus = 355312351885351386L
+  private val poolSurplus = 355312351884858115L
 
   /** Phantom PACA removed from the addresses that bought it out of the pool, net of what each of them is entitled to keep at the pre-attack
     * price, and after taking off what they moved into a token lock. Locked phantom is out of reach of a BalanceAdjustment and is not part
@@ -41,7 +41,7 @@ object BalanceAdjustment4Spec extends SimpleIOSuite {
     * deduction has to satisfy is visible here.
     */
   private val observedPoolBalance = 360351876219858115L
-  private val writtenPacaReserve = 5039524334506729L
+  private val writtenPacaReserve = 5039524335000000L
 
   test("balance-adjustments-4.json covers the mint, the pool and every buyer exactly once") {
     IO.fromTry(loadBalanceAdjustments("balance-adjustments-4.json")).map { adjustments =>

@@ -32,7 +32,7 @@ object PoolReservesFixSpec extends SimpleIOSuite {
   // slightly above the pre-attack DAG because they paid some in. Restoring the pre-attack figures
   // instead would leave the pool at 274 PACA/DAG, still 65x off, and hand the difference to the
   // first arbitrageur through the door.
-  private val targetPaca = 5039524334506729L
+  private val targetPaca = 5039524335000000L
   private val targetDag = 1230855384768349L
 
   /** The PACA/DAG pool as the swaps left it: reserves wrecked, share ledger untouched because no add or withdraw ever settled during the

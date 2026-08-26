@@ -3,12 +3,12 @@
     "poolId": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
     "tokenA": {
       "identifier": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
-      "amount": 5039524334506729
+      "amount": 5039524335000000
     },
     "tokenB": {
       "identifier": null,
       "amount": 1230855384768349
     },
-    "k": 6202925663798737856772846720421
+    "k": 6202925664405883123272915000000
   }
 }
