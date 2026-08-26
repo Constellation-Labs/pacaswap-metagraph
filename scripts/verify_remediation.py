@@ -84,6 +84,11 @@ def fmt(datum):
     return f"{datum / 1e8:,.2f}"
 
 
+def by_addr_pool(resource):
+    """The PACA-pool row of the balance-adjustment resource, as a positive amount."""
+    return -int(next(e for e in resource if e["address"] == PACA)["deduct"])
+
+
 def fmt8(datum):
     """Full precision. The injection is a transfer instruction, not a summary."""
     return f"{datum / 1e8:,.8f}"
@@ -191,8 +196,24 @@ def main():
           fmt8(attacker_proceeds), "12,122,329.77157270")
     check("PACA/DAG pool net DAG loss, pre-attack reserve minus what is left",
           fmt8(pool_dag_loss), "11,946,797.68043709")
-    check("the gap is DAG legitimate buyers paid back into the pool",
-          fmt8(attacker_proceeds - pool_dag_loss), "175,532.09113561")
+    # Measured, not inferred: DAG that non-attacker addresses actually put into this
+    # pool. It does not equal the gap between the two figures above, and is not
+    # claimed to. The remainder is carried as a residual below.
+    pool_swaps = [s for s in paired if PACA in (s["in_cur"], s["out_cur"])]
+    honest_in = sum(s["in_amt"] for s in pool_swaps
+                    if s["who"] not in ATTACKER and s["in_cur"] == "DAG")
+    honest_out = sum(s["out_amt"] for s in pool_swaps
+                     if s["who"] not in ATTACKER and s["out_cur"] == "DAG")
+    check("non-attacker net DAG paid into the pool, from the swap ledger",
+          fmt8(honest_in - honest_out), "179,113.93472559")
+    residual = attacker_proceeds - pool_dag_loss
+    check("gap between attacker proceeds and pool loss", fmt8(residual),
+          "175,532.09113561")
+    # The swap ledger and the reserve snapshot disagree at the edges of the window.
+    # Small, disclosed, and it does not touch the injection: that comes from the
+    # reserve alone.
+    check("swap ledger vs reserve snapshot residual",
+          fmt8((honest_in - honest_out) - residual), "3,581.84358998")
     # The address figure quoted in the document, 11,798,857.58, is the net DAG that
     # left the shared metagraph address. It is smaller than the pool's loss because
     # the other three pools took DAG in over the same window.
@@ -212,6 +233,32 @@ def main():
     # price no matter what the reserves say.
     check("k is recomputed from the written reserves",
           written["k"], written["tokenA"]["amount"] * written["tokenB"]["amount"])
+
+    print("\nThe pool address balance the deduction works against")
+    # Deductions act on the address balance; reserves are a separate quantity. The
+    # address held more PACA than the pool reserve accounted for, and the deduction
+    # is sized to leave exactly the reserve the remediation writes.
+    pool_row = next(r for r in plan if r["a"] == PACA)
+    check("observed pool address PACA balance",
+          fmt8(pool_row["bal"]), "3,603,518,762.19858122")
+    check("it sits above the pool's PACA reserve",
+          fmt8(pool_row["bal"] - CORRUPTED_PACA), "35,621.37389104")
+    adjustments = json.loads(
+        (ROOT / "modules/l0/src/main/resources/balance-adjustments-4.json").read_text())
+    left_on_address = pool_row["bal"] - by_addr_pool(adjustments)
+    # The deduction was sized against the target rounded to the cent, 50,395,243.35,
+    # while updated-pools-13.json writes the exact replay figure. The address is
+    # therefore left holding 0.00493271 PACA more than the reserve claims. The
+    # invariant that matters is the direction: the address must be able to back the
+    # reserve, and over-backing by half a cent is safe. Sizing the deduction on the
+    # exact figure instead would move the published nominal total, so it is left
+    # alone and disclosed here.
+    check("the deduction leaves the rounded target on the address",
+          left_on_address, 5039524335000000)
+    check("the address can back the PACA reserve that gets written",
+          left_on_address >= written["tokenA"]["amount"], True)
+    check("slack between the two, in PACA",
+          fmt8(left_on_address - written["tokenA"]["amount"]), "0.00493271")
 
     print("\nTreasury injection")
     injection = written["tokenB"]["amount"] - CORRUPTED_DAG

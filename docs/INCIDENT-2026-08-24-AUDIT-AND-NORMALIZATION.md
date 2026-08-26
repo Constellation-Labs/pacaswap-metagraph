@@ -26,7 +26,17 @@ tx 4    0                            ← back to start
 
 The mint was then sold into the PACA/DAG pool. The price collapsed from **4.2133** to **22,282** PACA/DAG — a factor of **5,289** — and **11,946,797.68 DAG** was drained from the pool.
 
-Three DAG figures in this document are distinct and must not be interchanged. The attacker's net proceeds are **12,122,329.77**. The PACA/DAG pool's net loss is **11,946,797.68** — smaller, because legitimate buyers paid 175,532.09 back in. The net DAG that left the metagraph *address* is **11,798,857.58** — smaller still, because the address is shared by all four pools and the other three were net receivers of 147,940.10 during the window. Only the middle figure describes the pool.
+Three DAG figures in this document are distinct and must not be interchanged.
+
+| Figure | Value | Measured from |
+|---|---|---|
+| Attacker's net DAG proceeds | 12,122,329.77 | the paired swap ledger |
+| **PACA/DAG pool's net DAG loss** | **11,946,797.68** | pre-attack reserve minus the reserve now |
+| Net DAG that left the metagraph *address* | 11,798,857.58 | the address balance |
+
+Only the middle figure describes the pool, and only it drives the injection in §6.
+
+The pool lost less than the attacker took because non-attacker buyers were paying DAG *into* the pool across the same window — 179,113.93 by the swap ledger. That does not close the 175,532.09 gap between the first two rows to the unit; the remaining 3,581.84 is the swap ledger and the reserve snapshot disagreeing at the edges of the window, and it is carried here as a residual rather than attributed. The address figure is lower again because the address backs all four pools and the other three were net receivers of 147,940.10 over the window.
 
 ---
 
@@ -108,6 +118,10 @@ Four addresses traded during the window but hold **zero PACA** today — they bo
 The PACA/DAG pool entry in the calculated state at currency ordinal 731646 holds **3,603,483,140.82469011 PACA** against a pre-attack reserve of 51,120,803.29, and **186,466.23956291 DAG** against a pre-attack 12,133,263.92. The phantom the attacker sold sits on the PACA side; the DAG side is what he carried out.
 
 Both figures are read from the pool, not from `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`. That address is shared by all four pools, so its balance does not describe this one — the distinction is what §6 turns on.
+
+The address balance is a separate, also-needed number: it held **3,603,518,762.19858122 PACA** when the data was captured, 35,621.37 above the pool's reserve. §5 deducts against the *balance*, not the reserve — the pool row there removes 3,553,123,518.84858115, leaving 50,395,243.35000000 on the address.
+
+That is the corrected target **rounded to the cent**, while §6 writes the exact replay figure 50,395,243.34506729 into the reserve. The address is therefore left backing the reserve with **0.00493271 PACA to spare**. The direction is the safe one and the amount is negligible, so the deduction is left as it is rather than restated — resizing it would move the 189,413,903,467.12 nominal total published above. It is recorded here so the two resources are not read as disagreeing.
 
 ---
 
