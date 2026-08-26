@@ -1,10 +1,13 @@
 package org.amm_metagraph.shared_data
 
+import cats.data.NonEmptyList
+
 import scala.collection.immutable.SortedMap
 
 import io.constellationnetwork.schema.address.Address
+import io.constellationnetwork.schema.artifact.{SpendAction, SpendTransaction}
 import io.constellationnetwork.schema.balance.Amount
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
@@ -13,8 +16,8 @@ import org.amm_metagraph.shared_data.services.combiners.CollateralInvariant
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import weaver.SimpleIOSuite
 
-/** The book must always equal the wallet. These use the real mainnet figures at currency
-  * ordinal 731646 so the check is pinned against a state we have independently measured.
+/** The book must always equal the wallet. These use the real mainnet figures at currency ordinal 731646 so the check is pinned against a
+  * state we have independently measured.
   */
 object CollateralInvariantSpec extends SimpleIOSuite {
 
@@ -37,7 +40,11 @@ object CollateralInvariantSpec extends SimpleIOSuite {
   pureTest("a fully backed book reports no breach") {
     val p = pool("p", Some(DOR), 1000L, 500L)
     val rows = CollateralInvariant.positions(
-      List(p), AMM, dagBalance = Some(BigInt(500)), tokenBalance = _ => Some(BigInt(1000))
+      List(p),
+      AMM,
+      dagBalance = Some(BigInt(500)),
+      tokenBalance = _ => Some(BigInt(1000)),
+      pendingSpendActions = Nil
     )
     expect.all(rows.size == 2, rows.forall(!_.breached))
   }
@@ -47,7 +54,10 @@ object CollateralInvariantSpec extends SimpleIOSuite {
     val a = pool("a", Some(DOR), 1000L, 300L)
     val b = pool("b", Some(UP), 2000L, 200L)
     val rows = CollateralInvariant.positions(
-      List(a, b), AMM, Some(BigInt(500)), _ => Some(BigInt(999999))
+      List(a, b),
+      AMM,
+      Some(BigInt(500)),
+      _ => Some(BigInt(999999))
     )
     val dag = rows.find(_.ledger == "DAG").get
     expect.all(dag.reserve == BigInt(500), !dag.breached, rows.count(_.ledger == "DAG") == 1)
@@ -58,7 +68,10 @@ object CollateralInvariantSpec extends SimpleIOSuite {
     // 7,822,758.38325224, short 1,641,127.95926795.
     val p = pool("p", Some(DOR), 1000L, 946388634252019L)
     val rows = CollateralInvariant.positions(
-      List(p), AMM, Some(BigInt(782275838325224L)), _ => Some(BigInt(1000))
+      List(p),
+      AMM,
+      Some(BigInt(782275838325224L)),
+      _ => Some(BigInt(1000))
     )
     val dag = rows.find(_.ledger == "DAG").get
     expect.all(dag.breached, dag.shortfall == BigInt(164112795926795L))
@@ -68,7 +81,10 @@ object CollateralInvariantSpec extends SimpleIOSuite {
     // The UP pool: book 73,629,031.67321414, wallet 145,335,256.25433419.
     val p = pool("p", Some(UP), 7362903167321414L, 100L)
     val rows = CollateralInvariant.positions(
-      List(p), AMM, Some(BigInt(100)), _ => Some(BigInt(14533525625433419L))
+      List(p),
+      AMM,
+      Some(BigInt(100)),
+      _ => Some(BigInt(14533525625433419L))
     )
     val up = rows.find(_.ledger != "DAG").get
     expect.all(!up.breached, up.shortfall == BigInt(-7170622458112005L))
@@ -78,7 +94,10 @@ object CollateralInvariantSpec extends SimpleIOSuite {
     // The DOR pool: book 24,704,246.45101111, wallet 22,859,282.41981735.
     val p = pool("p", Some(DOR), 2470424645101111L, 100L)
     val rows = CollateralInvariant.positions(
-      List(p), AMM, Some(BigInt(100)), _ => Some(BigInt(2285928241981735L))
+      List(p),
+      AMM,
+      Some(BigInt(100)),
+      _ => Some(BigInt(2285928241981735L))
     )
     val dor = rows.find(_.ledger != "DAG").get
     expect.all(dor.breached, dor.shortfall == BigInt(184496403119376L))
@@ -86,7 +105,78 @@ object CollateralInvariantSpec extends SimpleIOSuite {
 
   pureTest("an unreadable wallet yields no row, never a false pass") {
     val p = pool("p", Some(DOR), 1000L, 500L)
-    val rows = CollateralInvariant.positions(List(p), AMM, dagBalance = None, tokenBalance = _ => None)
+    val rows = CollateralInvariant.positions(List(p), AMM, dagBalance = None, tokenBalance = _ => None, pendingSpendActions = Nil)
     expect(rows.isEmpty)
+  }
+
+  // ------------------------------------------------- value in flight
+
+  private val USER = Address("DAG4w5mUqNNxQNS4hgdpx3E8FGgiu2UCRsJxHwhX")
+  private def leg(cur: Option[CurrencyId], amt: Long, from: Address, to: Address) =
+    SpendTransaction(None, cur, SwapAmount(PosLong.unsafeFrom(amt)), from, to)
+  private def action(txs: SpendTransaction*) = SpendAction(NonEmptyList.fromListUnsafe(txs.toList))
+
+  pureTest("a healthy in-flight swap is NOT a breach - this is the false positive to avoid") {
+    // The reserve is credited when the SpendAction is generated; the wallet only moves when the
+    // global layer settles it. Naively comparing reserve to balance fires on every live swap.
+    // DAG in 500, DOR out 1000. Reserve already reflects both; the wallet reflects neither.
+    val p = pool("p", Some(DOR), 9000L, 1500L)
+    val pending = List(action(leg(None, 500L, USER, AMM), leg(Some(DOR), 1000L, AMM, USER)))
+    val rows = CollateralInvariant.positions(
+      List(p),
+      AMM,
+      dagBalance = Some(BigInt(1000)), // 500 not yet received
+      tokenBalance = _ => Some(BigInt(10000)), // 1000 not yet paid out
+      pendingSpendActions = pending
+    )
+    val dag = rows.find(_.ledger == "DAG").get
+    val dor = rows.find(_.ledger != "DAG").get
+    expect.all(
+      dag.inFlightNet == BigInt(500),
+      dag.backing == BigInt(1500),
+      !dag.breached,
+      dor.inFlightNet == BigInt(-1000),
+      dor.backing == BigInt(9000),
+      !dor.breached
+    )
+  }
+
+  pureTest("an AllowSpend leg destined to the metagraph counts as inbound backing") {
+    // An AllowSpend debits the user and sits in the global activeAllowSpends - never in the
+    // metagraph balance. The AMM has already booked it, so it must count as in flight.
+    val flight = CollateralInvariant.inFlight(List(action(leg(None, 777L, USER, AMM))), AMM)
+    expect(flight.getOrElse(None, BigInt(0)) == BigInt(777))
+  }
+
+  pureTest("an outbound leg reduces the backing the wallet is expected to keep") {
+    val flight = CollateralInvariant.inFlight(List(action(leg(Some(UP), 42L, AMM, USER))), AMM)
+    expect(flight.getOrElse(Some(UP), BigInt(0)) == BigInt(-42))
+  }
+
+  pureTest("legs unrelated to the metagraph are ignored entirely") {
+    val other = Address("DAG8uqhyGtFABWSS5KeVB2ia1R4vXop5AeijXeoU")
+    expect(CollateralInvariant.inFlight(List(action(leg(None, 999L, USER, other))), AMM).isEmpty)
+  }
+
+  pureTest("inbound and outbound on the same ledger net out") {
+    val flight = CollateralInvariant.inFlight(
+      List(action(leg(None, 900L, USER, AMM), leg(None, 400L, AMM, USER))),
+      AMM
+    )
+    expect(flight.getOrElse(None, BigInt(0)) == BigInt(500))
+  }
+
+  pureTest("in flight cannot mask a genuine shortfall") {
+    // Reserve 5000, wallet 1000, only 500 legitimately in flight: still short 3500.
+    val p = pool("p", Some(DOR), 10L, 5000L)
+    val rows = CollateralInvariant.positions(
+      List(p),
+      AMM,
+      Some(BigInt(1000)),
+      _ => Some(BigInt(10)),
+      List(action(leg(None, 500L, USER, AMM)))
+    )
+    val dag = rows.find(_.ledger == "DAG").get
+    expect.all(dag.breached, dag.shortfall == BigInt(3500))
   }
 }
