@@ -85,7 +85,13 @@ object L0CombinerService {
         }
       } yield result
       combined.handleErrorWith { e =>
-        logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
+        val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
+        logger
+          .error(e)(
+            s"COMBINE_FAILED: dropping ${incomingUpdates.size} update(s) $updateHashes and returning previous state. " +
+              s"If this error is non-deterministic across nodes it WILL fork consensus — investigate immediately."
+          )
+          .as(oldState)
       }
     }
   }
