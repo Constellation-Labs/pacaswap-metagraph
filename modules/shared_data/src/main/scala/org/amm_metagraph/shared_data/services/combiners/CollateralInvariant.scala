@@ -8,7 +8,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.swap.CurrencyId
 
-import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPoolCalculatedState}
+import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -122,6 +122,12 @@ object CollateralInvariant {
     dagRow ++ tokenRows
   }
 
+  /** How often the check runs. It sits inside consensus, so it must never become a cost the combine has to pay every snapshot: it reads
+    * collections and writes log lines, both of which are real work on the critical path. Sampling keeps drift detection within a couple of
+    * minutes while making the amortised cost negligible. It touches no state, so sampling cannot affect consensus.
+    */
+  val checkEveryNOrdinals: Long = 50L
+
   def make[F[_]: Async]: CollateralInvariant[F] = new CollateralInvariant[F] {
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CollateralInvariant")
 
@@ -129,53 +135,67 @@ object CollateralInvariant {
       state: DataState[AmmOnChainState, AmmCalculatedState],
       context: ProcessingContext
     ): F[Unit] = {
-      val self = context.currencyId.value
-      val pools = getLiquidityPoolCalculatedState(state.calculated).confirmed.value.values
+      val ordinal = context.currentSnapshotOrdinal.value.value
 
-      // Every spend action the AMM has emitted and is still waiting to see settled.
-      val pendingSpendActions = state.calculated.operations.values.toList.flatMap {
-        _.pending.toList.collect { case p: PendingSpendAction[_] => p.generatedSpendAction }
-      }
+      // Everything below is inside defer so that nothing - not a missing map key, not a
+      // malformed state - can throw while the effect is being BUILT. An eager throw here would
+      // escape the caller's error handling and take the whole combine down with it, which is
+      // exactly what happened the first time this was written.
+      Async[F].defer {
+        if (ordinal % checkEveryNOrdinals =!= 0L) Async[F].unit
+        else {
+          val self = context.currencyId.value
 
-      context.lastSyncGlobalSnapshotInfo match {
-        case None =>
-          logger.warn("COLLATERAL_INVARIANT unknown: no global snapshot info this snapshot")
-        case Some(info) =>
-          val hasSelfLock = info.activeTokenLocks.get(self).nonEmpty
-          val rows = positions(
-            pools,
-            self,
-            info.balances.get(self).map(b => BigInt(b.value.value)),
-            cid =>
-              info.lastCurrencySnapshots
-                .get(cid.value)
-                .flatMap(_.toOption)
-                .flatMap { case (_, ci) => ci.balances.get(self) }
-                .map(b => BigInt(b.value.value)),
-            pendingSpendActions
-          )
+          // .get, never Map.apply: this runs before the LiquidityPool entry need exist.
+          val pools = state.calculated.operations
+            .get(OperationType.LiquidityPool)
+            .collect { case lp: LiquidityPoolCalculatedState => lp }
+            .fold(Iterable.empty[LiquidityPool])(_.confirmed.value.values)
 
-          val anomaly: F[Unit] =
-            if (hasSelfLock)
-              logger.warn(
-                "COLLATERAL_INVARIANT anomaly: the metagraph address holds a token lock. " +
-                  "Locked value sits outside the balances map, so backing is over-reported."
-              )
-            else Async[F].unit
-
-          anomaly >> rows.traverse_ { r =>
-            if (r.breached)
-              logger.warn(
-                s"COLLATERAL_INVARIANT BREACH ledger=${r.ledger} reserve=${r.reserve} " +
-                  s"balance=${r.balance} inFlightNet=${r.inFlightNet} backing=${r.backing} " +
-                  s"shortfall=${r.shortfall} - the book promises more than the wallet can back"
-              )
-            else
-              logger.debug(
-                s"COLLATERAL_INVARIANT ok ledger=${r.ledger} surplus=${-r.shortfall} inFlightNet=${r.inFlightNet}"
-              )
+          val pendingSpendActions = state.calculated.operations.values.toList.flatMap {
+            _.pending.toList.collect { case p: PendingSpendAction[_] => p.generatedSpendAction }
           }
+
+          context.lastSyncGlobalSnapshotInfo match {
+            case None =>
+              logger.warn("COLLATERAL_INVARIANT unknown: no global snapshot info this snapshot")
+            case Some(info) =>
+              val selfLocked = info.activeTokenLocks.flatMap(_.get(self)).exists(_.nonEmpty)
+              val rows = positions(
+                pools,
+                self,
+                info.balances.get(self).map(b => BigInt(b.value.value)),
+                cid =>
+                  info.lastCurrencySnapshots
+                    .get(cid.value)
+                    .flatMap(_.toOption)
+                    .flatMap { case (_, ci) => ci.balances.get(self) }
+                    .map(b => BigInt(b.value.value)),
+                pendingSpendActions
+              )
+
+              val anomaly: F[Unit] =
+                if (selfLocked)
+                  logger.warn(
+                    "COLLATERAL_INVARIANT anomaly: the metagraph address holds a token lock. " +
+                      "Locked value sits outside the balances map, so backing is over-reported."
+                  )
+                else Async[F].unit
+
+              // Only breaches are logged. A per-row debug line on every ledger every time
+              // would put avoidable I/O on the consensus path for no signal.
+              anomaly >> rows.filter(_.breached).traverse_ { r =>
+                logger.warn(
+                  s"COLLATERAL_INVARIANT BREACH ordinal=$ordinal ledger=${r.ledger} " +
+                    s"reserve=${r.reserve} balance=${r.balance} inFlightNet=${r.inFlightNet} " +
+                    s"backing=${r.backing} shortfall=${r.shortfall} - " +
+                    "the book promises more than the wallet can back"
+                )
+              }
+          }
+        }
       }
+        .handleErrorWith(e => logger.warn(e)("COLLATERAL_INVARIANT check failed; combine unaffected"))
     }
   }
 }

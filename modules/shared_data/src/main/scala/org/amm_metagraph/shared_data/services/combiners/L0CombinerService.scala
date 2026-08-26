@@ -78,6 +78,7 @@ object L0CombinerService {
                     )
                     // The book must always equal the wallet. Checked every snapshot, so a
                     // divergence is visible in one snapshot rather than after months.
+                    // Observability only: it must never be able to fail the combine it observes.
                     _ <- collateralInvariant.check(cleanedState, processingContext)
                   } yield cleanedState
               }

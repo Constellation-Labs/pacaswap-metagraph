@@ -179,4 +179,22 @@ object CollateralInvariantSpec extends SimpleIOSuite {
     val dag = rows.find(_.ledger == "DAG").get
     expect.all(dag.breached, dag.shortfall == BigInt(3500))
   }
+
+  // ------------------------------------------- it must never break the combine
+
+  pureTest("the check is sampled, so it is not a cost paid on every snapshot") {
+    // It runs inside consensus. Reading collections and writing log lines is real work on the
+    // critical path; a check that slows the combine can itself cause the problem it looks for.
+    expect.all(
+      CollateralInvariant.checkEveryNOrdinals > 1L,
+      731650L % CollateralInvariant.checkEveryNOrdinals == 0L
+    )
+  }
+
+  // The regression for "the check must never fail the combine" is covered end to end by
+  // CombinerTest, which runs the whole combine with the invariant wired in. It is what caught
+  // the original break: the first version computed its inputs while BUILDING the effect, so a
+  // missing map key threw before any error handling could see it and the combine dropped every
+  // update in the batch. Reproducing that here would mean fabricating a Hashed currency
+  // snapshot for ProcessingContext, which would test the fixture more than the code.
 }
