@@ -2,16 +2,16 @@
   "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM": {
     "poolId": "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM",
     "tokenA": {
-      "amount": 2470424645101111,
+      "amount": 2475356513342926,
       "identifier": "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM"
     },
     "tokenB": {
-      "amount": 381190149344871
+      "amount": 381957801425689
     },
     "owner": "DAG62QdFnvW8xX3uGmo6F3yB2CT5i25hZoVmN6za",
-    "k": 941701539411342439936204251681,
+    "k": 945481731581223212674162826014,
     "poolShares": {
-      "totalShares": 1285354640,
+      "totalShares": 1287928904,
       "addressShares": {
         "DAG0E8ogFouHy148MB3dwdvnMGA4nipRonndT8gW": 2857270,
         "DAG0GsQ2BkHEBgkBB8hAsj6VpXcVPqSn2kBmXHSu": 76792485,
@@ -82,7 +82,7 @@
         "DAG7sXNiKukzZeBy5vx6jxW3rXjv9hB4inkK7byL": 50561097,
         "DAG7tovDF5dnix7thJqPtzUDtQroVYEWiR55Ttc3": 53956,
         "DAG7uHRz6stwzsEnSHB2w1VxVHsCq7PDuDhTbjNP": 82819,
-        "DAG7yFtVWsNVN53knqtcaYoNg56sG8zXq79eUYLv": 1228491,
+        "DAG7yFtVWsNVN53knqtcaYoNg56sG8zXq79eUYLv": 3802755,
         "DAG7yhDHD3Rmy1HUu7TfrEvVWP5mRtcudCoDJChp": 10207976,
         "DAG84q6TTiBn9eE4bxcAFp9rF7yijGrec2vvPu3g": 4694681,
         "DAG8Eyr6SGvLorNU4rQspeUXZLZi3wt84CwbV1Ep": 47783420,

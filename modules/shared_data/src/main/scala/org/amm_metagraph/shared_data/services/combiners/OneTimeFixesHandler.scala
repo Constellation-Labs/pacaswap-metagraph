@@ -69,12 +69,14 @@ object OneTimeFixesHandler {
       *
       * Runs the snapshot after the remediation. It books the surplus the wallet already holds for The Upsider AI, which no transfer can fix
       * without moving tokens out, and sets totalShares to the sum of addressShares in all four pools so the LPs stop collectively claiming
-      * more than 100% of a pool. The DAG and token shortfalls are closed by the treasury transfer, not here, so this resource is safe to
-      * apply whether or not those transfers have landed yet.
+      * more than 100% of a pool. It also restores the exact reserves and 2,574,264-share entitlement recorded for the DOR/DAG staking
+      * operation whose SpendAction settled on GL0 but was later rolled back from Paca's book after a cold-cache evidence gap. Those are the
+      * shares the historical operation would have issued; this is deliberately not repriced as a new deposit against the 731648 pool. The
+      * DAG and token shortfalls, including the restored liability, are closed by treasury transfers, not here. The additional
+      * 7,676.52080818 DAG and 49,318.68241815 DOR backing MUST be present before this normalization executes.
       *
-      * Machine-generated rather than hand-written: k and totalShares are recomputed from the reserves and the share ledger, and the
-      * generator refuses to emit a file that does not close. Every one of the 48 records in the twelve hand-written predecessors carries k
-      * != tokenA * tokenB; this one does not. PoolNormalizationSpec re-derives both from the shipped resource.
+      * Every one of the 48 records in the twelve hand-written predecessors carries k != tokenA * tokenB; this one does not.
+      * PoolNormalizationSpec re-derives k and totalShares from the shipped resource and pins the recovered operation's exact amounts.
       */
     val normalizePoolsOrdinal: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(731648L))
 

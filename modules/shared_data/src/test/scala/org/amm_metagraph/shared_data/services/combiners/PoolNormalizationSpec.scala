@@ -7,6 +7,7 @@ import scala.collection.immutable.SortedMap
 import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.SnapshotOrdinal
 
+import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.loaders.LiquidityPoolLoader
@@ -16,8 +17,8 @@ import weaver.SimpleIOSuite
 /** updated-pools-14.json brings every pool to reserve == wallet, 1:1.
   *
   * Every one of the 48 pool records in the twelve hand-written predecessors carries `k != tokenA * tokenB`, and from the second file onward
-  * their share ledgers do not sum to totalShares either. Those inconsistencies are in the live state today. This resource is generated
-  * rather than written, and these assertions are what make that worth anything.
+  * their share ledgers do not sum to totalShares either. Those inconsistencies are in the live state today. These assertions re-derive the
+  * invariants from the shipped resource and pin the exact one-time recovery layered onto it.
   */
 object PoolNormalizationSpec extends SimpleIOSuite {
 
@@ -52,7 +53,7 @@ object PoolNormalizationSpec extends SimpleIOSuite {
 
   pureTest("the written totals are exactly the measured sums") {
     val expected = Map(
-      "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM" -> 1285354640L,
+      "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM" -> 1287928904L,
       "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh" -> 562953484L,
       "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1" -> 6847659924L,
       "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W" -> 3477010611L
@@ -73,23 +74,41 @@ object PoolNormalizationSpec extends SimpleIOSuite {
     )
   }
 
-  pureTest("the shortfall pools keep their book; those are closed by transfer, not a rewrite") {
+  pureTest("the shortfall pools retain their liabilities; those are closed by transfer, not a write-down") {
     val dor = pools.values.find(_.poolId == "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM").get
     val usdc = pools.values.find(_.poolId == "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh").get
     val dorToken = if (dor.tokenA.identifier.isDefined) dor.tokenA else dor.tokenB
     val usdcToken = if (usdc.tokenA.identifier.isDefined) usdc.tokenA else usdc.tokenB
     expect.all(
-      dorToken.amount.value == 2470424645101111L,
+      // DOR includes the 49,318.68241815 that GL0 settled for the recovered staking operation.
+      dorToken.amount.value == 2475356513342926L,
       usdcToken.amount.value == 2177968498680L
     )
   }
 
-  pureTest("the DAG side is untouched - it is pooled and closed by the treasury transfer") {
+  pureTest("the settled DOR/DAG staking operation is restored exactly once") {
+    val user = io.constellationnetwork.schema.address.Address("DAG7yFtVWsNVN53knqtcaYoNg56sG8zXq79eUYLv")
+    val dor = pools.values.find(_.poolId == "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM").get
+    val dorToken = if (dor.tokenA.identifier.isDefined) dor.tokenA else dor.tokenB
+    val dagToken = if (dor.tokenA.identifier.isEmpty) dor.tokenA else dor.tokenB
+
+    expect.all(
+      // Existing 1,228,491 plus the 2,574,264 shares recorded when update
+      // b4013241c218dff5772cfeaf5d4b6ee443eb004b33a47da54ad426548710a7f3 was generated. This honors
+      // the historical entitlement rather than repricing it as a new deposit against the later normalized pool.
+      dor.poolShares.addressShares.get(user).exists(_.value.value.value == 3802755L),
+      dorToken.amount.value == 2470424645101111L + 4931868241815L,
+      dagToken.amount.value == 381190149344871L + 767652080818L,
+      dor.k == BigInt(dorToken.amount.value) * BigInt(dagToken.amount.value)
+    )
+  }
+
+  pureTest("the aggregate DAG liability includes the recovered stake and is closed by transfer") {
     val dagTotal = pools.values.foldLeft(0L) { (acc, p) =>
       acc + List(p.tokenA, p.tokenB).filter(_.identifier.isEmpty).map(_.amount.value).sum
     }
-    // 3,811,901.49344871 + 2,873,780.52832436 + 2,591,738.08118421 + 12,308,553.84768349
-    expect(dagTotal == 2158597395064077L)
+    // The previous total plus the 7,676.52080818 DAG already settled for the recovered operation.
+    expect(dagTotal == 2159365047144895L)
   }
 
   test("the handler fires it at 731648 and treats it as fail-closed") {
