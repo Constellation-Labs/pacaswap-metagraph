@@ -11,10 +11,9 @@ import weaver.SimpleIOSuite
 
 /** updated-pools-14.json brings every pool to reserve == wallet, 1:1.
   *
-  * Every one of the 48 pool records in the twelve hand-written predecessors carries
-  * `k != tokenA * tokenB`, and from the second file onward their share ledgers do not sum to
-  * totalShares either. Those inconsistencies are in the live state today. This resource is
-  * generated rather than written, and these assertions are what make that worth anything.
+  * Every one of the 48 pool records in the twelve hand-written predecessors carries `k != tokenA * tokenB`, and from the second file onward
+  * their share ledgers do not sum to totalShares either. Those inconsistencies are in the live state today. This resource is generated
+  * rather than written, and these assertions are what make that worth anything.
   */
 object PoolNormalizationSpec extends SimpleIOSuite {
 
@@ -57,12 +56,17 @@ object PoolNormalizationSpec extends SimpleIOSuite {
     expect(pools.values.forall(p => p.poolShares.totalShares.value == expected(p.poolId)))
   }
 
-  pureTest("the Upsider AI surplus is booked; the wallet already holds it") {
-    // 145,335,256.25433419 UP sits at the custody address and no pool's book claimed it.
-    // No transfer can fix that without moving tokens out, so the book is raised to the wallet.
+  pureTest("the Upsider AI book is UNCHANGED - the surplus is swept out, not booked in") {
+    // 145,335,256.25433419 UP sits at the custody address and no pool's book claims it. Booking
+    // it in would have halved that pool's UP price; sweeping it out at ordinal 731649 leaves the
+    // book alone, so the pool reaches reserve == wallet with no price movement. The two are
+    // mutually exclusive, and this asserts we did not do both.
     val up = pools.values.find(_.poolId == "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1").get
     val token = if (up.tokenA.identifier.isDefined) up.tokenA else up.tokenB
-    expect(token.amount.value == 14533525625433419L)
+    expect.all(
+      token.amount.value == 7362903167321414L, // the book, untouched
+      token.amount.value != 14533525625433419L // NOT raised to the wallet
+    )
   }
 
   pureTest("the shortfall pools keep their book; those are closed by transfer, not a rewrite") {

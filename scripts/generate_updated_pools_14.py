@@ -58,6 +58,11 @@ NAMES = {
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
+    # The Upsider AI surplus can be resolved two ways and they are mutually exclusive:
+    # book it into the pool, or sweep it out of the custody address with a SpendAction.
+    # Sweeping is the chosen route, so the book stays where it is and the wallet comes down.
+    ap.add_argument("--book-up-surplus", action="store_true",
+                    help="raise the UP book to the wallet instead of sweeping the surplus out")
     args = ap.parse_args()
 
     state = json.loads(STATE.read_text())
@@ -84,7 +89,9 @@ def main():
             if pid == AMM:
                 wallet = p13["tokenA"]["amount"]   # remediation makes SWAP 1:1 by construction
             book = side["amount"]
-            side["amount"] = max(book, wallet)
+            # max() only where we intend to raise the book. For the surplus pool the wallet is
+            # brought DOWN to the book by the sweep, so the book must not move.
+            side["amount"] = max(book, wallet) if args.book_up_surplus else max(book, min(book, wallet))
             rows.append((NAMES[cid], book, wallet, side["amount"]))
 
         shares = p["poolShares"]["addressShares"]

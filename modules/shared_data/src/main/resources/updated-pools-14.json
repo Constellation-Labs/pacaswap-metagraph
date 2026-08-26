@@ -176,14 +176,14 @@
   "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1": {
     "poolId": "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1",
     "tokenA": {
-      "amount": 14533525625433419,
+      "amount": 7362903167321414,
       "identifier": "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1"
     },
     "tokenB": {
       "amount": 259173808118421
     },
     "owner": "DAG6kp1ZP5hUJJMq5GGYZ6ZoTZsSzPo3cDPqr4ny",
-    "k": 3766709181730235490779002911399,
+    "k": 1908271652681874382301881167294,
     "poolShares": {
       "totalShares": 6847659924,
       "addressShares": {

@@ -24,6 +24,7 @@ import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import eu.timepit.refined.types.numeric.NonNegLong
 import org.amm_metagraph.l0.BalanceAdjustmentLoader.loadBalanceAdjustments
+import org.amm_metagraph.l0.SurplusSweepLoader.loadSweep
 import org.amm_metagraph.l0.rewards.RewardsService
 import org.amm_metagraph.shared_data.app.ApplicationConfigOps
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
@@ -56,6 +57,8 @@ object Main
     val ordinalToPerformBalanceAdjustments2 = 145000L
     val ordinalToPerformBalanceAdjustments3 = 472325L
     val ordinalToPerformBalanceAdjustments4 = 731647L
+    // 731648 applies updated-pools-14.json; this is the snapshot after it.
+    val ordinalToSweepUpsiderSurplus = 731649L
     if (nextOrdinal == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None
@@ -84,6 +87,21 @@ object Main
         case Failure(exception) => throw exception
         case Success(adjustments) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet(adjustments: _*)
+          Some(artifactSet)
+      }
+    } else if (nextOrdinal == ordinalToSweepUpsiderSurplus) {
+      // The custody address has no private key, so a surplus sitting there cannot be moved by an
+      // ordinary transfer. This SpendAction is the only mechanism. It leaves the pool's book
+      // untouched, so The Upsider AI reaches reserve == wallet with no price movement.
+      //
+      // Fails closed for the same reason the deductions do: a resource problem must halt rather
+      // than silently emit nothing. It is fail-safe the other way too - if the SpendAction never
+      // settles the pool is merely over-backed, which is harmless and can never create a
+      // shortfall.
+      loadSweep("up-surplus-sweep.json") match {
+        case Failure(exception) => throw exception
+        case Success(spendAction) =>
+          val artifactSet: SortedSet[SharedArtifact] = SortedSet[SharedArtifact](spendAction)
           Some(artifactSet)
       }
     } else {
