@@ -16,6 +16,6 @@
   "currencyId": "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1",
   "amount": 7170622458112005,
   "source": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
-  "destination": "SET_DESTINATION_BEFORE_DEPLOY",
+  "destination": "DAG36xfcqvP1fe1JgKLs739LsCnqMzKt3DRhbCLz",
   "reason": "UpsiderSurplusSweep"
 }

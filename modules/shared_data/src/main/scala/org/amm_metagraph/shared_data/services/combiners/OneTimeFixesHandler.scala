@@ -172,7 +172,7 @@ object OneTimeFixesHandler {
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
       } else if (currentSnapshotOrdinal === normalizePoolsOrdinal) {
-        updatePoolsAtOrdinal(oldState, "updated-pools-14.json").flatMap { updatedState =>
+        updatePoolsAtOrdinal(oldState, "updated-pools-14.json", failClosed = true).flatMap { updatedState =>
           currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
         }
       } else if (currentSnapshotOrdinal === restorePoolReservesOrdinal) {
@@ -247,12 +247,28 @@ object OneTimeFixesHandler {
           } yield updatedState
       }
 
+    /** @param failClosed
+      *   raise instead of returning oldState when the resource cannot be loaded.
+      *
+      * Only the normalization at 731648 sets this. The same helper serves thirteen historical replay ordinals from 2025, and making those
+      * raise would change how an already-signed history replays, so their fail-open behaviour has to be preserved exactly.
+      *
+      * Without it, a bad or missing updated-pools-14.json would log "Error when updating the pools", return the previous state, and let the
+      * snapshot proceed: normalization silently skipped, k left inconsistent, the share ledger still promising over 100% of every pool, and
+      * the sweep at 731649 firing anyway. The fail-closed wrapper in L0CombinerService cannot catch that, because nothing propagates to it.
+      */
     private def updatePoolsAtOrdinal(
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
-      resourcePath: String
+      resourcePath: String,
+      failClosed: Boolean = false
     ): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
       _ <- logger.info("Starting to load the pools to update")
       result <- LiquidityPoolLoader.loadPools(resourcePath) match {
+        case Failure(exception) if failClosed =>
+          logger.error(exception)(
+            s"Error loading $resourcePath at a fail-closed ordinal. Refusing to build this " +
+              "snapshot rather than skip the state change it carries."
+          ) >> exception.raiseError[F, DataState[AmmOnChainState, AmmCalculatedState]]
         case Failure(exception) =>
           logger.error(exception)("Error when updating the pools") >>
             oldState.pure[F]

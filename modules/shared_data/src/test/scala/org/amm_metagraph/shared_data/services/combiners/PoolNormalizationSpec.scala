@@ -2,11 +2,15 @@ package org.amm_metagraph.shared_data.services.combiners
 
 import cats.effect.IO
 
+import scala.collection.immutable.SortedMap
+
+import io.constellationnetwork.currency.dataApplication.DataState
 import io.constellationnetwork.schema.SnapshotOrdinal
 
 import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.loaders.LiquidityPoolLoader
+import org.amm_metagraph.shared_data.types.States._
 import weaver.SimpleIOSuite
 
 /** updated-pools-14.json brings every pool to reserve == wallet, 1:1.
@@ -97,6 +101,31 @@ object PoolNormalizationSpec extends SimpleIOSuite {
         h.isOneTimeFixOrdinal(ord(731648L)),
         h.isOneTimeFixOrdinal(ord(731647L)),
         !h.isOneTimeFixOrdinal(ord(731649L))
+      )
+  }
+
+  test("a missing resource at 731648 RAISES rather than skipping normalization") {
+    // updatePoolsAtOrdinal is shared with thirteen historical replay ordinals and returns the
+    // previous state on a load failure, by design, so their signed history still replays. The
+    // normalization ordinal opts out of that. Without the opt-in a bad updated-pools-14.json
+    // would log, return oldState, and let the snapshot proceed with k still inconsistent and the
+    // share ledger still promising over 100% of every pool, while the sweep at 731649 fired
+    // anyway. The fail-closed wrapper in L0CombinerService cannot catch it: nothing propagates.
+    val empty = DataState(
+      AmmOnChainState.empty,
+      AmmCalculatedState(SortedMap(OperationType.LiquidityPool -> LiquidityPoolCalculatedState.empty))
+    )
+    for {
+      ref <- SignallingRef.of[IO, SnapshotOrdinal](SnapshotOrdinal.MinValue)
+      h = OneTimeFixesHandler.make[IO](ref)
+      atNormalization <- h.handleOneTimeFixesOrdinals(empty, ord(731648L)).attempt
+      // An ordinary ordinal does nothing at all, so a raise here would be the flag leaking.
+      atOrdinary <- h.handleOneTimeFixesOrdinals(empty, ord(731650L)).attempt
+    } yield
+      expect.all(
+        atNormalization.isLeft, // never a silent Some(oldState)
+        atOrdinary.isRight, // and the flag is scoped, not blanket
+        atOrdinary.exists(_.isEmpty)
       )
   }
 }

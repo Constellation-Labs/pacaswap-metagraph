@@ -159,8 +159,10 @@ runs:
     # A resource missing from the assembled jar is the one failure mode the unit tests cannot see:
     # the test classpath serves src/main/resources directly, while a restart reads it from this jar.
     # All four resources are fail-closed at their ordinal (731647, 731648, 731649), so a packaging
-    # regression would halt the metagraph mid-remediation. Runs on cache hits too, since the jar is
-    # checked either way.
+    # regression halts the metagraph rather than silently skipping the state change it carries.
+    # updated-pools-14.json only became fail-closed once updatePoolsAtOrdinal was given the
+    # failClosed flag; before that it logged and returned the previous state, and this comment
+    # was wrong. Runs on cache hits too, since the jar is checked either way.
     - name: Verify remediation resources are packaged in the L0 jar
       if: inputs.TEMPLATE_NAME == ''
       shell: bash
