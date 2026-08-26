@@ -215,123 +215,44 @@ The `Now` row above is read from the pool's calculated state at currency ordinal
 
 ---
 
-## 7. Normalization walkthrough
+## 7. Normalization walkthrough — REMOVED, do not reconstruct from memory
 
-Execute in this order. Steps 1–3 are prerequisites; step 5 is the single atomic snapshot that does the work.
+The step-by-step that stood here has been removed because it was wrong, and a wrong runbook is
+worse than none: it stopped at ordinal 731647 and stated that three places move together and
+"there is no fourth". That is no longer true.
 
-### Step 0 — Keep L1 down (already in effect)
+**The deployment now touches five hardcoded ordinals, not three.** Two of them did not exist when
+that walkthrough was written:
 
-**Currency-L1 and data-L1 must stay down until step 6.**
-
-The remediation fires **once**, at a fixed ordinal, against **hardcoded addresses**. Every snapshot between restart and that ordinal is a window in which those balances can move. If they move to fresh addresses, the deduction lands on empty wallets, saturates silently at zero, and **there is no second attempt**.
-
-The ordinal is not a safety mechanism. The only thing holding this window closed is L1 being down.
-
-### Step 1 — Ship Tessellation v3.5.28 to every GL0 node
-
-Not just PacaSwap's nodes — **every** GL0 node.
-
-GL0 re-executes each currency snapshot through the same acceptance path with `dataApplicationSnapshotAcceptanceManager = None`. A GL0 node without this release rejects the adjustment snapshot even if PacaSwap's own L0 nodes accept it. The metagraph then stalls at that exact ordinal.
-
-Verify: every GL0 node reports v3.5.28 before proceeding.
-
-### Step 2 — Merge and deploy the remediation
-
-Three PRs, and they must go together:
-
-| Repo | PR | Contents |
+| Ordinal | What fires | Emits balance artifacts |
 |---|---|---|
-| tessellation | `#1575` → `release/mainnet` | Authorizes the 17 deductions |
-| tessellation | `#1576` → `develop` | Same, so it survives the next release cut |
-| pacaswap-metagraph | `#175` → `release/mainnet` | Emits the deductions, restores the pool, purges state |
+| 731647 | The 17 deductions and `updated-pools-13.json` — the remediation in §6 | Yes |
+| **731648** | `updated-pools-14.json` — sets `totalShares` to the sum of `addressShares` in all four pools, so the LPs stop collectively claiming more than 100% of a pool | No |
+| **731649** | A `SpendAction` sweeping 71,706,224.58112005 UP out of the custody address, which has no private key and therefore cannot be swept any other way | Yes |
 
-The adjustment values in `#1575` and `#175` must be **byte-identical**. `validateRequiredAdjustments` compares `Amount`s exactly, and **either direction of a skew stalls the metagraph** at this ordinal:
+All three are fail-closed: a resource problem halts the snapshot rather than skipping the state
+change it carries.
 
-- Metagraph emits an artifact that GL0 has not authorized → `"not authorized"`
-- GL0 expects adjustments the metagraph does not emit → `"Missing required adjustments"`
+**The fragility worth knowing before restart.** Those ordinals are absolute literals. The
+metagraph stopped at 731646, so the first snapshot it produces on restart is 731647 and they line
+up. If that assumption breaks — a rollback, an unexpected snapshot, anything that makes the first
+new ordinal something other than 731647 — then 731648 and 731649 are already in the past and
+**will never fire**. No halt, no error: the normalization and the sweep simply do not happen, and
+the only symptom is the inconsistencies in §6 and the share ledger persisting.
 
-This was verified entry by entry: address, `deduct`, `reason`, `reference`, ordinal — identical on all 17.
-
-
-### Build prerequisite — one line to change on release day
-
-`project/Dependencies.scala` now defaults to tessellation **3.5.28**, the released incident build. It previously pinned 3.5.20, which predates the
-`FeeTransactionBugDeduction` variant that `BalanceAdjustmentLoader` references. Until the pin moves,
-`modules/l0` does not compile.
-
-**This has been verified end to end, not assumed.** The tessellation branch was published locally as
-`3.5.27-audit`, the pin was pointed at it, and `currencyL0/test` runs **10/10 including
-`BalanceAdjustment4Spec`**. The pin was then reverted, because a version that exists only on one
-machine would break CI for everyone else.
-
-**On release day: bump the pin to the first tessellation release containing `#1575` and `#1576`.**
-That is the only change required, and it is known to work.
-
-Worth knowing: because `currencyL0` never compiled, `BalanceAdjustment4Spec` had **never run in CI**.
-Its `thirdPartyTotal` constant sat at `139406347045268`, three orders of magnitude below the value it
-was asserting. That is now corrected and the spec passes.
-
-### Step 3 — Inject the DAG
-
-Send **12,122,087.60812058 DAG** from treasury to `DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W`.
-
-This must land **before** the remediation ordinal. The pool reserve figure written in step 5 asserts the DAG is there; writing a reserve the address cannot back leaves the pool insolvent and the first withdrawal fails.
-
-Verify the balance on-chain before proceeding.
-
-### Step 4 — Set the ordinal
-
-**The remediation ordinal is 731647**, the first snapshot after the recorded stop at 731646. An earlier revision of this runbook used `731650` as a placeholder for a slow rollout; the implementation uses 731647 throughout — `ProtocolActivation`, `OneTimeFixesHandler.restorePoolReservesOrdinal`, and `Main.customArtifactsAt`.
-
-**Three places move together:**
-
-1. `ordinalToPerformBalanceAdjustments4` — `pacaswap/modules/l0/.../Main.scala`
-2. `restorePoolReservesOrdinal` — `pacaswap/.../OneTimeFixesHandler.scala`
-3. `snapshotOrdinal` — `tessellation/modules/node-shared/src/main/resources/adjustments.json`
-
-The calculated-state purge reuses `restorePoolReservesOrdinal`, so there is no fourth.
-
-### Step 5 — The remediation snapshot
-
-At the chosen ordinal, in **one atomic snapshot**, three things happen:
-
-1. **17 balance deductions** — 189,413,903,467.12 PACA removed
-2. **Pool reserves and `k` restored** — 50,395,243.35 PACA / 12,308,553.85 DAG
-3. **Calculated-state purge** — every reference to the 5 attacker addresses stripped
-
-All three land together deliberately. Splitting them across ordinals leaves a window where the attacker's pending swaps and LP shares are actionable against an already-healthy pool.
-
-The purge covers all nine address-bearing locations in `AmmCalculatedState`: confirmed maps for Swap / Staking / Withdrawal, pending and failed sets across all four operation types, liquidity-pool `addressShares`, `votingPowers`, `usersAllocations`, `frozenUsedUserVotes`, `availableRewards`, `rewardsBuffer`, and both sides of `withdraws`.
-
-Zeroing a balance does not cancel a pending swap, release LP shares, clear voting power, or drop unclaimed rewards. Without the purge, all of that becomes actionable again the moment the metagraph restarts — against reserves step 5 just restored to health.
-
-### Step 6 — Verify before reopening
-
-Confirm on-chain, **before** L1 comes back up:
-
-- [ ] All 4 mint wallets at **0** PACA
-- [ ] The 2 downstream transferees at **0** PACA
-- [ ] The 10 buyers hold their entitlement (table in §3.2)
-- [ ] Pool reserves read 50,395,243.35 PACA / 12,308,553.85 DAG
-- [ ] Pool price reads ~4.09 PACA/DAG
-- [ ] No calculated-state entries remain for the 5 attacker addresses
-- [ ] Metagraph is producing snapshots normally and GL0 is accepting them
-
-### Step 7 — Reopen
-
-Bring currency-L1 and data-L1 back up. Monitor the first snapshots closely.
-
----
+The operational procedure is maintained outside this document. What remains here is the incident
+record: what happened, who was affected, why each figure is what it is, and how to reproduce it.
+That part is still accurate and is the reason to keep the file.
 
 ## 8. On locking the untouched wallets
 
 Two wallets still hold exactly 2^62 each, untouched: `DAG7ZjENTP4T36…` and `DAG1kEmLAgnCVB…`.
 
-**Locking them is weaker than the deduction and unnecessary if the sequence above holds** — step 5 zeroes them outright, which is strictly stronger than a lock.
+**Locking them is weaker than the deduction and unnecessary if L1 stays down through the remediation snapshot** — the deduction at 731647 zeroes them outright, which is strictly stronger than a lock.
 
 Locking becomes **essential** only if the metagraph must restart *before* the remediation ordinal fires. In that case those wallets are live and spendable, and a lock is the only thing standing between them and the pool.
 
-Decision rule: **if L1 stays down until step 5, do not bother locking. If L1 must come up first, locking is mandatory.**
+Decision rule: **if L1 stays down through ordinal 731647, do not bother locking. If L1 must come up first, locking is mandatory.**
 
 ---
 
@@ -385,7 +306,7 @@ silent replay divergence on the three older ordinals.
 1. Confirm the released balances on-chain for the addresses above.
 2. Append a new block to `adjustments.json` and a matching resource on the metagraph side, at an
    ordinal shortly after the release.
-3. Merge both, deploy tessellation to GL0 first, then the metagraph — same order as §7.
+3. Merge both, deploy tessellation to GL0 first, then the metagraph.
 
 The mechanism is in place and tested; only the ordinal and the amounts need filling in at the time.
 
