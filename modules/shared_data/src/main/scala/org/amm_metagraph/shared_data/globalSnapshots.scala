@@ -15,11 +15,8 @@ import io.constellationnetwork.security.{Hashed, Hasher}
 
 import eu.timepit.refined.types.all.NonNegLong
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
-import org.typelevel.log4cats.SelfAwareStructuredLogger
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object globalSnapshots {
-  def logger[F[_]: Async]: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("globalSnapshots")
 
   def getAllowSpendGlobalSnapshotsState[F[_]: Async: Hasher](
     allowSpendHash: Hash,
@@ -49,18 +46,27 @@ object globalSnapshots {
   def getSpendActionsFromGlobalSnapshots[F[_]: Async](
     lastSyncGlobalOrdinal: SnapshotOrdinal,
     currentSyncGlobalOrdinal: SnapshotOrdinal,
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    fallbackSnapshot: Option[GlobalIncrementalSnapshot] = None
   ): F[List[SpendAction]] = {
     val ordinals = (lastSyncGlobalOrdinal.value.value to currentSyncGlobalOrdinal.value.value)
       .map(o => SnapshotOrdinal(NonNegLong.unsafeFrom(o)))
       .toList
 
     ordinals.traverse { ordinal =>
-      globalSnapshotsStorage.get(ordinal).map {
+      globalSnapshotsStorage.get(ordinal).flatMap {
         case Some(snapshot) =>
-          snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten)
+          snapshot.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten).pure[F]
         case None =>
-          List.empty[SpendAction]
+          // After a restart/rollback the in-memory cache is empty. Fall back to the last synchronized
+          // snapshot (read from disk by LastSyncGlobalSnapshotStorage) when the ordinal matches, so we
+          // don't silently miss spend actions and fork from the majority.
+          fallbackSnapshot match {
+            case Some(s) if s.ordinal === ordinal =>
+              s.spendActions.fold(List.empty[SpendAction])(_.values.toList.flatten).pure[F]
+            case _ =>
+              List.empty[SpendAction].pure[F]
+          }
       }
     }.map(_.flatten)
   }

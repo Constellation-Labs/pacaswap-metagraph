@@ -20,7 +20,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendGlobalSnapshotsState, logger}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
