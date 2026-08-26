@@ -94,7 +94,8 @@ object PoolNormalizationSpec extends SimpleIOSuite {
 
     expect.all(
       // Existing 1,228,491 plus the 2,574,264 shares recorded when update
-      // b4013241c218dff5772cfeaf5d4b6ee443eb004b33a47da54ad426548710a7f3 was generated.
+      // b4013241c218dff5772cfeaf5d4b6ee443eb004b33a47da54ad426548710a7f3 was generated. This honors
+      // the historical entitlement rather than repricing it as a new deposit against the later normalized pool.
       dor.poolShares.addressShares.get(user).exists(_.value.value.value == 3802755L),
       dorToken.amount.value == 2470424645101111L + 4931868241815L,
       dagToken.amount.value == 381190149344871L + 767652080818L,

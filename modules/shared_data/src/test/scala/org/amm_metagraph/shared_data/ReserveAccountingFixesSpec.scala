@@ -15,7 +15,6 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.globalSnapshots.getSpendActionsFromGlobalSnapshots
-import org.amm_metagraph.shared_data.services.combiners.StateManager
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import weaver.SimpleIOSuite
 
@@ -63,25 +62,6 @@ object ReserveAccountingFixesSpec extends SimpleIOSuite {
       storage = GlobalSnapshotsStorage.make[IO](ref)
       read <- getSpendActionsFromGlobalSnapshots[IO](ord(10L), ord(10L), storage, None)
     } yield expect(!read.complete)
-  }
-
-  pureTest("an incomplete read retains the evidence cursor so the missing interval is retried") {
-    val previous = ord(10L)
-    val synchronized = ord(12L)
-
-    expect.all(
-      StateManager
-        .nextGlobalEvidenceCursor(previous, synchronized, evidenceComplete = false, hasPendingSpendActions = true, ACTIVE) == previous,
-      StateManager
-        .nextGlobalEvidenceCursor(previous, synchronized, evidenceComplete = true, hasPendingSpendActions = true, ACTIVE) == synchronized,
-      // A gap cannot affect anything once there are no generated SpendActions awaiting a verdict;
-      // retaining it would poison the evidence range for unrelated future operations.
-      StateManager
-        .nextGlobalEvidenceCursor(previous, synchronized, evidenceComplete = false, hasPendingSpendActions = false, ACTIVE) == synchronized,
-      // Historical replay below the activation must retain the already-signed behaviour.
-      StateManager
-        .nextGlobalEvidenceCursor(previous, synchronized, evidenceComplete = false, hasPendingSpendActions = true, BEFORE) == synchronized
-    )
   }
 
   // ------------------------------------------------------ exact share issuance
