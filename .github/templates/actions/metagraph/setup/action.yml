@@ -158,14 +158,15 @@ runs:
 
     # A resource missing from the assembled jar is the one failure mode the unit tests cannot see:
     # the test classpath serves src/main/resources directly, while a restart reads it from this jar.
-    # Both resources are fail-closed at ordinal 731647, so a packaging regression would halt the
-    # metagraph at the remediation snapshot. Runs on cache hits too, since the jar is checked either way.
+    # All four resources are fail-closed at their ordinal (731647, 731648, 731649), so a packaging
+    # regression would halt the metagraph mid-remediation. Runs on cache hits too, since the jar is
+    # checked either way.
     - name: Verify remediation resources are packaged in the L0 jar
       if: inputs.TEMPLATE_NAME == ''
       shell: bash
       run: |
         JAR=.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
-        for resource in balance-adjustments-4.json updated-pools-13.json; do
+        for resource in balance-adjustments-4.json updated-pools-13.json updated-pools-14.json up-surplus-sweep.json; do
           if unzip -l "$JAR" | grep -q "$resource"; then
             echo "OK: $resource is packaged in $JAR"
           else
@@ -173,6 +174,19 @@ runs:
             exit 1
           fi
         done
+
+        # The sweep moves tokens out of an address nobody holds a key for, so a wrong or unset
+        # destination cannot be undone. The node already refuses to build snapshot 731649 while
+        # the placeholder is present, but that is a halted chain discovered at runtime. Catch it
+        # here instead, before anything is deployed.
+        unzip -p "$JAR" up-surplus-sweep.json > /tmp/sweep.json
+        if grep -q "SET_DESTINATION_BEFORE_DEPLOY" /tmp/sweep.json; then
+          echo "::error::up-surplus-sweep.json still has the placeholder destination. Set the"
+          echo "::error::address that receives the Upsider AI surplus before deploying. The"
+          echo "::error::metagraph will halt at ordinal 731649 rather than send tokens nowhere."
+          exit 1
+        fi
+        echo "OK: up-surplus-sweep.json has a destination set"
 
     - name: Copy data layer JARs if needed - AMM
       if: ${{ inputs.TEMPLATE_NAME == '' && inputs.INCLUDE_DATA_LAYER == 'true' && steps.cache-data-l1.outputs.cache-hit != 'true' }}
