@@ -59,6 +59,7 @@ object Main
     val ordinalToPerformBalanceAdjustments4 = 731647L
     // 731648 applies updated-pools-14.json; this is the snapshot after it.
     val ordinalToSweepUpsiderSurplus = 731649L
+    val ordinalToRefundDagOverpayment = 731650L
     if (nextOrdinal == ordinalToPerformBalanceAdjustments1) {
       loadBalanceAdjustments("balance-adjustments.json") match {
         case Failure(_) => None
@@ -99,6 +100,20 @@ object Main
       // settles the pool is merely over-backed, which is harmless and can never create a
       // shortfall.
       loadSweep("up-surplus-sweep.json") match {
+        case Failure(exception) => throw exception
+        case Success(spendAction) =>
+          val artifactSet: SortedSet[SharedArtifact] = SortedSet[SharedArtifact](spendAction)
+          Some(artifactSet)
+      }
+    } else if (nextOrdinal == ordinalToRefundDagOverpayment) {
+      // The DAG leg of the PROT-1695 recovery was funded twice, by two different wallets. The book
+      // counts it once, so the wallet ends over-backed by exactly that leg. This returns one of the
+      // two payments and restores reserve == wallet without touching any pool's book.
+      //
+      // Fails closed for the same reason the others do. Over-backing is the harmless direction, so
+      // if this never settles nothing is at risk; a silent no-op that we mistake for success is
+      // worse than a halt.
+      loadSweep("dag-overpayment-refund.json") match {
         case Failure(exception) => throw exception
         case Success(spendAction) =>
           val artifactSet: SortedSet[SharedArtifact] = SortedSet[SharedArtifact](spendAction)
