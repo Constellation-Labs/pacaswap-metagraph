@@ -1,18 +1,24 @@
 {
   "_comment": [
-    "Shortfall we currently accept, per ledger, in datum. The monitor fails when a ledger is",
-    "short by MORE than this, so the signal is the gap growing rather than the gap existing.",
+    "Shortfall we accept, per ledger, in datum. The monitor fails when a ledger is short by MORE",
+    "than this, so the signal is the gap growing rather than the gap existing.",
     "",
-    "These are the measured figures at currency ordinal 731646, after the authorized attack",
-    "remediation. Once the treasury top-up lands and every ledger reads 1:1, set every value to 0",
-    "and this becomes a strict check. Never raise a value to silence an alert without recording",
-    "why here."
+    "Every value is now 0: this is a strict check. The treasury transfers landed, the metagraph",
+    "restarted at 731647 and applied the deduction, the normalization, the Upsider sweep and the",
+    "DAG refund, and the monitor reads book == wallet to the datum on all five ledgers with the",
+    "chain live and trading (run 33031654468).",
+    "",
+    "A transient shortfall can still appear mid-swap, because a reserve is credited when the",
+    "SpendAction is generated and the wallet only moves on settlement. That is handled by",
+    "re-sampling (--confirm-after), not by a tolerance here.",
+    "",
+    "Never raise a value to silence an alert without recording why here."
   ],
-  "measured_at_currency_ordinal": 731646,
+  "measured_at_currency_ordinal": 731686,
   "accepted_shortfall": {
-    "DAG": 164112795926795,
-    "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM": 184496403119376,
-    "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh": 778376240426,
+    "DAG": 0,
+    "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM": 0,
+    "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh": 0,
     "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1": 0,
     "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W": 0
   }
