@@ -12,6 +12,7 @@ import io.constellationnetwork.security.hash.Hash
 
 import io.circe.syntax.EncoderOps
 import io.circe.{Json, JsonObject}
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.States._
 
 trait CalculatedStateService[F[_]] {
@@ -90,6 +91,22 @@ object CalculatedStateService {
           // state must stay OUT of the proof.
           val operations = state.operations.map(_._2.confirmed).toList
           val canonicalData = createCanonicalRepresentation(operations)
+
+          // NOT widened to cover pending/failed/rewards, deliberately.
+          //
+          // Doing so would catch node divergence in one snapshot instead of letting it drift,
+          // which is worth having. But everything that feeds the proof must be provably
+          // deterministic, and these are not: `rewardsBuffer.data` is a List whose order comes
+          // from how it was built, `RewardInfo` is a plain Map, and `pending` holds an existential
+          // element type with no Encoder, so it cannot even be canonicalised without new codecs.
+          // sortJsonKeys fixes object-key order but not array order.
+          //
+          // If the ordering of any one of those differs between nodes, the recomputed proof
+          // differs, consensus fails, and the metagraph cannot restart. That is a worse failure
+          // than the one being fixed. Widen only after each nested collection has been made
+          // provably ordered (SortedMap/SortedSet throughout) and covered by a test that hashes
+          // the same state built two different ways and asserts the proofs match.
+
           val digest = MessageDigest.getInstance("SHA-256")
           val hashBytes = digest.digest(canonicalData.getBytes(StandardCharsets.UTF_8))
 

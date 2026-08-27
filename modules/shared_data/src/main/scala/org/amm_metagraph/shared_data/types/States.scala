@@ -357,7 +357,14 @@ object States {
     votingPowers: SortedMap[Address, VotingPower] = SortedMap.empty[Address, VotingPower],
     allocations: Allocations = Allocations.empty,
     lastSyncGlobalSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue,
-    rewards: RewardsState = RewardsState()
+    rewards: RewardsState = RewardsState(),
+    // The currency ordinal this state was produced for. Option with a None default so every
+    // state serialised before this field existed still decodes, and so nothing below the
+    // activation ordinal can observe it. Populated from the activation ordinal onwards, which
+    // gives consensus-visible code an ordinal it previously had to take from node-local state.
+    // Not part of the calculated-state proof unless the widened hash is active - see
+    // CalculatedStateService.hash.
+    lastProcessedCurrencyOrdinal: Option[SnapshotOrdinal] = None
   ) extends DataCalculatedState
 
   implicit val epochProgressKeyEncode: KeyEncoder[EpochProgress] = nonNegLongKeyEncoder.contramap(_.value)

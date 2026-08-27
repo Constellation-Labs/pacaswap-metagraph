@@ -1,0 +1,84 @@
+name: collateral-monitor
+
+# Does the AMM's book still match its wallet?
+#
+# The metagraph checks the same invariant internally every snapshot, but it only writes to the
+# node log, and a log nobody reads is not an alert. This runs outside the node so a mismatch
+# reaches people. Read-only: it queries two public APIs and writes nothing.
+#
+# The accepted shortfall per ledger lives in scripts/collateral-baseline.json, so the alert fires
+# on the gap GROWING rather than on the gap existing. Once the treasury top-up lands and every
+# ledger reads 1:1, set every baseline to 0 and this becomes a strict check.
+#
+# TO TEST THE ALERT WITHOUT WAITING FOR A REAL BREACH: run this manually with
+# simulate_breach = true. It reads nothing, posts a clearly-labelled drill, and exercises the
+# whole path. An alert nobody has seen fire is an alert nobody can trust.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      simulate_breach:
+        description: "Drill: post a test alert to prove the path works. Reads nothing."
+        type: boolean
+        default: false
+
+concurrency:
+  group: collateral-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read          # to read the previous run's conclusion
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # A breach does not fix itself, so at */15 the same alert would post 96 times a day and the
+      # channel would be muted within one. The script alerts on the TRANSITION, which means it
+      # needs to know how the previous run ended. Read it rather than storing state anywhere.
+      - name: What did the previous run conclude?
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev=$(gh run list --workflow=collateral-monitor.yml --status=completed --limit 1 \
+                   --json conclusion --jq '.[0].conclusion // "unknown"' 2>/dev/null || echo unknown)
+          case "$prev" in
+            success|failure) ;;
+            *) prev=unknown ;;
+          esac
+          echo "state=$prev" >> "$GITHUB_OUTPUT"
+          echo "previous run: $prev"
+
+      - name: Compare pool reserves against the wallet
+        env:
+          METAGRAPH_L0_URL: ${{ secrets.METAGRAPH_L0_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "${{ inputs.simulate_breach }}" = "true" ]; then
+            exec python3 scripts/monitor_collateral.py --simulate-breach
+          fi
+          if [ -z "$METAGRAPH_L0_URL" ]; then
+            echo "::error::METAGRAPH_L0_URL is not set. Add it as a repository secret pointing at"
+            echo "::error::a reachable ML0 public host, otherwise this monitor cannot read the book."
+            exit 1
+          fi
+          # A reserve is credited when the SpendAction is generated and the wallet only moves on
+          # settlement, so a single sample can show a false shortfall mid-swap. Re-sample before
+          # reporting, so only a breach that persists is alerted on.
+          exec python3 scripts/monitor_collateral.py \
+            --confirm-after 45 \
+            --previous-state "${{ steps.prev.outputs.state }}" \
+            --run-number "${{ github.run_number }}"

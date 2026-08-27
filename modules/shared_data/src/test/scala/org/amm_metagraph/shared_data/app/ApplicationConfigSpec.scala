@@ -6,8 +6,8 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import weaver.SimpleIOSuite
 
-/** Smoke test: the production application.conf must parse, and the activation epochs must be set to the coordinated
-  * rollout value (a malformed HOCON or an accidental change would otherwise only surface at node boot).
+/** Smoke test: the production application.conf must parse, and the activation epochs must be set to the coordinated rollout value (a
+  * malformed HOCON or an accidental change would otherwise only surface at node boot).
   */
 object ApplicationConfigSpec extends SimpleIOSuite {
 

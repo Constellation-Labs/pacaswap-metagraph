@@ -7,6 +7,7 @@ import cats.syntax.all._
 import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact._
@@ -17,10 +18,11 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -194,9 +196,12 @@ object StakingCombinerService {
           poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
             buildLiquidityPoolUniqueIdentifier(stakingUpdate.tokenAId, stakingUpdate.tokenBId)
           )
+          currentOrdinal <- EitherT.liftF[F, FailedCalculatedState, SnapshotOrdinal](
+            context.getLastCurrencySnapshot.map(_.fold(SnapshotOrdinal.MinValue)(_.ordinal.next))
+          )
           stakingTokenInfo <- EitherT(
             pricingService
-              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress)
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal)
           )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -454,9 +459,33 @@ object StakingCombinerService {
                   HasherSelector[F].withCurrent(implicit hs => StakingReference.of(signedStakingUpdate))
                 )
                 sourceAddress = signedStakingUpdate.source
-                stakingTokenInfo <- EitherT(
-                  pricingService.getStakingTokenInfo(signedStakingUpdate, pendingSpendAction.updateHash, poolId, globalEpochProgress)
-                )
+                // Use the token info captured when the SpendAction was generated, never a fresh
+                // computation. getStakingTokenInfo derives the pair amount from the CURRENT
+                // reserves, so recomputing here credits the pool an amount the ledger never
+                // moved whenever the pool changed between request and confirmation. The swap
+                // path already reads the persisted info; staking was the only one recomputing.
+                stakingTokenInfo <-
+                  if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal))
+                    EitherT.fromOption[F](
+                      pendingSpendAction.pricingTokenInfo.collect { case info: StakingTokenInfo => info },
+                      FailedCalculatedState(
+                        MissingStakingTokenInfo(),
+                        getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                        pendingSpendAction.updateHash,
+                        pendingSpendAction.update
+                      ): FailedCalculatedState
+                    )
+                  else
+                    // Pre-activation: reproduce the original recompute so history replays byte for byte.
+                    EitherT(
+                      pricingService.getStakingTokenInfo(
+                        signedStakingUpdate,
+                        pendingSpendAction.updateHash,
+                        poolId,
+                        globalEpochProgress,
+                        currentSnapshotOrdinal
+                      )
+                    )
 
                 liquidityPoolUpdated <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueStaking(

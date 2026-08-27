@@ -2,12 +2,14 @@ package org.amm_metagraph.shared_data.pricing
 
 import cats.effect.IO
 
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.CurrencyId
 import io.constellationnetwork.security.hash.Hash
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.refined._
@@ -22,8 +24,10 @@ import weaver.SimpleIOSuite
 /** Regression tests for D2-01 (a dust stake that mints 0 LP shares donates the staker's tokens to incumbent LPs) and D2-02 (the unsafe
   * PosLong conversion throws and the top-level combine catch drops the whole ordinal's batch).
   *
-  * The deterministic BigInt math + dust rejection is gated by `stakingShareMintFix` so a rolling upgrade does not fork: below the
-  * activation epoch the legacy behavior is preserved byte-for-byte.
+  * The deterministic BigInt math + dust rejection is gated on the currency ordinal, not on `stakingShareMintFix`. That config epoch is
+  * compared against the GLOBAL epoch, which mainnet passed long ago, so it would be active for every already-signed snapshot and replaying
+  * them would compute different share issuance. `ProtocolActivation.reserveAccountingFixes` (731647, the first ordinal after the stall) is
+  * the only gate that reproduces what was actually signed.
   */
 object StakingShareMintSpec extends SimpleIOSuite {
 
@@ -38,9 +42,9 @@ object StakingShareMintSpec extends SimpleIOSuite {
   private val (_, lpState) = buildLiquidityPoolCalculatedState(tokenA, tokenB, owner)
   private val pool: LiquidityPool = lpState.confirmed.value.head._2
 
-  private val activationEpoch = EpochProgress(NonNegLong.unsafeFrom(1L))
-  private val activeConfig: ApplicationConfig =
-    config.copy(activationEpochs = ApplicationConfig.ActivationEpochs(stakingShareMintFix = activationEpoch))
+  private val anyEpoch = EpochProgress(NonNegLong.unsafeFrom(1L))
+  private val activeOrdinal = ProtocolActivation.reserveAccountingFixes
+  private val beforeOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(ProtocolActivation.reserveAccountingFixes.value.value - 1L))
 
   private def stakingUpdate(amount: PosLong): StakingUpdate =
     StakingUpdate(
@@ -64,8 +68,8 @@ object StakingShareMintSpec extends SimpleIOSuite {
   private val normal: PosLong = PosLong.unsafeFrom(toFixedPoint(100.0))
 
   test("D2-01/D2-02 (active): a dust deposit is REJECTED as StakingAmountTooSmall, not absorbed with 0 shares") {
-    ops(activeConfig).map { o =>
-      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(dust)), Hash.empty, pool, activationEpoch)
+    ops(config).map { o =>
+      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(dust)), Hash.empty, pool, anyEpoch, activeOrdinal)
       matches(result) {
         case Left(FailedCalculatedState(_: StakingAmountTooSmall, _, _, _)) => success
       }
@@ -73,8 +77,8 @@ object StakingShareMintSpec extends SimpleIOSuite {
   }
 
   test("active: a normal deposit mints >= 1 share and succeeds") {
-    ops(activeConfig).map { o =>
-      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(normal)), Hash.empty, pool, activationEpoch)
+    ops(config).map { o =>
+      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(normal)), Hash.empty, pool, anyEpoch, activeOrdinal)
       matches(result) {
         case Right(info: StakingTokenInfo) => expect(info.newlyIssuedShares >= 1L)
       }
@@ -82,9 +86,9 @@ object StakingShareMintSpec extends SimpleIOSuite {
   }
 
   test("legacy (pre-activation): the SAME dust deposit is silently absorbed with 0 shares (the bug the fix removes)") {
-    // Default config => stakingShareMintFix = MaxValue, so any real epoch is below activation.
+    // One ordinal below the activation: the pre-731647 behaviour every signed snapshot was produced under.
     ops(config).map { o =>
-      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(dust)), Hash.empty, pool, EpochProgress.MinValue)
+      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(dust)), Hash.empty, pool, anyEpoch, beforeOrdinal)
       matches(result) {
         case Right(info: StakingTokenInfo) => expect(info.newlyIssuedShares == 0L)
       }

@@ -327,7 +327,8 @@ object PricingTest extends SimpleIOSuite {
         stakingUpdate,
         Hash.empty,
         poolId,
-        EpochProgress.MaxValue
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue
       )
 
     } yield

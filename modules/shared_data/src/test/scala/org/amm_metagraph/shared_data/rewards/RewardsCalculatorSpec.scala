@@ -5,7 +5,7 @@ import cats.data.EitherT
 import cats.effect.IO
 import cats.syntax.all._
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.concurrent.duration.DurationInt
 
 import io.constellationnetwork.schema.AmountOps.AmountOps
@@ -155,7 +155,7 @@ object RewardsCalculatorSpec extends SimpleIOSuite {
   def createLp(id: String, addressShares: Map[Address, Long], tokenA: Option[String], tokenB: Option[String]): (String, LiquidityPool) = {
     val poolShares = PoolShares(
       totalShares = PosLong.unsafeFrom(addressShares.values.sum),
-      addressShares = addressShares.view.mapValues(v => ShareAmount(Amount(NonNegLong.unsafeFrom(v)))).toMap
+      addressShares = SortedMap.from(addressShares.view.mapValues(v => ShareAmount(Amount(NonNegLong.unsafeFrom(v)))))
     )
 
     val tokenACurrency = toCurrency(tokenA)

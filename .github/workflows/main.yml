@@ -7,8 +7,10 @@ jobs:
   call-workflow-setup-environment:
     uses: ./.github/workflows/setup-environment.yml
     with:
-      # Hardcoding mainnet commit hash
-      tessellation_commit_hash: "fa8fc292e140aecbd52f572402b47a7f4ff8d62f"
+      # The released incident build, tessellation v3.5.29. CI must compile and test against the
+      # exact artifact the deployment will run: a green build against a candidate commit does not
+      # prove the release build works, and this is a one-shot remediation.
+      tessellation_commit_hash: "5e3098078bc664aff025cd488d57286edba64678"
       use_merge_commit: true
     secrets: inherit
 

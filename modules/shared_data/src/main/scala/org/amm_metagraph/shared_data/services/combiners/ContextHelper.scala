@@ -11,6 +11,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.globalSnapshots._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
@@ -39,9 +40,10 @@ object ContextHelper {
       state: DataState[AmmOnChainState, AmmCalculatedState]
     )(implicit context: L0NodeContext[F]): F[ProcessingContext] =
       for {
-        (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal) <- OptionT(
-          context.getLastSynchronizedGlobalSnapshot
-        ).map(snapshot => (snapshot.epochProgress, snapshot.ordinal)).getOrElseF {
+        lastSyncGlobalSnapshotOpt <- context.getLastSynchronizedGlobalSnapshot
+        (lastSyncGlobalEpochProgress, lastSyncGlobalOrdinal, fallbackSnapshot) <- OptionT(
+          lastSyncGlobalSnapshotOpt.pure[F]
+        ).map(snapshot => (snapshot.epochProgress, snapshot.ordinal, snapshot.some)).getOrElseF {
           val message = "Could not get last synchronized global snapshot data"
           logger.error(message) >> Async[F].raiseError(new Exception(message))
         }
@@ -58,12 +60,31 @@ object ContextHelper {
         _ <- logger.info(s"lastSyncGlobalEpochProgress=$lastSyncGlobalEpochProgress")
         _ <- logger.info(s"lastSyncGlobalOrdinal=$lastSyncGlobalOrdinal")
 
-        globalSnapshotsSyncSpendActions <- getSpendActionsFromGlobalSnapshots(
+        spendActionsRead <- getSpendActionsFromGlobalSnapshots(
           state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
           globalSnapshotsStorage,
+          // Gated: below the activation ordinal the cold-cache read stays empty, so all
+          // existing history replays exactly as it was recorded.
+          fallbackSnapshot =
+            if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal)) fallbackSnapshot
+            else None,
+          // Independent of the above and currently disabled in application.conf: this halts the combine
+          // instead of finalizing a divergent state. It stays wired so the coordinated re-activation only
+          // needs a config change once GlobalSnapshotsStorage backfills on startup.
           failOnMissing = currentSnapshotEpochProgress >= globalSyncDataIntegrityActivation
         )
+
+        _ <-
+          if (!spendActionsRead.complete)
+            logger.warn(
+              s"Spend-action evidence INCOMPLETE for range " +
+                s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
+                "No pending operation will be expired this snapshot."
+            )
+          else Async[F].unit
+
+        lastSyncGlobalSnapshotInfo <- context.getLastSynchronizedGlobalSnapshotCombined.map(_.map(_._2))
 
         currencyId <- context.getCurrencyId
 
@@ -74,10 +95,15 @@ object ContextHelper {
           currentSnapshotEpochProgress = currentSnapshotEpochProgress,
           currentSnapshotOrdinal = currentSnapshotOrdinal,
           globalSnapshotSyncAllowSpends = globalSnapshotSyncAllowSpends,
-          globalSnapshotsSyncSpendActions = globalSnapshotsSyncSpendActions,
+          globalSnapshotsSyncSpendActions = spendActionsRead.actions,
+          spendActionsEvidenceComplete =
+            // Pre-activation the flag is forced true so the old (unsafe) expiry behaviour is
+            // reproduced exactly and history replays byte for byte.
+            !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,
-          lastCurrencySnapshotInfo = lastCurrencySnapshotInfo
+          lastCurrencySnapshotInfo = lastCurrencySnapshotInfo,
+          lastSyncGlobalSnapshotInfo = lastSyncGlobalSnapshotInfo
         )
   }
 }

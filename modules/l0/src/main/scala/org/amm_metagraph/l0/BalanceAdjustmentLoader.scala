@@ -1,5 +1,7 @@
 package org.amm_metagraph.l0
 
+import cats.syntax.all._
+
 import scala.collection.immutable.SortedSet
 import scala.io.Source
 import scala.util.Try
@@ -35,16 +37,23 @@ object BalanceAdjustmentLoader {
         case "SpendTransactionNotApplied"            => Right(SpendTransactionNotApplied)
         case "SpendTransactionSourceNotApplied"      => Right(SpendTransactionSourceNotApplied)
         case "SpendTransactionDestinationNotApplied" => Right(SpendTransactionDestinationNotApplied)
+        case "TokenUnlockBugDeduction"               => Right(TokenUnlockBugDeduction)
+        case "FeeTransactionBugDeduction"            => Right(FeeTransactionBugDeduction)
         case other                                   => Left(s"Unknown BalanceAdjustmentReason: $other")
       }
 
-      reasonResult.map { reason =>
+      val deductResult = raw.deduct match {
+        case Some(Long.MinValue) => Left("deduct cannot be Long.MinValue")
+        case value               => Right(value.map(Math.abs))
+      }
+
+      (reasonResult, deductResult).mapN { (reason, deduct) =>
         BalanceAdjustment(
           address = raw.address,
           reason = reason,
           reference = SortedSet(raw.reference: _*),
           increase = raw.increase.map(increase => Amount(NonNegLong.unsafeFrom(increase))),
-          deduct = raw.deduct.map(deduct => Amount(NonNegLong.unsafeFrom(Math.abs(deduct))))
+          deduct = deduct.map(value => Amount(NonNegLong.unsafeFrom(value)))
         )
       }
     }

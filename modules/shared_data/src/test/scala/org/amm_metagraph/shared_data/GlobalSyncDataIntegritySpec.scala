@@ -35,13 +35,13 @@ object GlobalSyncDataIntegritySpec extends SimpleIOSuite {
   test("active + only the lower-bound ordinal is missing -> tolerated (no raise), returns empty") {
     // range [5..5]: the single ordinal equals the lower bound, already processed -> not critical
     getSpendActionsFromGlobalSnapshots[IO](ord(5), ord(5), emptyStorage, failOnMissing = true).map { actions =>
-      expect(actions.isEmpty)
+      expect(actions.actions.isEmpty)
     }
   }
 
   test("inactive (legacy) + missing ordinals -> silently returns empty, never raises") {
     getSpendActionsFromGlobalSnapshots[IO](ord(5), ord(7), emptyStorage, failOnMissing = false).map { actions =>
-      expect(actions.isEmpty)
+      expect(actions.actions.isEmpty)
     }
   }
 }

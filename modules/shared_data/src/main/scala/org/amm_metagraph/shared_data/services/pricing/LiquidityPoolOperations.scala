@@ -15,6 +15,7 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.refined._
@@ -405,7 +406,8 @@ class LiquidityPoolOperations[F[_]: Async](
     signedUpdate: Signed[StakingUpdate],
     updateHash: Hash,
     liquidityPool: LiquidityPool,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): Either[FailedCalculatedState, StakingTokenInfo] = {
     val stakingUpdate = signedUpdate.value
     val expireEpochProgress = getFailureExpireEpochProgress(config, lastSyncGlobalEpochProgress)
@@ -421,7 +423,12 @@ class LiquidityPoolOperations[F[_]: Async](
 
     val incomingPrimaryAmount = stakingUpdate.tokenAAmount.value
 
-    if (lastSyncGlobalEpochProgress >= config.activationEpochs.stakingShareMintFix) {
+    // Two gates existed for this fix. main gated on `config.activationEpochs.stakingShareMintFix`
+    // (486666, global-epoch space) but mainnet global epoch is already past 2.8M, so that gate is on
+    // for all of history and replaying PacaSwap's signed snapshots (<= 731646) under it would compute
+    // different share issuance and diverge. The currency-ordinal gate is the only one that reproduces
+    // what was actually signed, so the fix is driven from it while keeping main's stronger arithmetic.
+    if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal)) {
       // D2-01/D2-02 (active): pure-integer math, floored deterministically (no Double, no IEEE rounding).
       // pairAmount = floor(incomingPrimary * currentPair / currentPrimary)
       // newShares  = floor(incomingPrimary * totalShares / currentPrimary)

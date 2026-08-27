@@ -73,6 +73,8 @@ object DummyL0Context {
       none,
       none,
       none,
+      none,
+      // retiredAllowSpendRefs, added in tessellation v3.5.29
       none
     )
 

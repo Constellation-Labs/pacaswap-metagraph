@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Moves The Upsider AI surplus out of the metagraph's custody address at ordinal 731649.",
+    "",
+    "The wallet holds 145,335,256.25433419 UP while the pool book claims 73,629,031.67321414.",
+    "The difference, 71,706,224.58112005, is claimed by no pool. Sweeping it leaves the book",
+    "untouched, so the pool reaches reserve == wallet with no price movement.",
+    "",
+    "The custody address has no private key, so this cannot be done as an ordinary transfer.",
+    "This is the only mechanism available.",
+    "",
+    "IRREVERSIBLE. The destination cannot be recovered if it is wrong, for the same reason the",
+    "source cannot. Set it deliberately and check it twice. The node refuses to build the",
+    "snapshot while the placeholder is present."
+  ],
+  "currencyId": "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1",
+  "amount": 7170622458112005,
+  "source": "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W",
+  "destination": "DAG471pakWWz3ZAFvX5uhA7uyufSkv7E41Lh77Ge",
+  "reason": "UpsiderSurplusSweep"
+}

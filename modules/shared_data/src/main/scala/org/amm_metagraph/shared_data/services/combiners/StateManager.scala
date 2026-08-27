@@ -11,6 +11,7 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -55,8 +56,18 @@ object StateManager {
         we must clear the previous `onChain` and `sharedArtifacts` state to avoid duplication.
         If the ordinal remains the same, we preserve the state.
          */
+        // The node-local ref cannot be trusted: it is not persisted, so a restarted node and a
+        // node that already combined this ordinal disagree about whether to clear, which diverges
+        // onChain (the reward-minting instructions) and can replay the previous snapshot's reward
+        // chunks. From the activation ordinal we take the ordinal out of the state itself, which
+        // every node sees identically. Below it the old ref is used, so history replays unchanged.
+        lastOrdinalForClearing =
+          oldState.calculated.lastProcessedCurrencyOrdinal
+            .filter(_ => ProtocolActivation.reserveAccountingFixesActive(context.currentSnapshotOrdinal))
+            .getOrElse(lastSnapshotOrdinalStored)
+
         newState =
-          if (lastSnapshotOrdinalStored < context.currentSnapshotOrdinal) {
+          if (lastOrdinalForClearing < context.currentSnapshotOrdinal) {
             oldState
               .focus(_.onChain)
               .replace(AmmOnChainState.empty)
@@ -114,7 +125,15 @@ object StateManager {
 
         _ <- currentSnapshotOrdinalR.set(context.currentSnapshotOrdinal)
 
-      } yield stateUpdatedRewardDistribution
+        // Record it in the state too, so the next combine does not have to trust the ref.
+        finalState =
+          if (ProtocolActivation.reserveAccountingFixesActive(context.currentSnapshotOrdinal))
+            stateUpdatedRewardDistribution
+              .focus(_.calculated.lastProcessedCurrencyOrdinal)
+              .replace(context.currentSnapshotOrdinal.some)
+          else stateUpdatedRewardDistribution
+
+      } yield finalState
     }
 
     private def cleanupExpiredOperations(
