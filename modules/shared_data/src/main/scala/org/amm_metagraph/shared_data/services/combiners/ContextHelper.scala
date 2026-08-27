@@ -28,7 +28,8 @@ trait ContextHelper[F[_]] {
 
 object ContextHelper {
   def make[F[_]: Async](
-    globalSnapshotsStorage: GlobalSnapshotsStorage[F]
+    globalSnapshotsStorage: GlobalSnapshotsStorage[F],
+    globalSyncDataIntegrityActivation: EpochProgress = EpochProgress.MaxValue
   ): ContextHelper[F] = new ContextHelper[F] {
 
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -65,8 +66,13 @@ object ContextHelper {
           globalSnapshotsStorage,
           // Gated: below the activation ordinal the cold-cache read stays empty, so all
           // existing history replays exactly as it was recorded.
-          if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal)) fallbackSnapshot
-          else None
+          fallbackSnapshot =
+            if (ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal)) fallbackSnapshot
+            else None,
+          // Independent of the above and currently disabled in application.conf: this halts the combine
+          // instead of finalizing a divergent state. It stays wired so the coordinated re-activation only
+          // needs a config change once GlobalSnapshotsStorage backfills on startup.
+          failOnMissing = currentSnapshotEpochProgress >= globalSyncDataIntegrityActivation
         )
 
         _ <-

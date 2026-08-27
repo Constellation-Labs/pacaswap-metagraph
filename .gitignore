@@ -10,3 +10,5 @@ target/
 project/project/
 node_modules/
 data/
+pools-balances-updates.log
+incident-audit-*/

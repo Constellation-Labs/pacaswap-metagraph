@@ -4,6 +4,7 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.epoch.EpochProgress
 
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.services.combiners.operations._
@@ -18,11 +19,12 @@ object L0CombinerServiceFactory {
     swapCombinerService: SwapCombinerService[F],
     withdrawalCombinerService: WithdrawalCombinerService[F],
     rewardsCombinerService: RewardsDistributionService[F],
-    rewardsWithdrawService: RewardsWithdrawService[F]
+    rewardsWithdrawService: RewardsWithdrawService[F],
+    globalSyncDataIntegrityActivation: EpochProgress = EpochProgress.MaxValue
   ): F[L0CombinerService[F]] = for {
     currentSnapshotOrdinalR <- SignallingRef.of[F, SnapshotOrdinal](SnapshotOrdinal.MinValue)
 
-    contextHelper = ContextHelper.make(globalSnapshotsStorage)
+    contextHelper = ContextHelper.make(globalSnapshotsStorage, globalSyncDataIntegrityActivation)
 
     stateManager = StateManager.make(
       liquidityPoolCombinerService,

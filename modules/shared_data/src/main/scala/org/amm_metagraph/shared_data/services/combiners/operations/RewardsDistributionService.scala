@@ -41,7 +41,8 @@ object RewardsDistributionService {
   def make[F[_]: Async: SecurityProvider](
     rewardCalculator: RewardCalculator[F],
     rewardsConfig: ApplicationConfig.Rewards,
-    epochInfoConfig: ApplicationConfig.EpochMetadata
+    epochInfoConfig: ApplicationConfig.EpochMetadata,
+    rewardEpochCatchUpActivation: EpochProgress = EpochProgress.MaxValue
   ): RewardsDistributionService[F] =
     new RewardsDistributionService[F] {
       val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -100,8 +101,16 @@ object RewardsDistributionService {
         val currentEpochNumber = currentEpoch.value.value
         val newEpoch = currentEpochNumber > state.calculated.rewards.lastProcessedEpoch.value.value
         val rewardDistributionEpoch = (currentEpochNumber + 1) % interval.value == 0
+        // D2-06: count scheduled distribution boundaries crossed in (lastProcessedEpoch, currentEpoch] (a boundary is
+        // an epoch B with (B+1) % interval == 0). Normally 0 or 1; >1 only on a real epoch jump (missed time triggers
+        // / catch-up), which the legacy single-boundary check would silently skip -> reward under-emission.
+        val lastProcessedEpochNumber = state.calculated.rewards.lastProcessedEpoch.value.value
+        val boundariesCrossed =
+          ((currentEpochNumber + 1) / interval.value) - ((lastProcessedEpochNumber + 1) / interval.value)
+        val catchUpActive = currentEpoch >= rewardEpochCatchUpActivation
+        val shouldDistribute = if (catchUpActive) boundariesCrossed > 0 else rewardDistributionEpoch
 
-        (newEpoch, rewardDistributionEpoch) match {
+        (newEpoch, shouldDistribute) match {
           case (false, _) =>
             logger.info(show"Skip reward distribution for epoch $currentEpochNumber. Epoch had been processed already") >>
               state.pure[F]
@@ -112,7 +121,9 @@ object RewardsDistributionService {
             // We don't calculate rewards every epoch,
             // instead we skip "interval" epochs but increase rewards distribution to "interval".
             // Therefore, we get more or less the same value for rewards as we calculate them every epoch
-            val rewardsMultiplier = interval.value
+            // When catch-up is active, distribute `interval` worth for EVERY boundary crossed (boundariesCrossed),
+            // so an epoch jump does not drop scheduled emissions; otherwise the legacy single-interval multiplier.
+            val rewardsMultiplier = if (catchUpActive) interval.value * boundariesCrossed else interval.value.toLong
             for {
               _ <- logger.info(show"Start reward distribution. Current epoch $currentEpochNumber, interval ${interval.value}")
               res <- doUpdateRewardsBuffer(approvedValidators, lastArtifact, state, rewardsMultiplier, currentEpoch)
