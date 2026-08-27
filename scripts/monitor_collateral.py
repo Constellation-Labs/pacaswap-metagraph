@@ -71,10 +71,13 @@ COLOUR_DRILL = "#E67E22"    # amber, a test - must never be mistaken for an inci
 COLOUR_OK = "#1F6B5B"       # green, a breach that has cleared
 COLOUR_BLIND = "#8E44AD"    # purple, the check could not run - a different problem from a breach
 
-# A breach does not fix itself, so a 15-minute cron would post the same alert 96 times a day and
+# A breach does not fix itself, so an hourly cron would post the same alert 24 times a day and
 # the channel would be muted within one. Alert on the TRANSITION instead: once when it starts,
 # once when it clears, and a quiet reminder every REMIND_EVERY runs while it persists.
-REMIND_EVERY = 16   # at */15 that is roughly four hours
+#
+# Tied to the cron interval: this is a number of RUNS, not of hours, so it has to move whenever
+# the schedule does or the reminder silently drifts. It was 16 at */15.
+REMIND_EVERY = 4    # at hourly that is roughly four hours, as before
 
 
 def slack_payload(breaches, reserves, wallet, shortfall, accepted, run_url=None, drill=False):
