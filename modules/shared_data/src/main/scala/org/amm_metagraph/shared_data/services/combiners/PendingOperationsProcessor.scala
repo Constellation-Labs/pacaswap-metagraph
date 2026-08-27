@@ -8,6 +8,7 @@ import scala.collection.immutable.SortedSet
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -224,8 +225,23 @@ object PendingOperationsProcessor {
         _ <- logger.info(s"Starting to combine ${pendingSpendActions.size} pending spend actions")
         _ <- logger.debug(s"Global snapshot sync spend actions available: ${context.globalSnapshotsSyncSpendActions.nonEmpty}")
 
+        // The completeness guard has to come FIRST. It used to sit behind `nonEmpty`, so a node that
+        // resolved even one ordinal containing any spend action treated a PARTIAL list as proof and
+        // processed every pending operation against it - including operations whose evidence lived
+        // in the ordinals it could not read. That is how a settled SpendAction gets expired and
+        // rolled back, which is precisely what stranded the DOR/DAG deposit in PROT-1695. Finding
+        // some actions says nothing about the ones you could not look for.
+        //
+        // Gated on its own later ordinal because 731647 is long past; see ProtocolActivation.
+        // Deferring cannot deadlock: lastSyncGlobalSnapshotOrdinal advances every combine whatever
+        // this decides, so the unreadable range falls behind the cursor and the next combine reads
+        // a short, freshly-cached range instead.
+        evidenceFirst = ProtocolActivation.evidenceCompletenessFirstActive(context.currentSnapshotOrdinal)
         pendingSpendActionsToCombine =
-          if (context.globalSnapshotsSyncSpendActions.nonEmpty) {
+          if (evidenceFirst && !context.spendActionsEvidenceComplete) {
+            // Nothing can be concluded from an incomplete read, whether or not it returned actions.
+            SortedSet.empty[PendingSpendAction[AmmUpdate]]
+          } else if (context.globalSnapshotsSyncSpendActions.nonEmpty) {
             logger.debug("Using all pending spend actions (global snapshots available)")
             pendingSpendActions
           } else if (!context.spendActionsEvidenceComplete) {
