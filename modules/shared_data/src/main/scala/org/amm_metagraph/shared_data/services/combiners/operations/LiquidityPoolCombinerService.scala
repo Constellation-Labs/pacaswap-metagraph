@@ -24,7 +24,7 @@ import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
-import org.amm_metagraph.shared_data.globalSnapshots.{getAllowSpendsGlobalSnapshotsState, logger}
+import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -457,7 +457,7 @@ object LiquidityPoolCombinerService {
                   BigInt(amountA) * BigInt(amountB),
                   PoolShares(
                     poolTotalShares,
-                    Map(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
+                    SortedMap(sourceAddress -> ShareAmount(Amount(poolTotalShares)))
                   ),
                   fees
                 )

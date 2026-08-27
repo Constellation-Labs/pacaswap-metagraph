@@ -4,7 +4,9 @@ import cats.effect.Async
 import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
+import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
@@ -25,7 +27,8 @@ object L0CombinerService {
     updateProcessor: NewUpdatesProcessor[F],
     pendingOperationsProcessor: PendingOperationsProcessor[F],
     oneTimeFixesHandler: OneTimeFixesHandler[F],
-    contextHelper: ContextHelper[F]
+    contextHelper: ContextHelper[F],
+    collateralInvariant: CollateralInvariant[F]
   ): L0CombinerService[F] = new L0CombinerService[F] {
 
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F](this.getClass.getName)
@@ -34,10 +37,9 @@ object L0CombinerService {
       oldState: DataState[AmmOnChainState, AmmCalculatedState],
       incomingUpdates: List[Signed[AmmUpdate]]
     )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
-      val combined = for {
-        _ <- logger.info("Starting combine function")
-        currencySnapshotOpt <- context.getLastCurrencySnapshotCombined
-
+      def run(
+        currencySnapshotOpt: Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]
+      ): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
         result <- currencySnapshotOpt match {
           case Some((lastCurrencySnapshot, lastCurrencySnapshotInfo)) =>
             val currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
@@ -75,6 +77,10 @@ object L0CombinerService {
                       finalState,
                       processingContext
                     )
+                    // The book must always equal the wallet. Checked every snapshot, so a
+                    // divergence is visible in one snapshot rather than after months.
+                    // Observability only: it must never be able to fail the combine it observes.
+                    _ <- collateralInvariant.check(cleanedState, processingContext)
                   } yield cleanedState
               }
             } yield result
@@ -84,9 +90,33 @@ object L0CombinerService {
               oldState.pure[F]
         }
       } yield result
-      combined.handleErrorWith { e =>
-        logger.error(s"Error when combining: ${e.getMessage}").as(oldState)
-      }
+
+      for {
+        _ <- logger.info("Starting combine function")
+        currencySnapshotOpt <- context.getLastCurrencySnapshotCombined
+        nextOrdinal = currencySnapshotOpt.map { case (snapshot, _) => snapshot.ordinal.next }
+        atOneTimeFix = nextOrdinal.exists(oneTimeFixesHandler.isOneTimeFixOrdinal)
+        result <- run(currencySnapshotOpt).handleErrorWith { e =>
+          val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
+          if (atOneTimeFix)
+            // A one-time state rewrite is paired with balance artifacts emitted on a separate
+            // path, which fails closed. Swallowing here would ship the deductions WITHOUT the
+            // reserve restoration and the frozen-state purge, leaving a partial, unrecoverable
+            // snapshot. The two must land together or the snapshot must not be built at all.
+            logger.error(e)(
+              s"COMBINE_FAILED_AT_ONE_TIME_FIX ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
+                "build this snapshot. The paired balance artifacts must not ship without this state " +
+                "change. Fix the cause and restart; do NOT let the node proceed past this ordinal."
+            ) >> Async[F].raiseError[DataState[AmmOnChainState, AmmCalculatedState]](e)
+          else
+            logger
+              .error(e)(
+                s"COMBINE_FAILED: dropping ${incomingUpdates.size} update(s) $updateHashes and returning previous state. " +
+                  s"If this error is non-deterministic across nodes it WILL fork consensus — investigate immediately."
+              )
+              .as(oldState)
+        }
+      } yield result
     }
   }
 }

@@ -931,7 +931,7 @@ object StakingCombinerTest extends MutableIOSuite {
       pending = getPendingSpendActionStakingUpdates(stakeResponsePendingSpendActionResponse.calculated)
 
       stakeResponseConfirmedResponse <- stakingCombinerService.combinePendingSpendAction(
-        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head),
+        PendingSpendAction(stakingUpdate, pending.head.updateHash, spendActions.head, pending.head.pricingTokenInfo),
         stakeResponsePendingSpendActionResponse,
         EpochProgress.MinValue,
         spendActions,

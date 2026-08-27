@@ -228,6 +228,11 @@ object PendingOperationsProcessor {
           if (context.globalSnapshotsSyncSpendActions.nonEmpty) {
             logger.debug("Using all pending spend actions (global snapshots available)")
             pendingSpendActions
+          } else if (!context.spendActionsEvidenceComplete) {
+            // No evidence, so nothing can be concluded. Processing here would drive every pending
+            // operation down the "not accepted" branch and roll back a pool whose SpendAction may
+            // already have settled on the global ledger. Leave them pending until evidence arrives.
+            SortedSet.empty[PendingSpendAction[AmmUpdate]]
           } else {
             val filtered = pendingSpendActions.filter { pending =>
               val shouldProcess = pending.update.value match {

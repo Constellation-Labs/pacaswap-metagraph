@@ -137,7 +137,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       expectedMap = Map.empty[AddressAndRewardType, Amount]
       expectedRewards = RewardsState(
         withdraws = RewardWithdrawCalculatedState.empty,
-        availableRewards = RewardInfo(expectedMap),
+        availableRewards = RewardInfo(SortedMap.from(expectedMap)),
         lastProcessedEpoch = currentEpoch,
         rewardsBuffer = RewardsBuffer.empty
       )
@@ -214,7 +214,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       distributedRewards = SortedMap(currentMonthRef -> buildDistribution(expectedMap))
       expectedRewards = RewardsState(
         withdraws = RewardWithdrawCalculatedState.empty,
-        availableRewards = RewardInfo(expectedMap),
+        availableRewards = RewardInfo(SortedMap.from(expectedMap)),
         lastProcessedEpoch = currentEpoch,
         rewardsBuffer = RewardsBuffer.empty,
         distributedRewards = distributedRewards
@@ -304,7 +304,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       distributedRewards = SortedMap(currentMonthRef -> buildDistribution(expectedMap))
       expectedRewardsAtEnd = RewardsState(
         withdraws = RewardWithdrawCalculatedState.empty,
-        availableRewards = RewardInfo(expectedMap),
+        availableRewards = RewardInfo(SortedMap.from(expectedMap)),
         lastProcessedEpoch = currentEpoch,
         distributedRewards = distributedRewards
       )
@@ -313,11 +313,11 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
         newState1.onChain.rewardsUpdate.size == rewardTransactionsPerSnapshot,
         newState1.calculated.rewards.availableRewards.info.size == rewardTransactionsPerSnapshot,
         newState1.calculated.rewards.rewardsBuffer.data.size == totalRewardsSize - rewardTransactionsPerSnapshot,
-        allRewardsIteration1 == RewardInfo(expectedMap),
+        allRewardsIteration1 == RewardInfo(SortedMap.from(expectedMap)),
         newState2.onChain.rewardsUpdate.size == rewardTransactionsPerSnapshot,
         newState2.calculated.rewards.availableRewards.info.size == rewardTransactionsPerSnapshot * 2,
         newState2.calculated.rewards.rewardsBuffer.data.size == totalRewardsSize - rewardTransactionsPerSnapshot * 2,
-        allRewardsIteration2 == RewardInfo(expectedMap),
+        allRewardsIteration2 == RewardInfo(SortedMap.from(expectedMap)),
         newState3.onChain.rewardsUpdate.size == 1,
         newState3.calculated.rewards == expectedRewardsAtEnd
       )
@@ -649,7 +649,7 @@ object RewardsDistributionServiceTest extends MutableIOSuite {
       distributedRewards = SortedMap(currentMonthRef -> buildDistribution(expectedMap))
       expectedRewards = RewardsState(
         withdraws = RewardWithdrawCalculatedState.empty,
-        availableRewards = RewardInfo(expectedMap),
+        availableRewards = RewardInfo(SortedMap.from(expectedMap)),
         lastProcessedEpoch = currentEpoch2,
         distributedRewards = distributedRewards
       )

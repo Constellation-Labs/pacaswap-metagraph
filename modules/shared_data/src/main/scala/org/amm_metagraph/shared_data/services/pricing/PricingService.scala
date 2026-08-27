@@ -54,7 +54,8 @@ trait PricingService[F[_]] {
     signedUpdate: Signed[StakingUpdate],
     updateHash: Hash,
     poolId: PoolId,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, StakingTokenInfo]]
 
   def getUpdatedLiquidityPoolDueStaking(
@@ -278,7 +279,8 @@ object PricingService {
           signedUpdate: Signed[StakingUpdate],
           updateHash: Hash,
           poolId: PoolId,
-          lastSyncGlobalEpochProgress: EpochProgress
+          lastSyncGlobalEpochProgress: EpochProgress,
+          currencyOrdinal: SnapshotOrdinal
         ): F[Either[FailedCalculatedState, StakingTokenInfo]] = for {
           liquidityPools <- getConfirmedLiquidityPools
           expireEpochProgress = org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress(
@@ -296,7 +298,7 @@ object PricingService {
                 )
               )
             case Right(liquidityPool) =>
-              poolOps.calculateStakingInfo(signedUpdate, updateHash, liquidityPool, lastSyncGlobalEpochProgress)
+              poolOps.calculateStakingInfo(signedUpdate, updateHash, liquidityPool, lastSyncGlobalEpochProgress, currencyOrdinal)
           }
         } yield result
 

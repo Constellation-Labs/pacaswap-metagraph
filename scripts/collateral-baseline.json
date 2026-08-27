@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Shortfall we currently accept, per ledger, in datum. The monitor fails when a ledger is",
+    "short by MORE than this, so the signal is the gap growing rather than the gap existing.",
+    "",
+    "These are the measured figures at currency ordinal 731646, after the authorized attack",
+    "remediation. Once the treasury top-up lands and every ledger reads 1:1, set every value to 0",
+    "and this becomes a strict check. Never raise a value to silence an alert without recording",
+    "why here."
+  ],
+  "measured_at_currency_ordinal": 731646,
+  "accepted_shortfall": {
+    "DAG": 164112795926795,
+    "DAG0CyySf35ftDQDQBnd1bdQ9aPyUdacMghpnCuM": 184496403119376,
+    "DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh": 778376240426,
+    "DAG7Ghth1WhWK83SB3MtXnnHYZbCsmiRTwJrgaW1": 0,
+    "DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W": 0
+  }
+}

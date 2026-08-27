@@ -52,13 +52,15 @@ object L0CombinerServiceFactory {
     )
 
     oneTimeFixesHandler = OneTimeFixesHandler.make(currentSnapshotOrdinalR)
+    collateralInvariant = CollateralInvariant.make[F]
 
     service = L0CombinerService.make(
       stateManager,
       updateProcessor,
       pendingOperationsProcessor,
       oneTimeFixesHandler,
-      contextHelper
+      contextHelper,
+      collateralInvariant
     )
   } yield service
 }

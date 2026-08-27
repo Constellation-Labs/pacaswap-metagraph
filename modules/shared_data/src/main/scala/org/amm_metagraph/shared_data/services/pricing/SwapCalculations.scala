@@ -102,7 +102,8 @@ object SwapCalculations {
         "Desired output amount exceeds available liquidity"
       )
 
-      totalFeeDecimal = pool.poolFees.total
+      // .toDecimal divides by 100. Without it a 0.3% pool charged 30% on this path.
+      totalFeeDecimal = pool.poolFees.total.toDecimal
       outputBeforeFeeDecimal = desiredOutputBigInt.toBigDecimal / (BigDecimal(1) - totalFeeDecimal)
       outputBeforeFee = outputBeforeFeeDecimal.toBigInt
       totalFeeAmount = outputBeforeFee - desiredOutputBigInt
