@@ -38,9 +38,12 @@ object SurplusSweepLoader {
   /** The value shipped in the resource until an operator sets a real destination. */
   val DestinationPlaceholder = "SET_DESTINATION_BEFORE_DEPLOY"
 
+  /** `currencyId` absent (or null) means DAG. Every other value is a metagraph currency address. DAG has no currency id on the wire, so
+    * this cannot be a plain String: the refund of an overpaid DAG transfer needs `None` here, and a metagraph token needs `Some`.
+    */
   @derive(encoder, decoder)
   case class RawSurplusSweep(
-    currencyId: String,
+    currencyId: Option[String],
     amount: Long,
     source: String,
     destination: String,
@@ -77,13 +80,18 @@ object SurplusSweepLoader {
 
       val src = address("source", raw.source)
       val dst = address("destination", raw.destination)
-      val cur = address("currencyId", raw.currencyId)
+      // Absent means DAG. An empty or blank string is a mistake, not a way to say DAG: omit the field.
+      val cur = raw.currencyId.map { c =>
+        if (c.trim.isEmpty)
+          throw new RuntimeException(s"$resourcePath: currencyId is present but blank. Omit the field entirely to mean DAG.")
+        CurrencyId(address("currencyId", c))
+      }
 
       SpendAction(
         NonEmptyList.of(
           SpendTransaction(
             allowSpendRef = None,
-            currencyId = Some(CurrencyId(cur)),
+            currencyId = cur,
             amount = SwapAmount(PosLong.unsafeFrom(raw.amount)),
             source = src,
             destination = dst
