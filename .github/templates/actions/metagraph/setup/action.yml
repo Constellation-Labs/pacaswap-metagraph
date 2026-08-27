@@ -168,7 +168,7 @@ runs:
       shell: bash
       run: |
         JAR=.github/code/metagraphs/${{ inputs.METAGRAPH_NAME }}/metagraph-l0/metagraph-l0.jar
-        for resource in balance-adjustments-4.json updated-pools-13.json updated-pools-14.json up-surplus-sweep.json; do
+        for resource in balance-adjustments-4.json updated-pools-13.json updated-pools-14.json up-surplus-sweep.json dag-overpayment-refund.json; do
           if unzip -l "$JAR" | grep -q "$resource"; then
             echo "OK: $resource is packaged in $JAR"
           else

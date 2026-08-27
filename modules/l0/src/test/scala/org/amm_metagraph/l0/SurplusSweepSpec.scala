@@ -57,7 +57,7 @@ object SurplusSweepSpec extends SimpleIOSuite {
       expect.all(
         raw.amount == SURPLUS, // 71,706,224.58112005 UP, the measured surplus
         raw.source == AMM, // out of the custody address
-        raw.currencyId == UP, // on The Upsider AI's ledger
+        raw.currencyId.contains(UP), // on The Upsider AI's ledger, not DAG
         raw.destination == DESTINATION, // the address operations supplied
         raw.destination != AMM // never back into custody
       )
@@ -107,16 +107,25 @@ object SurplusSweepSpec extends SimpleIOSuite {
     IO(loadSweep("no-such-sweep.json")).map(r => expect(r.isFailure))
   }
 
-  test("the sweep is emitted at 731649, and at no neighbouring ordinal") {
-    // 731647 is the remediation, 731648 the normalization. The sweep is its own snapshot so a
-    // failure in one cannot take down the others.
+  test("the sweep is emitted at 731649 only, and carries the UP ledger rather than DAG") {
+    // 731647 is the remediation, 731648 the normalization, 731650 the DAG overpayment refund.
+    // Each is its own snapshot so a failure in one cannot take down the others. 731650 emits a
+    // SpendAction too, so it is not enough to count artifacts: check the ledger as well, or the
+    // two sweeps could be swapped without a test noticing.
     IO {
       val at = (o: Long) => scala.util.Try(Main.customArtifactsAt(o))
+      val sweep = at(731649L).toOption.flatten.toList.flatten.collect { case sa: SpendAction => sa }
+      val refund = at(731650L).toOption.flatten.toList.flatten.collect { case sa: SpendAction => sa }
       expect.all(
         at(731647L).isSuccess, // deductions, unaffected
         at(731648L).toOption.flatten.isEmpty, // normalization emits no artifacts
-        at(731649L).toOption.flatten.exists(_.size == 1), // the sweep, exactly one artifact
-        at(731650L).toOption.flatten.isEmpty
+        sweep.size == 1,
+        sweep.head.spendTransactions.head.currencyId.exists(_.value.value.value == UP),
+        // 731650 is the DAG refund: a SpendAction, but a different ledger and destination.
+        refund.size == 1,
+        refund.head.spendTransactions.head.currencyId.isEmpty,
+        refund.head.spendTransactions.head.destination.value.value != DESTINATION,
+        at(731651L).toOption.flatten.isEmpty
       )
     }
   }
