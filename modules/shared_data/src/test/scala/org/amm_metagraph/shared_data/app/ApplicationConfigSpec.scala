@@ -22,7 +22,12 @@ object ApplicationConfigSpec extends SimpleIOSuite {
       // startup; active at 486666 it deadlocked every node on restart/rollback. Re-coordinate a future epoch only
       // after the backfill ships. Keep this assertion in lockstep with application.conf.
       cfg.activationEpochs.globalSyncDataIntegrity == EpochProgress.MaxValue,
-      cfg.activationEpochs.rewardEpochCatchUp == rolloutEpoch
+      // D2-06 is DISABLED for the same shape of reason, found later: 486666 is compared against the METAGRAPH's own
+      // epochProgress and PacaSwap is already past 591000, so it was never a future activation. Deploying a build
+      // carrying it would switch reward distribution retroactively, and AmmOnChainState.rewardsUpdate is covered by
+      // the snapshot hash, so historical ordinals would stop replaying. Re-coordinate a genuinely future metagraph
+      // epoch before re-enabling. Keep this assertion in lockstep with application.conf.
+      cfg.activationEpochs.rewardEpochCatchUp == EpochProgress.MaxValue
     )
   }
 }
