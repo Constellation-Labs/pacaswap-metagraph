@@ -75,7 +75,12 @@ runs:
     - name: Stopping execution in monitoring
       shell: bash
       run: |
-        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn kill"
+        # `yarn kill` runs `pm2 delete`, which exits non-zero when the process is not running.
+        # That is the normal state whenever the metagraph is already down - exactly the case in an
+        # incident restart - and it aborted the deploy after the jars had been copied but before
+        # `Forcing metagraph restart`, leaving new jars on disk and nothing started.
+        # Tolerated inside the remote shell, so a genuine ssh failure still fails the step.
+        ssh -o StrictHostKeyChecking=no ${{ inputs.SSH_USER_MONITORING }}@${{ inputs.SSH_HOST_MONITORING }} "cd ${{ inputs.MONITORING_PROJECT_DIRECTORY }}; yarn kill || true"
 
     - name: Forcing metagraph restart
       shell: bash
