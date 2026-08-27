@@ -55,17 +55,28 @@ jobs:
       - name: Get the release version
         id: get_version
         run: |
-          {
-            if [[ "${{ github.ref_name }}" == "release/mainnet" ]]; then
-              echo 'VERSION<<EOF'
-              npx commit-and-tag-version --dry-run | grep -oP 'tagging release v\K[0-9]+\.[0-9]+\.[0-9]+'
-              echo EOF
-            elif [[ "${{ github.ref_name }}" == "release/integrationnet" ]]; then
-              echo 'VERSION<<EOF'
-              npx commit-and-tag-version --dry-run --prerelease rc | grep -oP 'tagging release v\K(.*)'
-              echo EOF
-            fi
-          } >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.ref_name }}" == "release/mainnet" ]]; then
+            VERSION=$(npx commit-and-tag-version --dry-run | grep -oP 'tagging release v\K[0-9]+\.[0-9]+\.[0-9]+')
+          elif [[ "${{ github.ref_name }}" == "release/integrationnet" ]]; then
+            VERSION=$(npx commit-and-tag-version --dry-run --prerelease rc | grep -oP 'tagging release v\K(.*)')
+          fi
+
+          # commit-and-tag-version derives the next version from the tags reachable on THIS branch.
+          # Tags cut on another release line are not reachable from here, so it can propose a
+          # version that already exists: it proposed 1.1.0 while v1.1.0 and v1.1.1 are both already
+          # published, and `git tag -a` then failed with exit 128 and took the whole release with
+          # it, deploy included. Forcing the tag is not the fix - it would silently repoint a
+          # published release at a different commit. Take the next free patch above every existing
+          # vX.Y.Z instead, and resolve it here so the tag, the assembly and the deploy all agree.
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            HIGHEST=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            NEXT=$(echo "${HIGHEST#v}" | awk -F. '{print $1"."$2"."$3+1}')
+            echo "::warning::v$VERSION already exists (highest existing tag $HIGHEST); releasing as v$NEXT"
+            VERSION="$NEXT"
+          fi
+
+          echo "Resolved release version: v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build Changelog
         id: get_changelog
