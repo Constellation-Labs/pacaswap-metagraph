@@ -16,7 +16,10 @@ name: collateral-monitor
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Hourly. */15 was optimistic: GitHub treats schedule as best-effort and drops runs under
+    # load, and on the day this was set up it delivered one run in the first two hours. An
+    # interval the platform actually honours is worth more than a nominal one it does not.
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       simulate_breach:
@@ -45,8 +48,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      # A breach does not fix itself, so at */15 the same alert would post 96 times a day and the
-      # channel would be muted within one. The script alerts on the TRANSITION, which means it
+      # A breach does not fix itself, so an hourly cron would post the same alert 24 times a day
+      # and the channel would be muted within one. The script alerts on the TRANSITION, which means it
       # needs to know how the previous run ended. Read it rather than storing state anywhere.
       - name: What did the previous run conclude?
         id: prev
