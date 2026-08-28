@@ -3,9 +3,11 @@ package org.amm_metagraph.shared_data
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.artifact.SpendAction
 
 import eu.timepit.refined.types.all.NonNegLong
-import org.amm_metagraph.shared_data.services.combiners.PendingOperationsProcessor
+import org.amm_metagraph.shared_data.globalSnapshots.summarizeSpendActionsRead
+import org.amm_metagraph.shared_data.services.combiners.{PendingOperationsProcessor, StateManager}
 import weaver.SimpleIOSuite
 
 /** PROT-1695: a settled SpendAction was expired and rolled back because a partial read of the global chain was treated as proof that it had
@@ -62,6 +64,43 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       // The blank-read guard predates this gate and must keep working below it.
       selected(739999L, evidenceComplete = false, readReturnedActions = false).isEmpty,
       selected(739999L, evidenceComplete = true, readReturnedActions = true) == pending
+    )
+  }
+
+  pureTest("an unresolved middle ordinal stops the evidence cursor before the gap") {
+    val resolved = (List.empty[SpendAction], true)
+    val missing = (List.empty[SpendAction], false)
+    val read = summarizeSpendActionsRead(
+      ord(10L),
+      List(ord(10L) -> resolved, ord(11L) -> resolved, ord(12L) -> missing, ord(13L) -> resolved)
+    )
+
+    expect.all(
+      !read.complete,
+      read.lastContiguousGlobalSnapshotOrdinal == ord(11L),
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(740000L),
+        read.complete,
+        ord(13L),
+        read.lastContiguousGlobalSnapshotOrdinal
+      ) == ord(11L)
+    )
+  }
+
+  pureTest("cursor hold is gated so historical snapshots retain the old advancement") {
+    expect.all(
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(739999L),
+        evidenceComplete = false,
+        ord(13L),
+        ord(11L)
+      ) == ord(13L),
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(740000L),
+        evidenceComplete = true,
+        ord(13L),
+        ord(11L)
+      ) == ord(13L)
     )
   }
 

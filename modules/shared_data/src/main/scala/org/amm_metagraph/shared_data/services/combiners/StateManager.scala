@@ -30,6 +30,18 @@ trait StateManager[F[_]] {
 }
 
 object StateManager {
+  private[shared_data] def selectNextGlobalSnapshotCursor(
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    evidenceComplete: Boolean,
+    lastSyncGlobalOrdinal: SnapshotOrdinal,
+    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal
+  ): SnapshotOrdinal =
+    if (
+      ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) &&
+      !evidenceComplete
+    ) lastContiguousGlobalSnapshotOrdinal
+    else lastSyncGlobalOrdinal
+
   def make[F[_]: Async](
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
     stakingCombinerService: StakingCombinerService[F],
@@ -111,9 +123,16 @@ object StateManager {
           context.currentSnapshotEpochProgress
         )
 
+        nextGlobalSnapshotCursor = StateManager.selectNextGlobalSnapshotCursor(
+          context.currentSnapshotOrdinal,
+          context.spendActionsEvidenceComplete,
+          context.lastSyncGlobalOrdinal,
+          context.lastContiguousGlobalSnapshotOrdinal
+        )
+
         stateUpdatedByLastGlobalSync = rewardsCleanedState
           .focus(_.calculated.lastSyncGlobalSnapshotOrdinal)
-          .replace(context.lastSyncGlobalOrdinal)
+          .replace(nextGlobalSnapshotCursor)
 
         _ <- logger.info(s"spendTxnProduced=${stateUpdatedByLastGlobalSync.sharedArtifacts}")
 
