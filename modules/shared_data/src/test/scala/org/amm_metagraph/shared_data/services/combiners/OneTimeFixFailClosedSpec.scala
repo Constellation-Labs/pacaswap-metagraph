@@ -19,6 +19,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
@@ -153,8 +154,13 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         real.isOneTimeFixOrdinal(ord(111700L)),
         real.isOneTimeFixOrdinal(ord(161148L)),
         real.isOneTimeFixOrdinal(ord(731648L)), // normalization, updated-pools-14
+        // The incident token-lock remediation is NOT a one-time fix: it is applied every ordinal by
+        // the persistent filter in StateManager.prepareStateForNewOrdinal, so it must not short-circuit
+        // the normal snapshot transition.
+        !real.isOneTimeFixOrdinal(ProtocolActivation.incidentTokenLockRemediation),
         !real.isOneTimeFixOrdinal(ord(731646L)), // the last ordinal before the stop
-        !real.isOneTimeFixOrdinal(ord(731649L)) // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(731649L)), // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(ProtocolActivation.incidentTokenLockRemediation.value.value - 1L))
       )
   }
 }

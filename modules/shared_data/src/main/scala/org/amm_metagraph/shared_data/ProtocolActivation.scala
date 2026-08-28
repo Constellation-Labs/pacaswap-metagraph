@@ -25,4 +25,14 @@ object ProtocolActivation {
 
   def reserveAccountingFixesActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= reserveAccountingFixes.value.value
+
+  /** The calculated state was at currency ordinal 736006 when this remediation was prepared. At the nominal ~43s snapshot cadence the 3994
+    * ordinals to 740000 are roughly 47 hours, so this leaves under two days for every ML0 node to deploy the new binary while remaining
+    * well ahead of the month-13 governance freeze at metagraph epoch 604800. The activation removes only the seven incident TokenLocks
+    * listed in IncidentTokenLockRemediation; all other state owned by the same addresses remains intact.
+    */
+  val incidentTokenLockRemediation: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(740000L))
+
+  def incidentTokenLockRemediationActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= incidentTokenLockRemediation.value.value
 }

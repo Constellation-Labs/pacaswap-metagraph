@@ -11,9 +11,9 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
+import org.amm_metagraph.shared_data.{IncidentTokenLockRemediation, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -78,10 +78,18 @@ object StateManager {
           }
 
         // Update voting powers
-        updatedVotingPowers = governanceCombinerService.updateVotingPowers(
+        recomputedVotingPowers = governanceCombinerService.updateVotingPowers(
           newState.calculated,
           context.lastCurrencySnapshotInfo,
           context.lastSyncGlobalEpochProgress
+        )
+
+        // Active TokenLocks are imported on every ordinal, so the seven incident locks must be
+        // removed after every rebuild until they are retired on Tessellation. Unrelated locks owned
+        // by the same addresses remain and continue to confer their legitimate voting power.
+        updatedVotingPowers = IncidentTokenLockRemediation.removeFromVotingPowers(
+          recomputedVotingPowers,
+          context.currentSnapshotOrdinal
         )
 
         updatedVotingPowerState = newState.calculated
