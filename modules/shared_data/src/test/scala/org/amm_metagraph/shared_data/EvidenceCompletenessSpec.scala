@@ -115,4 +115,12 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       ProtocolActivation.evidenceCompletenessFirst.value.value - 736000L >= 80L * 48L
     )
   }
+
+  pureTest("governance month-boundary ordering changes with the same coordinated activation") {
+    expect.all(
+      ProtocolActivation.governanceMonthBoundaryFix == ProtocolActivation.evidenceCompletenessFirst,
+      !ProtocolActivation.governanceMonthBoundaryFixActive(ord(739999L)),
+      ProtocolActivation.governanceMonthBoundaryFixActive(ord(740000L))
+    )
+  }
 }

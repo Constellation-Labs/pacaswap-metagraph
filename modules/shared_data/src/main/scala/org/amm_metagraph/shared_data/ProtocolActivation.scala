@@ -41,4 +41,16 @@ object ProtocolActivation {
 
   def evidenceCompletenessFirstActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= evidenceCompletenessFirst.value.value
+
+  /** Roll an expired governance month before applying updates from the first epoch of the next month.
+    *
+    * This ships in the same coordinated, not-yet-released upgrade as `evidenceCompletenessFirst`, so both corrections intentionally share
+    * an activation ordinal. Below it, month expiration remains after incoming-update processing to preserve historical calculated-state
+    * proofs. From it onwards, a vote accepted at the month boundary belongs to the new month instead of being excluded from the closing
+    * result and then cleared.
+    */
+  val governanceMonthBoundaryFix: SnapshotOrdinal = evidenceCompletenessFirst
+
+  def governanceMonthBoundaryFixActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= governanceMonthBoundaryFix.value.value
 }

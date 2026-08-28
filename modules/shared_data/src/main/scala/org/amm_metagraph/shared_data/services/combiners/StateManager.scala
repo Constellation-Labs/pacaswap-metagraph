@@ -104,7 +104,20 @@ object StateManager {
           .focus(_.calculated)
           .replace(updatedVotingPowerState)
 
-      } yield stateCombinedByVotingPower
+        // Historically month expiration ran during cleanup, after incoming updates. A vote accepted
+        // in the first epoch of a new month was therefore stamped with that epoch, excluded from the
+        // closing month's result, and then cleared. After activation, close the old month first so
+        // subsequent updates remain live for the new month. The legacy order is retained below the
+        // gate so historical calculated-state proofs replay unchanged.
+        statePreparedForUpdates <-
+          if (ProtocolActivation.governanceMonthBoundaryFixActive(context.currentSnapshotOrdinal))
+            governanceCombinerService.handleMonthExpiration(
+              stateCombinedByVotingPower,
+              context.currentSnapshotEpochProgress
+            )
+          else stateCombinedByVotingPower.pure[F]
+
+      } yield statePreparedForUpdates
 
     override def cleanupAndFinalize(
       state: DataState[AmmOnChainState, AmmCalculatedState],
@@ -113,10 +126,14 @@ object StateManager {
       val cleanedState = cleanupExpiredOperations(state, context.lastSyncGlobalEpochProgress)
 
       for {
-        governanceRewardsState <- governanceCombinerService.handleMonthExpiration(
-          cleanedState,
-          context.currentSnapshotEpochProgress
-        )
+        governanceRewardsState <-
+          if (ProtocolActivation.governanceMonthBoundaryFixActive(context.currentSnapshotOrdinal))
+            cleanedState.pure[F]
+          else
+            governanceCombinerService.handleMonthExpiration(
+              cleanedState,
+              context.currentSnapshotEpochProgress
+            )
 
         rewardsCleanedState = rewardsWithdrawService.clearDistributedRewards(
           governanceRewardsState,

@@ -1,6 +1,6 @@
 import { dag4 } from "@stardust-collective/dag4";
 import axios from "axios";
-import { delay, getPublicKey, log, retry, getSnapshotRewardForAddress, getSnapshotBalanceForAddress, getGlobalSnapshotCombined, getBalanceForAddress, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate, getAvaialbleRewardsForAddress } from "../../shared";
+import { delay, getPublicKey, log, retry, getSnapshotRewardForAddress, getSnapshotBalanceForAddress, getGlobalSnapshotCombined, getBalanceForAddress, BaseAmmMetagraphCliArgsSchema, serializeBase64, sendDataUpdate, getAvaialbleRewardsForAddress, getCurrencySnapshot } from "../../shared";
 import { z } from 'zod';
 
 const voteAllocations = [{
@@ -160,6 +160,31 @@ const validateAllocationsRewards = async (
     throw new Error(`Invalid governance votes: expected ${expectedTotal}, got ${total}`);
 };
 
+const waitForStableVotingWindow = async (
+    config: ReturnType<typeof createConfig>,
+    logger: (message: string, type?: string, context?: string) => void = log
+) => {
+    const [snapshot, { data: monthlyReference }] = await Promise.all([
+        getCurrencySnapshot(config.ammMl0Url),
+        axios.get(`${config.ammMl0Url}/v1/governance-rounds/current/month-reference`)
+    ]);
+    const currentEpoch = snapshot.value.epochProgress;
+    const { firstEpochOfMonth, lastEpochOfMonth } = monthlyReference;
+    const epochsRemaining = lastEpochOfMonth - currentEpoch;
+
+    logger(
+        `Current governance voting window is ${firstEpochOfMonth}..${lastEpochOfMonth}; ` +
+        `currency epoch is ${currentEpoch} (${epochsRemaining} remaining)`
+    );
+
+    // The data update needs at least one additional snapshot to reach ML0. Keep a wider margin so
+    // this test validates ordinary in-month voting instead of racing month rollover. The rollover
+    // boundary itself is covered deterministically by the Scala regression suite.
+    if (currentEpoch < firstEpochOfMonth || epochsRemaining < 3) {
+        throw new Error("Too close to governance month rollover to submit a deterministic test vote");
+    }
+};
+
 const getExpectedAvaialbleRewardForAddress = async (
   address: string,
   rewardType: string,
@@ -209,6 +234,10 @@ const voteAllocationTests = async (argsObject: object) => {
 
     for (const voteAllocationInfo of voteAllocationsInfo) {
         const { address } = voteAllocationInfo;
+
+        await retry(`Wait for a stable governance voting window`, { delayMs: 2000, maxAttempts: 60 })(async (logger) => {
+            await waitForStableVotingWindow(config, logger)
+        })
 
         const signedVoteAllocation = await getSignedVoteAllocation(config, voteAllocationInfo);
         await sendDataUpdate(config.ammDl1Url, signedVoteAllocation);
