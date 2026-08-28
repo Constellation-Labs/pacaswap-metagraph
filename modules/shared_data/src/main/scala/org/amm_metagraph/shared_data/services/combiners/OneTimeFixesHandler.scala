@@ -21,6 +21,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Rewards.RewardInfo
 import org.amm_metagraph.shared_data.types.States._
+import org.amm_metagraph.shared_data.{IncidentTokenLockRemediation, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -112,7 +113,8 @@ object OneTimeFixesHandler {
       updatePools12Ordinal,
       updateUSDCPool,
       restorePoolReservesOrdinal,
-      normalizePoolsOrdinal
+      normalizePoolsOrdinal,
+      ProtocolActivation.incidentTokenLockRemediation
     ).map(_.value.value)
 
     override def isOneTimeFixOrdinal(ordinal: SnapshotOrdinal): Boolean =
@@ -187,6 +189,13 @@ object OneTimeFixesHandler {
           .flatMap { updatedState =>
             currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(updatedState))
           }
+      } else if (currentSnapshotOrdinal === ProtocolActivation.incidentTokenLockRemediation) {
+        // This is deliberately lock-level rather than address-level. The six holders also have
+        // unrelated historical locks, positions, allocations and rewards that must remain intact.
+        val remediatedState = oldState.copy(
+          calculated = IncidentTokenLockRemediation.removeFromCalculatedState(oldState.calculated, currentSnapshotOrdinal)
+        )
+        currentSnapshotOrdinalR.set(currentSnapshotOrdinal).as(Some(remediatedState))
       } else if (currentSnapshotOrdinal === updateUSDCPool) {
         val usdcPool = CurrencyId(Address("DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh")).some
         val newAmount = PosLong.unsafeFrom(1200116577579L)

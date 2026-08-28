@@ -19,6 +19,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
@@ -153,8 +154,10 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         real.isOneTimeFixOrdinal(ord(111700L)),
         real.isOneTimeFixOrdinal(ord(161148L)),
         real.isOneTimeFixOrdinal(ord(731648L)), // normalization, updated-pools-14
+        real.isOneTimeFixOrdinal(ProtocolActivation.incidentTokenLockRemediation),
         !real.isOneTimeFixOrdinal(ord(731646L)), // the last ordinal before the stop
-        !real.isOneTimeFixOrdinal(ord(731649L)) // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(731649L)), // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(ProtocolActivation.incidentTokenLockRemediation.value.value - 1L))
       )
   }
 }

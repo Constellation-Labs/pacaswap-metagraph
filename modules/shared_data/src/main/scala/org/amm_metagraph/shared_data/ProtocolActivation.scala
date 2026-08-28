@@ -25,4 +25,13 @@ object ProtocolActivation {
 
   def reserveAccountingFixesActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= reserveAccountingFixes.value.value
+
+  /** The calculated state was at currency ordinal 736006 when this remediation was prepared. Activating at 740000 leaves roughly four days
+    * for deployment while remaining well ahead of the month-13 governance freeze at metagraph epoch 604800. The activation removes only the
+    * seven incident TokenLocks listed in IncidentTokenLockRemediation; all other state owned by the same addresses remains intact.
+    */
+  val incidentTokenLockRemediation: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(740000L))
+
+  def incidentTokenLockRemediationActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= incidentTokenLockRemediation.value.value
 }
