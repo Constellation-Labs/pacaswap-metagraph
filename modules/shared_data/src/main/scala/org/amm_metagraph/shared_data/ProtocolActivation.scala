@@ -30,13 +30,14 @@ object ProtocolActivation {
     *
     * `reserveAccountingFixes` cannot carry this: it activated at 731647 and the chain is already well past it, so changing behaviour under
     * it would make the ordinals produced since the restart unreplayable. This is a second, later gate, and it is deliberately far enough
-    * ahead that every node can be upgraded before it takes effect. At ~80 ordinals an hour, 736000 is roughly two days out from when it was
+    * ahead that every node can be upgraded before it takes effect. The original 736000 activation was not released before the chain
+    * approached it, so it was superseded before activation. At ~80 ordinals an hour, 740000 is roughly two days out from when it was
     * chosen.
     *
     * Activate only once every metagraph L0 node runs a build containing it. A node that has not upgraded will decide differently at this
     * ordinal and fork.
     */
-  val evidenceCompletenessFirst: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(736000L))
+  val evidenceCompletenessFirst: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(740000L))
 
   def evidenceCompletenessFirstActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= evidenceCompletenessFirst.value.value
