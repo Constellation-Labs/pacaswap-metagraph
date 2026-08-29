@@ -26,6 +26,13 @@ object ProtocolActivation {
   def reserveAccountingFixesActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= reserveAccountingFixes.value.value
 
+  /* Three corrections activate together at 740000: the seven-lock incident remediation below, plus
+   * evidenceCompletenessFirst and governanceMonthBoundaryFix further down. They ship in one binary
+   * and one coordinated upgrade, so one ordinal is correct - splitting them would mean two
+   * coordinated deploys for no benefit. It also means a node missing this build diverges on three
+   * counts at once, which makes the upgrade non-optional rather than merely advisable.
+   */
+
   /** The calculated state was at currency ordinal 736006 when this remediation was prepared. At the nominal ~43s snapshot cadence the 3994
     * ordinals to 740000 are roughly 47 hours, so this leaves under two days for every ML0 node to deploy the new binary while remaining
     * well ahead of the month-13 governance freeze at metagraph epoch 604800. The activation removes only the seven incident TokenLocks
@@ -35,4 +42,32 @@ object ProtocolActivation {
 
   def incidentTokenLockRemediationActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= incidentTokenLockRemediation.value.value
+
+  /** Partial spend-action evidence must stop counting as complete evidence.
+    *
+    * `reserveAccountingFixes` cannot carry this: it activated at 731647 and the chain is already well past it, so changing behaviour under
+    * it would make the ordinals produced since the restart unreplayable. This is a second, later gate, and it is deliberately far enough
+    * ahead that every node can be upgraded before it takes effect. The original 736000 activation was not released before the chain
+    * approached it, so it was superseded before activation. At ~80 ordinals an hour, 740000 is roughly two days out from when it was
+    * chosen.
+    *
+    * Activate only once every metagraph L0 node runs a build containing it. A node that has not upgraded will decide differently at this
+    * ordinal and fork.
+    */
+  val evidenceCompletenessFirst: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(740000L))
+
+  def evidenceCompletenessFirstActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= evidenceCompletenessFirst.value.value
+
+  /** Roll an expired governance month before applying updates from the first epoch of the next month.
+    *
+    * This ships in the same coordinated, not-yet-released upgrade as `evidenceCompletenessFirst`, so both corrections intentionally share
+    * an activation ordinal. Below it, month expiration remains after incoming-update processing to preserve historical calculated-state
+    * proofs. From it onwards, a vote accepted at the month boundary belongs to the new month instead of being excluded from the closing
+    * result and then cleared.
+    */
+  val governanceMonthBoundaryFix: SnapshotOrdinal = evidenceCompletenessFirst
+
+  def governanceMonthBoundaryFixActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= governanceMonthBoundaryFix.value.value
 }

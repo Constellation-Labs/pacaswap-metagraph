@@ -24,7 +24,8 @@ case class ApplicationConfig(
   tokenLimits: ApplicationConfig.TokenLimits,
   allowSpendEpochBufferDelay: EpochProgress,
   epochInfo: ApplicationConfig.EpochMetadata,
-  tokenLockLimits: TokenLockLimitsConfig
+  tokenLockLimits: TokenLockLimitsConfig,
+  activationEpochs: ApplicationConfig.ActivationEpochs = ApplicationConfig.ActivationEpochs()
 )
 
 object ApplicationConfig {
@@ -102,5 +103,32 @@ object ApplicationConfig {
   case class TokenLockLimitsConfig(
     maxTokenLocksPerAddress: PosInt,
     minTokenLockAmount: PosLong
+  )
+
+  /** Epochs at which consensus-visible behavior changes activate.
+    *
+    * CRITICAL: every field changes the bytes produced by `combine` or `hashCalculatedState`. On a live network all validators MUST flip at
+    * the SAME epoch or they fork. Therefore:
+    *   - the value MUST be identical in every node's config, and
+    *   - it MUST be a future epoch agreed for a coordinated rollout (set once the new code is deployed to the whole cluster but before the
+    *     epoch is reached).
+    *
+    * The default is `EpochProgress.MaxValue` ("never"), so an un-coordinated deploy keeps the legacy behavior on every node and cannot
+    * accidentally fork. Ops sets the real epoch in the environment HOCON.
+    */
+  @derive(show, encoder)
+  case class ActivationEpochs(
+    // D2-01/D2-02: deterministic BigInt share math + rejection of dust stakes that would mint 0 shares or throw.
+    // EPOCH SPACE: the GLOBAL synchronized snapshot epoch (lastSyncGlobalEpochProgress).
+    stakingShareMintFix: EpochProgress = EpochProgress.MaxValue,
+    // D1-01: fail-closed when the node-local cache is missing a global snapshot inside the consensus-agreed sync
+    // range, instead of silently treating it as empty (which can fork via a divergent operations.confirmed hash).
+    // EPOCH SPACE: the METAGRAPH snapshot epoch (currentSnapshotEpochProgress). Deploy cache persistence first, let
+    // caches fill, THEN set this to a future epoch for a watched, coordinated rollout.
+    globalSyncDataIntegrity: EpochProgress = EpochProgress.MaxValue,
+    // D2-06: when the epoch advances by more than 1 between combines (catch-up / missed time triggers), distribute
+    // rewards for EVERY scheduled distribution boundary crossed, not just the single observed epoch, so reward
+    // emission is never silently skipped (under-emission). EPOCH SPACE: the METAGRAPH snapshot epoch.
+    rewardEpochCatchUp: EpochProgress = EpochProgress.MaxValue
   )
 }

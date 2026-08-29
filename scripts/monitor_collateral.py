@@ -69,11 +69,15 @@ NAMES = {
 COLOUR_BREACH = "#A93226"   # deep red, a real divergence
 COLOUR_DRILL = "#E67E22"    # amber, a test - must never be mistaken for an incident
 COLOUR_OK = "#1F6B5B"       # green, a breach that has cleared
+COLOUR_BLIND = "#8E44AD"    # purple, the check could not run - a different problem from a breach
 
-# A breach does not fix itself, so a 15-minute cron would post the same alert 96 times a day and
+# A breach does not fix itself, so an hourly cron would post the same alert 24 times a day and
 # the channel would be muted within one. Alert on the TRANSITION instead: once when it starts,
 # once when it clears, and a quiet reminder every REMIND_EVERY runs while it persists.
-REMIND_EVERY = 16   # at */15 that is roughly four hours
+#
+# Tied to the cron interval: this is a number of RUNS, not of hours, so it has to move whenever
+# the schedule does or the reminder silently drifts. It was 16 at */15.
+REMIND_EVERY = 4    # at hourly that is roughly four hours, as before
 
 
 def slack_payload(breaches, reserves, wallet, shortfall, accepted, run_url=None, drill=False):
@@ -143,6 +147,29 @@ def recovery_payload(shortfall, accepted, run_url=None):
     ] + ([{"type": "actions", "elements": [
         {"type": "button", "text": {"type": "plain_text", "text": "View the run"}, "url": run_url}]}]
          if run_url else [])}]}
+
+
+def unreadable_payload(detail, run_url=None):
+    """The monitor could not read the book at all.
+
+    Deliberately not styled as a collateral breach, because it is not one and confusing the two
+    would be worse than either alone: this says nothing about whether the book matches the wallet.
+    It says the check did not happen. That is its own incident - the metagraph may be down, the
+    host unreachable, or METAGRAPH_L0_URL wrong - and it has to reach a person, because a monitor
+    that goes quiet exactly when the thing it watches breaks is worse than no monitor at all.
+    """
+    return {"text": ":mag: PacaSwap collateral monitor could not read the book",
+            "attachments": [{"color": COLOUR_BLIND, "blocks": [
+                {"type": "header", "text": {"type": "plain_text",
+                    "text": ":mag: Collateral monitor is blind", "emoji": True}},
+                {"type": "section", "text": {"type": "mrkdwn", "text":
+                    "*The check did not run.* This is not a collateral breach and says nothing "
+                    "either way about the book - it means the monitor could not read it. The "
+                    "metagraph may be down, the host unreachable, or the URL wrong."}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": "```" + detail + "```"}},
+            ] + ([{"type": "actions", "elements": [
+                {"type": "button", "text": {"type": "plain_text", "text": "View the run"},
+                 "url": run_url, "style": "danger"}]}] if run_url else [])}]}
 
 
 def post_slack(webhook, payload):
@@ -266,7 +293,25 @@ def main():
     baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else {}
     accepted = baseline.get("accepted_shortfall", {})
 
-    shortfall, reserves, wallet = sample(args)
+    # A read that cannot happen used to exit here through SystemExit, before any Slack call: the
+    # job went red and nobody was told. That is the failure mode this whole monitor exists to
+    # remove, one level up. Catch it and alert, with the same transition suppression as a breach
+    # so a long outage does not post every 15 minutes.
+    try:
+        shortfall, reserves, wallet = sample(args)
+    except SystemExit as e:
+        detail = str(e)
+        print(detail)
+        ongoing = args.previous_state == "failure"
+        remind = ongoing and args.run_number and args.run_number % REMIND_EVERY == 0
+        if not args.slack_webhook:
+            print("slack: no webhook configured, nobody was told")
+        elif ongoing and not remind:
+            print("slack: suppressed, already reported as unreadable and not yet cleared")
+        else:
+            st, body = post_slack(args.slack_webhook, unreadable_payload(detail, args.run_url))
+            print(f"slack: {st} {body} (unreadable)" + (" (periodic reminder)" if remind else ""))
+        return 1
 
     breaches = {l: s for l, s in shortfall.items() if s > int(accepted.get(l, 0))}
     if breaches and args.confirm_after:

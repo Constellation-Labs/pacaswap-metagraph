@@ -5,7 +5,7 @@ object Dependencies {
   object V {
     val tessellation: String = sys.env.getOrElse("TESSELLATION_VERSION", "3.5.29")
     val decline = "2.4.1"
-    val organizeImports = "0.5.0"
+    val scalafixRules = "0.1.2"
   }
 
   def tessellation(artifact: String): ModuleID = {
@@ -30,7 +30,7 @@ object Dependencies {
     val weaverCats = "com.disneystreaming" %% "weaver-cats" % "0.8.3"
     val weaverDiscipline = "com.disneystreaming" %% "weaver-discipline" % "0.8.3"
     val weaverScalaCheck = "com.disneystreaming" %% "weaver-scalacheck" % "0.8.3"
-    val organizeImports = "com.github.liancheng" %% "organize-imports" % V.organizeImports
+    val scalafixRules = "io.constellationnetwork" %% "constellation-scalafix-rules" % V.scalafixRules
   }
 
   object CompilerPlugin {

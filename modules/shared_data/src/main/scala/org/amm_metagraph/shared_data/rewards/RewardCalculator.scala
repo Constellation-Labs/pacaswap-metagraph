@@ -288,7 +288,10 @@ class RewardCalculatorImpl[F[_]: Async](
 
       allRemainders = totalEpochTokens - (nodeValidatorDistributed + daoPerEpoch + voteBasedDistributed)
 
-      daoRewardAmount = (daoPerEpoch + allRemainders).toAmountUnsafe
+      // D2-05: with floored distributions and config-validated weights summing to 100, (daoPerEpoch + allRemainders)
+      // is always >= 0. Clamp to 0 defensively so a hypothetical negative can never reach NonNegLong.unsafeFrom and
+      // throw (which would halt all reward distribution). No-op in every reachable state.
+      daoRewardAmount = (daoPerEpoch + allRemainders).max(BigDecimal(0)).toAmountUnsafe
       _ <- EitherT.fromEither[F](
         logger
           .info(

@@ -179,6 +179,9 @@ object Errors {
   case class CannotWithdrawAllShares() extends FailureReason
   case class TokenExceedsAvailableAmount(tokenId: Option[CurrencyId], availableAmount: Long, requestedAmount: Long) extends FailureReason
   case class ArithmeticError(message: String) extends FailureReason
+  // D2-01/D2-02: staking deposit too small to mint >=1 LP share (or whose proportional pair amount rounds to 0).
+  // Rejecting it prevents donating the staker's tokens to incumbent LPs and prevents a throw poisoning the batch.
+  case class StakingAmountTooSmall(message: String) extends FailureReason
   case class SwapWouldDrainPoolBalance() extends FailureReason
   case class SwapExceedsMaxTokensLimit(update: AmmUpdate, grossReceived: SwapAmount) extends FailureReason
   case class WithdrawalWouldDrainPoolBalance() extends FailureReason

@@ -1,0 +1,33 @@
+package org.amm_metagraph.shared_data.app
+
+import io.constellationnetwork.schema.epoch.EpochProgress
+
+import eu.timepit.refined.auto._
+import eu.timepit.refined.types.all.NonNegLong
+import weaver.SimpleIOSuite
+
+/** Smoke test: the production application.conf must parse, and the activation epochs must be set to the coordinated rollout value (a
+  * malformed HOCON or an accidental change would otherwise only surface at node boot).
+  */
+object ApplicationConfigSpec extends SimpleIOSuite {
+
+  // Coordinated mainnet rollout epoch (current 486246 + ~5h at 43s/epoch). Update together with application.conf.
+  private val rolloutEpoch: EpochProgress = EpochProgress(NonNegLong.unsafeFrom(486666L))
+
+  pureTest("application.conf loads and activation epochs are set to the coordinated rollout epoch") {
+    val cfg = ApplicationConfigOps.readDefaultPure
+    expect.all(
+      cfg.activationEpochs.stakingShareMintFix == rolloutEpoch,
+      // D1-01 is DISABLED (EpochProgress.MaxValue) until GlobalSnapshotsStorage backfills the (lastSync .. tip] gap on
+      // startup; active at 486666 it deadlocked every node on restart/rollback. Re-coordinate a future epoch only
+      // after the backfill ships. Keep this assertion in lockstep with application.conf.
+      cfg.activationEpochs.globalSyncDataIntegrity == EpochProgress.MaxValue,
+      // D2-06 is DISABLED for the same shape of reason, found later: 486666 is compared against the METAGRAPH's own
+      // epochProgress and PacaSwap is already past 591000, so it was never a future activation. Deploying a build
+      // carrying it would switch reward distribution retroactively, and AmmOnChainState.rewardsUpdate is covered by
+      // the snapshot hash, so historical ordinals would stop replaying. Re-coordinate a genuinely future metagraph
+      // epoch before re-enabling. Keep this assertion in lockstep with application.conf.
+      cfg.activationEpochs.rewardEpochCatchUp == EpochProgress.MaxValue
+    )
+  }
+}
