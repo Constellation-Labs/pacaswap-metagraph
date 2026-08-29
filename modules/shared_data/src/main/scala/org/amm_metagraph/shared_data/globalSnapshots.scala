@@ -47,13 +47,39 @@ object globalSnapshots {
     globalSnapshotState.activeAllowSpends
       .getOrElse(SortedMap.empty[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]])
 
-  /** Spend actions read from the global chain, plus whether the read was COMPLETE.
+  /** Spend actions read from the global chain, plus whether the read was COMPLETE and the last ordinal that can safely become the next read
+    * cursor.
     *
     * `complete = false` means at least one ordinal in the requested range could not be resolved, so an empty or partial `actions` list is
     * not evidence that nothing was accepted. Callers must never conclude "not accepted" from an incomplete read: the spend action may well
     * have settled on the global ledger, and rolling the pool back on that assumption desynchronises the book from the ledger permanently.
     */
-  case class SpendActionsRead(actions: List[SpendAction], complete: Boolean)
+  case class SpendActionsRead(
+    actions: List[SpendAction],
+    complete: Boolean,
+    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal
+  )
+
+  private[shared_data] def summarizeSpendActionsRead(
+    lastSyncGlobalOrdinal: SnapshotOrdinal,
+    results: List[(SnapshotOrdinal, (List[SpendAction], Boolean))]
+  ): SpendActionsRead = {
+    // The lower bound was already processed by the previous combine, so it is always a safe
+    // cursor even when a restarted node no longer has that snapshot in its in-memory cache.
+    // Above it, stop at the first gap: seeing a later snapshot must never let the cursor skip
+    // unresolved evidence permanently.
+    val lastContiguousGlobalSnapshotOrdinal = results
+      .dropWhile(_._1.value.value <= lastSyncGlobalOrdinal.value.value)
+      .takeWhile(_._2._2)
+      .lastOption
+      .fold(lastSyncGlobalOrdinal)(_._1)
+
+    SpendActionsRead(
+      actions = results.flatMap(_._2._1),
+      complete = results.forall(_._2._2),
+      lastContiguousGlobalSnapshotOrdinal = lastContiguousGlobalSnapshotOrdinal
+    )
+  }
 
   def getSpendActionsFromGlobalSnapshots[F[_]: Async](
     lastSyncGlobalOrdinal: SnapshotOrdinal,
@@ -101,7 +127,7 @@ object globalSnapshots {
       val missingCritical = results.collect {
         case (o, (_, false)) if o.value.value > lastSyncGlobalOrdinal.value.value => o
       }
-      val read = SpendActionsRead(results.flatMap(_._2._1), results.forall(_._2._2))
+      val read = summarizeSpendActionsRead(lastSyncGlobalOrdinal, results)
 
       if (failOnMissing && missingCritical.nonEmpty)
         logger[F].warn(

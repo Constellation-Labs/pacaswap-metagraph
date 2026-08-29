@@ -1,8 +1,13 @@
 package org.amm_metagraph.shared_data
 
+import scala.collection.immutable.SortedSet
+
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.artifact.SpendAction
 
 import eu.timepit.refined.types.all.NonNegLong
+import org.amm_metagraph.shared_data.globalSnapshots.summarizeSpendActionsRead
+import org.amm_metagraph.shared_data.services.combiners.{PendingOperationsProcessor, StateManager}
 import weaver.SimpleIOSuite
 
 /** PROT-1695: a settled SpendAction was expired and rolled back because a partial read of the global chain was treated as proof that it had
@@ -12,34 +17,42 @@ import weaver.SimpleIOSuite
   * returned nothing at all. A node that resolved one ordinal carrying any spend action skipped the guard entirely and judged every pending
   * operation against a list that could not contain the evidence it needed.
   *
-  * These pin the ordering rule and the gate it hangs on. The branch itself is exercised through the combiner suites.
+  * These pin the production selector's ordering rule and the gate it hangs on.
   */
 object EvidenceCompletenessSpec extends SimpleIOSuite {
 
   private def ord(o: Long): SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(o))
 
-  /** The decision the combiner makes, in the same order the combiner makes it. Kept here as the specification: if the branches in
-    * PendingOperationsProcessor are ever reordered again, this is what should fail.
-    */
-  private def defersEverything(gateActive: Boolean, evidenceComplete: Boolean, readReturnedActions: Boolean): Boolean =
-    if (gateActive && !evidenceComplete) true
-    else if (readReturnedActions) false
-    else !evidenceComplete
+  private val pending = SortedSet(1, 2)
+
+  private def selected(
+    ordinal: Long,
+    evidenceComplete: Boolean,
+    readReturnedActions: Boolean,
+    expired: Int => Boolean = _ => true
+  ): SortedSet[Int] =
+    PendingOperationsProcessor.selectPendingSpendActions(
+      ord(ordinal),
+      evidenceComplete,
+      readReturnedActions,
+      pending
+    )(expired)
 
   pureTest("PROT-1695: a partial read no longer counts as proof once the gate is active") {
     expect.all(
       // The exact shape that stranded the deposit: some actions came back, but the range was not
-      // fully resolved. Before the fix this returned false and every pending operation was judged.
-      defersEverything(gateActive = true, evidenceComplete = false, readReturnedActions = true),
+      // fully resolved. Before the fix every pending operation was judged.
+      selected(740000L, evidenceComplete = false, readReturnedActions = true).isEmpty,
       // A blank read was already handled, and still is.
-      defersEverything(gateActive = true, evidenceComplete = false, readReturnedActions = false)
+      selected(740000L, evidenceComplete = false, readReturnedActions = false).isEmpty
     )
   }
 
   pureTest("a complete read is still acted on, whether or not it found anything") {
     expect.all(
-      !defersEverything(gateActive = true, evidenceComplete = true, readReturnedActions = true),
-      !defersEverything(gateActive = true, evidenceComplete = true, readReturnedActions = false)
+      selected(740000L, evidenceComplete = true, readReturnedActions = true) == pending,
+      selected(740000L, evidenceComplete = true, readReturnedActions = false) == pending,
+      selected(740000L, evidenceComplete = true, readReturnedActions = false, _ == 2) == SortedSet(2)
     )
   }
 
@@ -47,10 +60,47 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
     expect.all(
       // The bug itself, preserved below the activation. This is the assertion that keeps the
       // ordinals already produced since the 731647 restart replayable.
-      !defersEverything(gateActive = false, evidenceComplete = false, readReturnedActions = true),
+      selected(739999L, evidenceComplete = false, readReturnedActions = true) == pending,
       // The blank-read guard predates this gate and must keep working below it.
-      defersEverything(gateActive = false, evidenceComplete = false, readReturnedActions = false),
-      !defersEverything(gateActive = false, evidenceComplete = true, readReturnedActions = true)
+      selected(739999L, evidenceComplete = false, readReturnedActions = false).isEmpty,
+      selected(739999L, evidenceComplete = true, readReturnedActions = true) == pending
+    )
+  }
+
+  pureTest("an unresolved middle ordinal stops the evidence cursor before the gap") {
+    val resolved = (List.empty[SpendAction], true)
+    val missing = (List.empty[SpendAction], false)
+    val read = summarizeSpendActionsRead(
+      ord(10L),
+      List(ord(10L) -> resolved, ord(11L) -> resolved, ord(12L) -> missing, ord(13L) -> resolved)
+    )
+
+    expect.all(
+      !read.complete,
+      read.lastContiguousGlobalSnapshotOrdinal == ord(11L),
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(740000L),
+        read.complete,
+        ord(13L),
+        read.lastContiguousGlobalSnapshotOrdinal
+      ) == ord(11L)
+    )
+  }
+
+  pureTest("cursor hold is gated so historical snapshots retain the old advancement") {
+    expect.all(
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(739999L),
+        evidenceComplete = false,
+        ord(13L),
+        ord(11L)
+      ) == ord(13L),
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(740000L),
+        evidenceComplete = true,
+        ord(13L),
+        ord(11L)
+      ) == ord(13L)
     )
   }
 
@@ -59,11 +109,18 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       // 731647 is long past, so this fix could not hang on it without breaking replay of
       // everything produced since the restart.
       ProtocolActivation.evidenceCompletenessFirst.value.value > ProtocolActivation.reserveAccountingFixes.value.value,
-      ProtocolActivation.evidenceCompletenessFirstActive(ord(736000L)),
-      !ProtocolActivation.evidenceCompletenessFirstActive(ord(735999L)),
-      // Chosen with room for every node to upgrade first: the chain was at ~731718 and moves at
-      // roughly 80 ordinals an hour, so this is about two days out.
-      ProtocolActivation.evidenceCompletenessFirst.value.value - 731718L > 80L * 24L
+      ProtocolActivation.evidenceCompletenessFirstActive(ord(740000L)),
+      !ProtocolActivation.evidenceCompletenessFirstActive(ord(739999L)),
+      // Supersedes the unreleased 736000 gate by at least another two days at the observed rate.
+      ProtocolActivation.evidenceCompletenessFirst.value.value - 736000L >= 80L * 48L
+    )
+  }
+
+  pureTest("governance month-boundary ordering changes with the same coordinated activation") {
+    expect.all(
+      ProtocolActivation.governanceMonthBoundaryFix == ProtocolActivation.evidenceCompletenessFirst,
+      !ProtocolActivation.governanceMonthBoundaryFixActive(ord(739999L)),
+      ProtocolActivation.governanceMonthBoundaryFixActive(ord(740000L))
     )
   }
 }

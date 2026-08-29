@@ -21,6 +21,9 @@ case class ProcessingContext(
   // False when the spend-action read could not resolve every ordinal in the range. An empty
   // list then proves nothing, so no pending operation may be expired on the strength of it.
   spendActionsEvidenceComplete: Boolean,
+  // The greatest ordinal in the contiguous resolved prefix above the previous cursor. When
+  // evidence is incomplete this prevents cleanup from advancing past the first unresolved gap.
+  lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,
   currencyId: CurrencyId,
   lastCurrencySnapshot: Hashed[CurrencyIncrementalSnapshot],
   lastCurrencySnapshotInfo: CurrencySnapshotInfo,

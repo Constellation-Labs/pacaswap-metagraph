@@ -76,11 +76,15 @@ object ContextHelper {
         )
 
         _ <-
-          if (!spendActionsRead.complete)
+          if (
+            !spendActionsRead.complete &&
+            ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal)
+          )
             logger.warn(
               s"Spend-action evidence INCOMPLETE for range " +
                 s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
-                "No pending operation will be expired this snapshot."
+                "No pending operation will be expired and the global evidence cursor will stop at " +
+                s"${spendActionsRead.lastContiguousGlobalSnapshotOrdinal.show}."
             )
           else Async[F].unit
 
@@ -100,6 +104,7 @@ object ContextHelper {
             // Pre-activation the flag is forced true so the old (unsafe) expiry behaviour is
             // reproduced exactly and history replays byte for byte.
             !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
+          lastContiguousGlobalSnapshotOrdinal = spendActionsRead.lastContiguousGlobalSnapshotOrdinal,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,
           lastCurrencySnapshotInfo = lastCurrencySnapshotInfo,
