@@ -132,15 +132,12 @@ object PoolLogger {
     updateHash: Option[Hash],
     address: Option[Address],
     additionalInfo: Map[String, String]
-  ): PoolBalanceChange = {
-    val timestamp = DateTimeFormatter
-      .ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
-      .withZone(ZoneOffset.UTC)
-      .format(Instant.now())
-
+  ): PoolBalanceChange =
+    // Left empty on purpose. The wall clock is read on the drainer fiber in formatLogEntry, so no
+    // Instant.now() runs on the consensus path (taken from main, D5-02/D6-05).
     PoolBalanceChange(
       operation = operation,
-      timestamp = timestamp,
+      timestamp = "",
       epochProgress = epochProgress,
       updateHash = updateHash,
       beforeTokenA = (beforePool.tokenA.identifier, beforePool.tokenA.amount.value),
@@ -154,13 +151,16 @@ object PoolLogger {
       address = address,
       additionalInfo = additionalInfo
     )
-  }
 
   private def formatChange(change: Long): String =
     if (change >= 0) s"+$change" else change.toString
 
   def formatLogEntry(change: PoolBalanceChange): String = {
-    val basicInfo = s"[${change.timestamp}] POOL_BALANCE_CHANGE " +
+    // Stamped here rather than at creation: this runs on the drainer, off the consensus path.
+    val stamped =
+      if (change.timestamp.nonEmpty) change.timestamp
+      else DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC).format(Instant.now())
+    val basicInfo = s"[$stamped] POOL_BALANCE_CHANGE " +
       s"operation=${change.operation} " +
       s"epoch=${change.epochProgress.map(_.value).getOrElse("N/A")} " +
       s"hash=${change.updateHash.map(_.value).getOrElse("N/A")}"

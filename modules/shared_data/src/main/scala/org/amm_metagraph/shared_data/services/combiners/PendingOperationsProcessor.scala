@@ -6,8 +6,10 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -26,6 +28,27 @@ trait PendingOperationsProcessor[F[_]] {
 }
 
 object PendingOperationsProcessor {
+
+  /** Selects pending SpendActions that may be resolved from the Global L0 evidence currently available.
+    *
+    * The completeness check intentionally precedes `readReturnedActions`. A partial read can contain unrelated SpendActions while omitting
+    * the one needed by a pending operation, so non-empty partial evidence must never authorize a failed/expired decision. The
+    * pre-activation ordering is retained for deterministic replay of already-signed history.
+    */
+  private[shared_data] def selectPendingSpendActions[A](
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    evidenceComplete: Boolean,
+    readReturnedActions: Boolean,
+    pendingSpendActions: SortedSet[A]
+  )(isExpired: A => Boolean): SortedSet[A] = {
+    val none = pendingSpendActions.filter(_ => false)
+
+    if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete) none
+    else if (readReturnedActions) pendingSpendActions
+    else if (!evidenceComplete) none
+    else pendingSpendActions.filter(isExpired)
+  }
+
   def make[F[_]: Async](
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
     stakingCombinerService: StakingCombinerService[F],
@@ -224,32 +247,28 @@ object PendingOperationsProcessor {
         _ <- logger.info(s"Starting to combine ${pendingSpendActions.size} pending spend actions")
         _ <- logger.debug(s"Global snapshot sync spend actions available: ${context.globalSnapshotsSyncSpendActions.nonEmpty}")
 
-        pendingSpendActionsToCombine =
-          if (context.globalSnapshotsSyncSpendActions.nonEmpty) {
-            logger.debug("Using all pending spend actions (global snapshots available)")
-            pendingSpendActions
-          } else if (!context.spendActionsEvidenceComplete) {
-            // No evidence, so nothing can be concluded. Processing here would drive every pending
-            // operation down the "not accepted" branch and roll back a pool whose SpendAction may
-            // already have settled on the global ledger. Leave them pending until evidence arrives.
-            SortedSet.empty[PendingSpendAction[AmmUpdate]]
-          } else {
-            val filtered = pendingSpendActions.filter { pending =>
-              val shouldProcess = pending.update.value match {
-                case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
-                case stakingUpdate: StakingUpdate       => stakingUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
-                case withdrawalUpdate: WithdrawalUpdate => withdrawalUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
-                case swapUpdate: SwapUpdate             => swapUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
-                case _                                  => false
-              }
-              if (!shouldProcess) {
-                logger.debug(s"Skipping pending spend action ${pending.updateHash} - epoch progress not reached")
-              }
-              shouldProcess
-            }
-            logger.debug(s"Filtered to ${filtered.size} pending spend actions based on epoch progress")
-            filtered
+        // The completeness guard has to come FIRST. It used to sit behind `nonEmpty`, so a node that
+        // resolved even one ordinal containing any spend action treated a PARTIAL list as proof and
+        // processed every pending operation against it - including operations whose evidence lived
+        // in the ordinals it could not read. That is how a settled SpendAction gets expired and
+        // rolled back, which is precisely what stranded the DOR/DAG deposit in PROT-1695. Finding
+        // some actions says nothing about the ones you could not look for.
+        //
+        // Gated on its own later ordinal because 731647 is long past; see ProtocolActivation.
+        pendingSpendActionsToCombine = PendingOperationsProcessor.selectPendingSpendActions(
+          context.currentSnapshotOrdinal,
+          context.spendActionsEvidenceComplete,
+          context.globalSnapshotsSyncSpendActions.nonEmpty,
+          pendingSpendActions
+        ) { pending =>
+          pending.update.value match {
+            case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
+            case stakingUpdate: StakingUpdate       => stakingUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
+            case withdrawalUpdate: WithdrawalUpdate => withdrawalUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
+            case swapUpdate: SwapUpdate             => swapUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
+            case _                                  => false
           }
+        }
 
         _ <- logger.info(s"Processing ${pendingSpendActionsToCombine.size} filtered pending spend actions")
 

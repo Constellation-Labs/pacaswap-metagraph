@@ -422,30 +422,64 @@ class LiquidityPoolOperations[F[_]: Async](
     val currentPairTokenAmount = pairToken.amount.value
 
     val incomingPrimaryAmount = stakingUpdate.tokenAAmount.value
-    val incomingPairAmount =
-      (BigDecimal(incomingPrimaryAmount) * BigDecimal(currentPairTokenAmount)) / BigDecimal(
-        currentPrimaryTokenAmount
-      )
 
-    // Reserves are 8-decimal fixed point and routinely exceed 2^53, so Double arithmetic here
-    // silently dropped mantissa bits and under-issued shares to the depositor, with the residual
-    // accruing to the existing LPs. Exact integer maths, floor rounding (dust stays in the pool).
-    val newlyIssuedSharesExact =
-      (BigInt(incomingPrimaryAmount) * BigInt(liquidityPool.poolShares.totalShares.value)) /
-        BigInt(currentPrimaryTokenAmount)
-    val relativeDepositIncrease = incomingPrimaryAmount.toDouble / currentPrimaryTokenAmount
-    val newlyIssuedSharesLegacy = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
-    val newlyIssuedShares: Long =
-      if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal)) newlyIssuedSharesExact.toLong
-      else newlyIssuedSharesLegacy.toLong
+    // Two gates existed for this fix. main gated on `config.activationEpochs.stakingShareMintFix`
+    // (486666, global-epoch space) but mainnet global epoch is already past 2.8M, so that gate is on
+    // for all of history and replaying PacaSwap's signed snapshots (<= 731646) under it would compute
+    // different share issuance and diverge. The currency-ordinal gate is the only one that reproduces
+    // what was actually signed, so the fix is driven from it while keeping main's stronger arithmetic.
+    if (ProtocolActivation.reserveAccountingFixesActive(currencyOrdinal)) {
+      // D2-01/D2-02 (active): pure-integer math, floored deterministically (no Double, no IEEE rounding).
+      // pairAmount = floor(incomingPrimary * currentPair / currentPrimary)
+      // newShares  = floor(incomingPrimary * totalShares / currentPrimary)
+      // Reject the deposit (instead of throwing or minting 0 shares) when either floors to 0: a dust deposit must
+      // never be silently absorbed into reserves with 0 ownership, nor throw and poison the whole ordinal's batch.
+      val incomingPrimaryBig = BigInt(incomingPrimaryAmount)
+      val incomingPairBig = (incomingPrimaryBig * BigInt(currentPairTokenAmount)) / BigInt(currentPrimaryTokenAmount)
+      val newSharesBig = (incomingPrimaryBig * BigInt(liquidityPool.poolShares.totalShares.value)) / BigInt(currentPrimaryTokenAmount)
 
-    Right(
-      StakingTokenInfo(
-        primaryToken.copy(amount = incomingPrimaryAmount.toPosLongUnsafe),
-        pairToken.copy(amount = incomingPairAmount.toLong.toPosLongUnsafe),
-        SwapAmount(incomingPairAmount.toLong.toPosLongUnsafe),
-        newlyIssuedShares
+      def tooSmall(detail: String): FailedCalculatedState =
+        FailedCalculatedState(
+          StakingAmountTooSmall(detail),
+          expireEpochProgress,
+          updateHash,
+          signedUpdate
+        )
+
+      for {
+        _ <- Either.cond(newSharesBig >= BigInt(1), (), tooSmall(s"deposit mints 0 LP shares (incomingPrimary=$incomingPrimaryAmount)"))
+        _ <- Either.cond(
+          incomingPairBig >= BigInt(1),
+          (),
+          tooSmall(s"proportional pair amount rounds to 0 (incomingPrimary=$incomingPrimaryAmount)")
+        )
+        primaryPos <- incomingPrimaryAmount.toPosLong.leftMap(e => tooSmall(s"invalid primary amount: $e"))
+        pairPos <- incomingPairBig.toLong.toPosLong.leftMap(e => tooSmall(s"invalid pair amount: $e"))
+      } yield
+        StakingTokenInfo(
+          primaryToken.copy(amount = primaryPos),
+          pairToken.copy(amount = pairPos),
+          SwapAmount(pairPos),
+          newSharesBig.toLong
+        )
+    } else {
+      // Legacy behavior (pre-activation): preserved byte-for-byte so a rolling upgrade does not fork the chain.
+      val incomingPairAmount =
+        (BigDecimal(incomingPrimaryAmount) * BigDecimal(currentPairTokenAmount)) / BigDecimal(
+          currentPrimaryTokenAmount
+        )
+
+      val relativeDepositIncrease = incomingPrimaryAmount.toDouble / currentPrimaryTokenAmount
+      val newlyIssuedShares = relativeDepositIncrease * liquidityPool.poolShares.totalShares.value
+
+      Right(
+        StakingTokenInfo(
+          primaryToken.copy(amount = incomingPrimaryAmount.toPosLongUnsafe),
+          pairToken.copy(amount = incomingPairAmount.toLong.toPosLongUnsafe),
+          SwapAmount(incomingPairAmount.toLong.toPosLongUnsafe),
+          newlyIssuedShares.toLong
+        )
       )
-    )
+    }
   }
 }

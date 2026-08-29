@@ -218,6 +218,86 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
       )
   }
 
+  test("a vote accepted at the first epoch of a new month survives the preceding month rollover") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val appConfig = config.copy(epochInfo = EpochMetadata(1.day, 5L))
+    val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+    val previousMonth = MonthlyReference(
+      EpochProgress(NonNegLong.unsafeFrom(5L)),
+      EpochProgress(NonNegLong.unsafeFrom(9L)),
+      NonNegLong.unsafeFrom(1L)
+    )
+    val metagraphId = CurrencyId(Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W"))
+    val previousAllocation = Allocation(
+      AllocationId("PreviousValidator", AllocationCategory.NodeOperator),
+      Percentage.unsafeFrom(1.0)
+    )
+    val currentAllocationId = AllocationId("CurrentValidator", AllocationCategory.NodeOperator)
+    val votingPower = VotingPower(NonNegLong.unsafeFrom(7000000000000L), SortedSet.empty)
+
+    val allocations = Allocations(
+      previousMonth,
+      SortedMap(
+        ownerAddress -> UserAllocations(
+          0,
+          RewardAllocationVoteReference.empty,
+          EpochProgress(NonNegLong.unsafeFrom(9L)),
+          SortedSet(previousAllocation)
+        )
+      ),
+      GovernanceVotingResult.empty
+    )
+    val state = DataState(AmmOnChainState.empty, AmmCalculatedState())
+      .focus(_.calculated.allocations)
+      .replace(allocations)
+      .focus(_.calculated.votingPowers)
+      .replace(SortedMap(ownerAddress -> votingPower))
+    val update = getFakeSigned(
+      DataUpdates.RewardAllocationVoteUpdate(
+        metagraphId,
+        ownerAddress,
+        RewardAllocationVoteReference.empty,
+        Seq("CurrentValidator" -> PosLong(10L))
+      )
+    )
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      governanceCombiner = GovernanceCombinerService.make[IO](appConfig, dummyGovernanceValidation)
+
+      // This is the activated StateManager order: close 5..9, then accept epoch-10 updates.
+      rolledState <- governanceCombiner.handleMonthExpiration(state, currentEpoch)
+      updatedState <- governanceCombiner.combineNew(
+        update,
+        rolledState,
+        EpochProgress.MaxValue,
+        currentEpoch,
+        SortedMap.empty,
+        metagraphId
+      )
+
+      currentUserAllocations = updatedState.calculated.allocations.usersAllocations(ownerAddress)
+      frozen = updatedState.calculated.allocations.frozenUsedUserVotes
+    } yield
+      expect.all(
+        frozen.monthlyReference == previousMonth,
+        frozen.votingPowerForAddresses == SortedMap(ownerAddress -> votingPower),
+        frozen.votes.keySet == SortedSet(previousAllocation.id),
+        currentUserAllocations.allocationEpochProgress == currentEpoch,
+        currentUserAllocations.allocations.toList.map(_.id) == List(currentAllocationId)
+      )
+  }
+
   test("Double vote shall correctly be saved") { implicit res =>
     implicit val (h, hs, sp) = res
     val ammOnChainState = AmmOnChainState.empty
