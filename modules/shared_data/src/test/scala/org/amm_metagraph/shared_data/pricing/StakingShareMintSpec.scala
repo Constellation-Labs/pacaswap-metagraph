@@ -18,7 +18,7 @@ import org.amm_metagraph.shared_data.types.DataUpdates.StakingUpdate
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.Staking.StakingReference
 import org.amm_metagraph.shared_data.types.States.{FailedCalculatedState, StakingTokenInfo}
-import org.amm_metagraph.shared_data.validations.Errors.StakingAmountTooSmall
+import org.amm_metagraph.shared_data.validations.Errors.{ArithmeticError, StakingAmountTooSmall}
 import weaver.SimpleIOSuite
 
 /** Regression tests for D2-01 (a dust stake that mints 0 LP shares donates the staker's tokens to incumbent LPs) and D2-02 (the unsafe
@@ -67,6 +67,16 @@ object StakingShareMintSpec extends SimpleIOSuite {
   // 100-token deposit -> floor(1e10 * 1e8 / 1e12) = 1e6 shares
   private val normal: PosLong = PosLong.unsafeFrom(toFixedPoint(100.0))
 
+  // A pool whose pair reserve dwarfs its primary reserve, so a small primary deposit produces a proportional
+  // pair leg above the Long range: incomingPair = floor(incomingPrimary * pairReserve / primaryReserve).
+  private val skewedPrimary = TokenInformation(tokenAId, PosLong.unsafeFrom(1L))
+  private val skewedPair = TokenInformation(tokenBId, PosLong.unsafeFrom(Long.MaxValue))
+  private val (_, skewedLpState) = buildLiquidityPoolCalculatedState(skewedPrimary, skewedPair, owner)
+  private val skewedPool: LiquidityPool = skewedLpState.confirmed.value.head._2
+  // incomingPair = floor(3 * Long.MaxValue / 1) ~= 2.77e19 > 2^64, which BigInt.toLong would wrap to a bogus
+  // in-range value (~9.22e18) that toPosLong accepts, instead of rejecting the deposit.
+  private val overflowing: PosLong = PosLong.unsafeFrom(3L)
+
   test("D2-01/D2-02 (active): a dust deposit is REJECTED as StakingAmountTooSmall, not absorbed with 0 shares") {
     ops(config).map { o =>
       val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(dust)), Hash.empty, pool, anyEpoch, activeOrdinal)
@@ -81,6 +91,15 @@ object StakingShareMintSpec extends SimpleIOSuite {
       val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(normal)), Hash.empty, pool, anyEpoch, activeOrdinal)
       matches(result) {
         case Right(info: StakingTokenInfo) => expect(info.newlyIssuedShares >= 1L)
+      }
+    }
+  }
+
+  test("active: a deposit whose proportional pair leg overflows Long is REJECTED, not wrapped to a tiny charge") {
+    ops(config).map { o =>
+      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(overflowing)), Hash.empty, skewedPool, anyEpoch, activeOrdinal)
+      matches(result) {
+        case Left(FailedCalculatedState(_: ArithmeticError, _, _, _)) => success
       }
     }
   }
