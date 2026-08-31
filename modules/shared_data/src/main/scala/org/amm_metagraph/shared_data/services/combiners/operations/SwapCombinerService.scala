@@ -237,8 +237,8 @@ object SwapCombinerService {
           swapStateValue = SwapCalculatedStateValue(expirationEpoch, swapStateAddress)
 
           updatedPending = swapCalculatedState.pending.filterNot {
-            case PendingSpendAction(update, _, _, _) => update === pendingAction.update
-            case _                                   => false
+            case PendingSpendAction(update, _, _, _, _) => update === pendingAction.update
+            case _                                      => false
           }
 
           newSwapState = swapCalculatedState
@@ -448,7 +448,8 @@ object SwapCombinerService {
                       primaryTokenInformationUpdated = primaryTokenInfo,
                       pairTokenInformationUpdated = pairTokenInfo
                     )
-                    .some
+                    .some,
+                  oldState.calculated.lastSyncGlobalSnapshotOrdinal.some
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {

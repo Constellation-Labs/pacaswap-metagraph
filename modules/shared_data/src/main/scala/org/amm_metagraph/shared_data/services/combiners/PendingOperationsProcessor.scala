@@ -35,17 +35,34 @@ object PendingOperationsProcessor {
     * the one needed by a pending operation, so non-empty partial evidence must never authorize a failed/expired decision. The
     * pre-activation ordering is retained for deterministic replay of already-signed history.
     */
+  /** Whether the scan that just ran could possibly have seen this operation settle.
+    *
+    * A scan starting above the cursor the operation was generated under cannot contain its acceptance, so finding nothing says nothing.
+    * Unknown provenance (`None`, written before the field existed) is treated the same way: not provable.
+    */
+  private[shared_data] def evidenceCoversOperation(
+    evidenceLowerBound: SnapshotOrdinal,
+    generatedAtGlobalOrdinal: Option[SnapshotOrdinal]
+  ): Boolean =
+    generatedAtGlobalOrdinal.exists(_.value.value >= evidenceLowerBound.value.value)
+
   private[shared_data] def selectPendingSpendActions[A](
     currentSnapshotOrdinal: SnapshotOrdinal,
     evidenceComplete: Boolean,
     readReturnedActions: Boolean,
-    pendingSpendActions: SortedSet[A]
+    pendingSpendActions: SortedSet[A],
+    evidenceCovers: A => Boolean = (_: A) => true
   )(isExpired: A => Boolean): SortedSet[A] = {
     val none = pendingSpendActions.filter(_ => false)
 
     if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete) none
     else if (readReturnedActions) pendingSpendActions
     else if (!evidenceComplete) none
+    else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal))
+      // A complete scan is still only evidence about the range it covered. Operations generated
+      // before the cursor the scan started from are held, not expired: that is the exact case the
+      // 741789 rollback got wrong, and the bounded cursor makes it reachable by design.
+      pendingSpendActions.filter(p => evidenceCovers(p) && isExpired(p))
     else pendingSpendActions.filter(isExpired)
   }
 
@@ -259,7 +276,12 @@ object PendingOperationsProcessor {
           context.currentSnapshotOrdinal,
           context.spendActionsEvidenceComplete,
           context.globalSnapshotsSyncSpendActions.nonEmpty,
-          pendingSpendActions
+          pendingSpendActions,
+          (pending: PendingSpendAction[AmmUpdate]) =>
+            PendingOperationsProcessor.evidenceCoversOperation(
+              state.calculated.lastSyncGlobalSnapshotOrdinal,
+              pending.generatedAtGlobalOrdinal
+            )
         ) { pending =>
           pending.update.value match {
             case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress

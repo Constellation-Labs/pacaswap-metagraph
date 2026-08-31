@@ -111,7 +111,7 @@ object WithdrawalCombinerService {
         pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(

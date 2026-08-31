@@ -123,4 +123,54 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       ProtocolActivation.governanceMonthBoundaryFixActive(ord(740000L))
     )
   }
+
+  pureTest("the cursor hold is bounded, so it cannot starve the monitoring service into a restart loop") {
+    val head = ord(6856623L)
+    val stuck = ord(6855921L)
+    val recent = ord(6856600L)
+
+    expect.all(
+      // Within the bound the hold still works: this is what keeps unresolved evidence reachable.
+      StateManager.selectNextGlobalSnapshotCursor(ord(740000L), evidenceComplete = false, head, recent) == recent,
+      // Past it the cursor is released. On 2026-08-31 it sat at 6855921 while the head ran to
+      // 6856623, the monitoring service saw no progress in that exact value, and force-restarted
+      // all three nodes thirteen times. Each restart re-emptied the cache that caused the hold.
+      head.value.value - stuck.value.value > StateManager.maxCursorHoldOrdinals,
+      StateManager.selectNextGlobalSnapshotCursor(ord(740000L), evidenceComplete = false, head, stuck) == head
+    )
+  }
+
+  pureTest("a scan that started after an operation was generated can never expire it") {
+    val generatedAt = ord(6855900L)
+
+    expect.all(
+      // The 741789 case: the cursor had moved above the point the operation was generated under, so
+      // the scan could not contain its acceptance. Finding nothing there proves nothing.
+      !PendingOperationsProcessor.evidenceCoversOperation(ord(6856000L), Some(generatedAt)),
+      // A scan reaching back to or below that point is real evidence.
+      PendingOperationsProcessor.evidenceCoversOperation(generatedAt, Some(generatedAt)),
+      PendingOperationsProcessor.evidenceCoversOperation(ord(6855800L), Some(generatedAt)),
+      // Unknown provenance, from a state written before the field existed, is not provable either.
+      !PendingOperationsProcessor.evidenceCoversOperation(ord(1L), None)
+    )
+  }
+
+  pureTest("coverage gates expiry only once the gate is active, so signed history is untouched") {
+    val covered = Set(1)
+    def sel(o: Long) =
+      PendingOperationsProcessor.selectPendingSpendActions(
+        ord(o),
+        evidenceComplete = true,
+        readReturnedActions = false,
+        pending,
+        (i: Int) => covered.contains(i)
+      )(_ => true)
+
+    expect.all(
+      // Active: only the operation whose lifetime the scan covered may be expired.
+      sel(740000L) == SortedSet(1),
+      // Below the gate the old behaviour is reproduced exactly, uncovered operation included.
+      sel(739999L) == pending
+    )
+  }
 }

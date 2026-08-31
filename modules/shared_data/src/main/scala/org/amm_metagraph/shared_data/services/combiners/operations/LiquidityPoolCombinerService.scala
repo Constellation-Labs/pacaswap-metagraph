@@ -146,8 +146,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ): SortedSet[PendingAction[LiquidityPoolUpdate]] =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                           => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                              => false
         }
 
       def combineNew(
@@ -309,7 +309,8 @@ object LiquidityPoolCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  None
+                  None,
+                  oldState.calculated.lastSyncGlobalSnapshotOrdinal.some
                 )
 
                 updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + pendingSpendAction

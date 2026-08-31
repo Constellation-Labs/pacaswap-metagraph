@@ -16,8 +16,8 @@ import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, Operation
   * The three metagraph L0 nodes restarted at 20:16:39Z on 2026-08-31. At ordinal 741789 the combine judged three pending spend actions,
   * found no acceptance for them in the global range it scanned, and expired all three. Two of them had in fact settled hours earlier:
   *
-  *   700ae9df…  SWAP -> DAG, forward applied 17:43:59Z, rolled back 20:21:05Z
-  *   96e16834…  SWAP -> DAG, forward applied 18:45:22Z, rolled back 20:21:05Z
+  * 700ae9df… SWAP -> DAG, forward applied 17:43:59Z, rolled back 20:21:05Z 96e16834… SWAP -> DAG, forward applied 18:45:22Z, rolled back
+  * 20:21:05Z
   *
   * The external collateral monitor read book == wallet at 17:02, 18:04, 19:02 and 20:03, which is the proof that both forward credits were
   * matched on the ledger: had they not settled, the book would already have disagreed from 17:43 onward. The rollbacks then moved the book
@@ -31,15 +31,12 @@ import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, Operation
   * discard every trade between the moment they were measured and the activation ordinal. These are the exact amounts the rollback moved,
   * read from the SWAP_ROLLBACK entries in the node's own pool log, and they are applied to whatever the reserves are at activation:
   *
-  *   700ae9df  SWAP 5100830170115943 -> 5098896903620698  (-1933266495245)
-  *             DAG  1143472155147592 -> 1143904409617034  (+432254469442)
-  *   96e16834  SWAP 5098896903620698 -> 5098874904568618  (-21999052080)
-  *             DAG  1143904409617034 -> 1143909326453037  (+4916836003)
+  * 700ae9df SWAP 5100830170115943 -> 5098896903620698 (-1933266495245) DAG 1143472155147592 -> 1143904409617034 (+432254469442) 96e16834
+  * SWAP 5098896903620698 -> 5098874904568618 (-21999052080) DAG 1143904409617034 -> 1143909326453037 (+4916836003)
   *
   * Summed, and independently equal to the divergence the monitor measures against the live wallet:
   *
-  *   SWAP  +1955265547325   (book was short by this)
-  *   DAG    -437171305445   (book was long by this)
+  * SWAP +1955265547325 (book was short by this) DAG -437171305445 (book was long by this)
   *
   * This restores the book. It does not compensate anyone: the two swappers received what the ledger paid them, and the pool holds what the
   * ledger gave it. Only the book was wrong.
@@ -99,7 +96,8 @@ object IncidentSwapRollbackCorrection {
         updatedLpState = lpState
           .focus(_.confirmed.value)
           .modify(_.updated(poolId, corrected: LiquidityPool))
-      } yield state
-        .focus(_.operations)
-        .modify(_.updated(OperationType.LiquidityPool, updatedLpState))
+      } yield
+        state
+          .focus(_.operations)
+          .modify(_.updated(OperationType.LiquidityPool, updatedLpState))
 }
