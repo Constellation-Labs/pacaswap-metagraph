@@ -70,4 +70,26 @@ object ProtocolActivation {
 
   def governanceMonthBoundaryFixActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= governanceMonthBoundaryFix.value.value
+
+  /** The collateral invariant stops observing and starts refusing.
+    *
+    * On 2026-08-31 at ordinal 741789 the combine rolled back two swaps that had already settled on the global ledger, and built the
+    * snapshot anyway. The invariant SAW it - `COLLATERAL_INVARIANT BREACH ordinal=741800 ledger=DAG` is in the node log - but it sampled
+    * one ordinal in fifty and only warned, so the divergence became history. From this ordinal it runs on every snapshot and raises, which
+    * means a combine that would leave the book disagreeing with the wallet produces no snapshot at all.
+    *
+    * The cost is explicit: a false positive halts the chain rather than corrupting it. That trade is only defensible because the check nets
+    * in-flight value from the metagraph's own pending spend actions, and because it was run in report-only mode on every ordinal first to
+    * confirm it stays silent under normal trading.
+    */
+  val collateralInvariantEnforced: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(760000L))
+
+  def collateralInvariantEnforcedActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= collateralInvariantEnforced.value.value
+
+  /** Restores the book after the 741789 rollback. See IncidentSwapRollbackCorrection. */
+  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(745000L))
+
+  def swapRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= swapRollbackCorrection.value.value
 }

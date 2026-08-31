@@ -8,6 +8,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.swap.CurrencyId
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -42,9 +43,11 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   *   - Rewards. Minted by the currency reward mechanism, never custodied at the metagraph address, so outstanding rewards are not a claim
   *     on the wallet and are not subtracted.
   *
-  * Reported, not enforced. The invariant is violated by construction right now - the book is short 1,641,127.95926795 DAG plus two token
-  * legs, pending treasury funding or a write-down - so rejecting on breach would refuse every snapshot and halt the chain. Flip `enforce`
-  * on once the outstanding gap is closed.
+  * Advisory below `ProtocolActivation.collateralInvariantEnforced`, refusing from it onwards. It was written advisory because the book was
+  * short 1,641,127.95926795 DAG by construction at the time, pending treasury funding; rejecting then would have refused every snapshot.
+  * That funding landed on 2026-08-27 and every ledger read 1:1, but the check was left sampling one ordinal in fifty and only warning. On
+  * 2026-08-31 the combine rolled back two already-settled swaps at ordinal 741789 and built the snapshot anyway. The invariant saw it -
+  * `COLLATERAL_INVARIANT BREACH ordinal=741800 ledger=DAG` is in the node log - four ordinals too late to prevent anything.
   *
   * DAG is fungible and shared across every pool, so only the aggregate is meaningful. Each token belongs to exactly one pool, so those are
   * exact per pool. Never derive one from the other: that conflation previously produced a 147,940.10 DAG error.
@@ -141,8 +144,13 @@ object CollateralInvariant {
       // malformed state - can throw while the effect is being BUILT. An eager throw here would
       // escape the caller's error handling and take the whole combine down with it, which is
       // exactly what happened the first time this was written.
+      // Sampling only applies while the check is advisory. Once it can refuse a snapshot it has to
+      // look at every one: a breach the combine is allowed to skip past is the failure this whole
+      // mechanism exists to prevent, and 49 unchecked ordinals in 50 is how 741789 got built.
+      val enforced = ProtocolActivation.collateralInvariantEnforcedActive(context.currentSnapshotOrdinal)
+
       Async[F].defer {
-        if (ordinal % checkEveryNOrdinals =!= 0L) Async[F].unit
+        if (!enforced && ordinal % checkEveryNOrdinals =!= 0L) Async[F].unit
         else {
           val self = context.currencyId.value
 
@@ -184,7 +192,9 @@ object CollateralInvariant {
 
               // Only breaches are logged. A per-row debug line on every ledger every time
               // would put avoidable I/O on the consensus path for no signal.
-              anomaly >> rows.filter(_.breached).traverse_ { r =>
+              val breaches = rows.filter(_.breached)
+
+              val describe = breaches.traverse_ { r =>
                 logger.warn(
                   s"COLLATERAL_INVARIANT BREACH ordinal=$ordinal ledger=${r.ledger} " +
                     s"reserve=${r.reserve} balance=${r.balance} inFlightNet=${r.inFlightNet} " +
@@ -192,10 +202,31 @@ object CollateralInvariant {
                     "the book promises more than the wallet can back"
                 )
               }
+
+              // Refusing means this combine yields no snapshot. That is the point: the alternative
+              // is committing a book the wallet cannot back, which is unrecoverable without a
+              // one-time fix. Only raise once the gate is active, so signed history keeps replaying
+              // under the advisory behaviour it was produced with.
+              val enforce: F[Unit] =
+                if (enforced && breaches.nonEmpty)
+                  logger.error(
+                    s"COLLATERAL_INVARIANT_ENFORCED ordinal=$ordinal: refusing to build this snapshot. " +
+                      s"${breaches.size} ledger(s) short: ${breaches.map(_.ledger).mkString(", ")}."
+                  ) >> new IllegalStateException(
+                    s"Collateral invariant violated at ordinal $ordinal on ${breaches.map(_.ledger).mkString(", ")}"
+                  ).raiseError[F, Unit]
+                else Async[F].unit
+
+              anomaly >> describe >> enforce
           }
         }
       }
-        .handleErrorWith(e => logger.warn(e)("COLLATERAL_INVARIANT check failed; combine unaffected"))
+        // A fault in the CHECK must still never take the combine down - that bug was made once
+        // already. But a deliberate refusal has to pass through, or enforcement is decorative.
+        .handleErrorWith {
+          case e: IllegalStateException if enforced => e.raiseError[F, Unit]
+          case e                                    => logger.warn(e)("COLLATERAL_INVARIANT check failed; combine unaffected")
+        }
     }
   }
 }
