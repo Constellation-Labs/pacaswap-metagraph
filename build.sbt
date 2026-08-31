@@ -12,6 +12,8 @@ enablePlugins(GitVersioningPlugin)
 
 ThisBuild / assemblyMergeStrategy := {
   case "logback.xml"                                       => MergeStrategy.first
+  // Override Tessellation's currency-l0.conf so the evidence backfill can span the post-restart gap.
+  case "currency-l0.conf"                                  => MergeStrategy.first
   case x if x.contains("io.netty.versions.properties")     => MergeStrategy.discard
   case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
   case x if x.contains("rally-version.properties")         => MergeStrategy.concat
