@@ -446,12 +446,33 @@ class LiquidityPoolOperations[F[_]: Async](
           signedUpdate
         )
 
+      def outOfRange(detail: String): FailedCalculatedState =
+        FailedCalculatedState(
+          ArithmeticError(detail),
+          expireEpochProgress,
+          updateHash,
+          signedUpdate
+        )
+
       for {
         _ <- Either.cond(newSharesBig >= BigInt(1), (), tooSmall(s"deposit mints 0 LP shares (incomingPrimary=$incomingPrimaryAmount)"))
         _ <- Either.cond(
           incomingPairBig >= BigInt(1),
           (),
           tooSmall(s"proportional pair amount rounds to 0 (incomingPrimary=$incomingPrimaryAmount)")
+        )
+        // Fail closed instead of narrowing with BigInt.toLong, which truncates modulo 2^64: a deposit whose
+        // proportional pair leg or minted share count exceeds the Long range is rejected, never silently wrapped
+        // to a bogus in-range charge that no longer reflects the true proportional amount.
+        _ <- Either.cond(
+          incomingPairBig.isValidLong,
+          (),
+          outOfRange(s"proportional pair amount $incomingPairBig exceeds the representable range (incomingPrimary=$incomingPrimaryAmount)")
+        )
+        _ <- Either.cond(
+          newSharesBig.isValidLong,
+          (),
+          outOfRange(s"minted shares $newSharesBig exceed the representable range (incomingPrimary=$incomingPrimaryAmount)")
         )
         primaryPos <- incomingPrimaryAmount.toPosLong.leftMap(e => tooSmall(s"invalid primary amount: $e"))
         pairPos <- incomingPairBig.toLong.toPosLong.leftMap(e => tooSmall(s"invalid pair amount: $e"))
