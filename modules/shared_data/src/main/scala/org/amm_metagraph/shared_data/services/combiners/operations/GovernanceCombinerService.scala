@@ -173,7 +173,9 @@ object GovernanceCombinerService {
               HasherSelector[F].withCurrent { implicit hs =>
                 RewardAllocationVoteReference.of(signedUpdate)
               }.flatMap { reference =>
-                val allocationsSum = signedUpdate.allocations.map { case (_, weight) => weight.value }.sum
+                // Sum in BigInt so crafted weights cannot overflow Long and wrap the divisor to a small value, which
+                // would push each weight/sum ratio above its true share and inflate the stored allocation percentages.
+                val allocationsSum = signedUpdate.allocations.map { case (_, weight) => BigInt(weight.value) }.sum
 
                 val allocationsUpdate = signedUpdate.allocations.map {
                   case (key, weight) =>

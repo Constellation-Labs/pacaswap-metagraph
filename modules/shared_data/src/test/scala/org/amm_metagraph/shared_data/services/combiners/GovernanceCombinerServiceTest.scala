@@ -298,6 +298,55 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
       )
   }
 
+  test("a vote whose weights would overflow a Long sum yields normalized allocations, not inflated ones") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val metagraphId = CurrencyId(Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W"))
+    val currentEpoch = EpochProgress(NonNegLong.unsafeFrom(10L))
+    val votingPower = VotingPower(NonNegLong.unsafeFrom(7000000000000L), SortedSet.empty)
+    val state = DataState(AmmOnChainState.empty, AmmCalculatedState())
+      .focus(_.calculated.votingPowers)
+      .replace(SortedMap(ownerAddress -> votingPower))
+
+    // Four weights whose true sum (~2.46e19) exceeds 2^64. A raw Long sum wraps to ~6.2e18, which would push the
+    // per-target ratios up so their stored percentages sum to ~3.98 instead of 1.0. The BigInt sum keeps them normalized.
+    val update = getFakeSigned(
+      DataUpdates.RewardAllocationVoteUpdate(
+        metagraphId,
+        ownerAddress,
+        RewardAllocationVoteReference.empty,
+        Seq(
+          "val1" -> PosLong(6200000000000000000L),
+          "val2" -> PosLong(6148914691236517206L),
+          "val3" -> PosLong(6148914691236517205L),
+          "val4" -> PosLong(6148914691236517205L)
+        )
+      )
+    )
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      governanceCombiner = GovernanceCombinerService.make[IO](config, dummyGovernanceValidation)
+      updated <- governanceCombiner.combineNew(update, state, EpochProgress.MaxValue, currentEpoch, SortedMap.empty, metagraphId)
+      allocations = updated.calculated.allocations.usersAllocations(ownerAddress).allocations
+      percentageSum = allocations.toList.map(_.percentage.value).sum
+    } yield
+      expect.all(
+        allocations.size == 4,
+        percentageSum <= BigDecimal(1.0001),
+        percentageSum >= BigDecimal(0.9999)
+      )
+  }
+
   test("Double vote shall correctly be saved") { implicit res =>
     implicit val (h, hs, sp) = res
     val ammOnChainState = AmmOnChainState.empty
