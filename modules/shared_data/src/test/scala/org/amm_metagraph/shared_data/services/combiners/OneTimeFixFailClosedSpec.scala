@@ -144,6 +144,32 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
     } yield expect.all(r.isRight, r.exists(_ == emptyState))
   }
 
+  test("a failure at the swap rollback correction ordinal must NOT return oldState") { res =>
+    implicit val (h, sp) = res
+    for {
+      kp <- KeyPairGenerator.makeKeyPair[IO]
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        ord(ProtocolActivation.swapRollbackCorrection.value.value - 1L),
+        AMM
+      )
+      // No OneTimeFixesHandler ordinal is active. The stub StateManager raises after that handler,
+      // proving the correction ordinal itself selects the fail-closed branch in the production
+      // L0CombinerService wrapper.
+      r <- combinerWith(handler(Set.empty)).combine(emptyState, List.empty)(ctx).attempt
+    } yield
+      expect.all(
+        r.isLeft,
+        r.swap.exists(_.getMessage.contains("must not be reached")),
+        !r.exists(_ == emptyState)
+      )
+  }
+
   test("the real handler declares 731647, and only fix ordinals, as one-time") { _ =>
     for {
       ref <- SignallingRef.of[IO, SnapshotOrdinal](SnapshotOrdinal.MinValue)

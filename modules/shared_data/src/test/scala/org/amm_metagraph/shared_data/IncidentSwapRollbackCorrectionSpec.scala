@@ -83,15 +83,22 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
     expect.all(k == BigInt(swapLeg) * BigInt(dagLeg), k != staleK)
   }
 
-  pureTest("it fires at exactly one ordinal, so the delta cannot compound") {
+  pureTest("it fires exactly once even when multiple data blocks are combined at the activation ordinal") {
     val before = stateWith(poolAt(liveSwapLeg, liveDagLeg))
+      .focus(_.lastProcessedCurrencyOrdinal)
+      .replace(Some(ord(at.value.value - 1L)))
     val one = IncidentSwapRollbackCorrection.applyTo(before, at).toOption.get
-    // Feeding the corrected state back in at a later ordinal must be a no-op, which is what makes
-    // it safe to sit on a path that runs every snapshot.
-    val twice = IncidentSwapRollbackCorrection.applyTo(one, ord(at.value.value + 1L)).toOption.get
+    // Tessellation calls combine once per accepted data block. cleanupAndFinalize records the
+    // ordinal after block one, and block two receives that chained state at the same ordinal.
+    val finalizedBlockOne = one
+      .focus(_.lastProcessedCurrencyOrdinal)
+      .replace(Some(at))
+    val secondBlock = IncidentSwapRollbackCorrection.applyTo(finalizedBlockOne, at).toOption.get
+    val later = IncidentSwapRollbackCorrection.applyTo(finalizedBlockOne, ord(at.value.value + 1L)).toOption.get
     expect.all(
       legs(IncidentSwapRollbackCorrection.applyTo(before, ord(at.value.value - 1L)).toOption.get) == legs(before),
-      legs(twice) == legs(one)
+      legs(secondBlock) == legs(one),
+      legs(later) == legs(one)
     )
   }
 

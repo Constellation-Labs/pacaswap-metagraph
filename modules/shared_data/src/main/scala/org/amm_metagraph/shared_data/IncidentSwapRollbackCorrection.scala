@@ -59,10 +59,15 @@ object IncidentSwapRollbackCorrection {
     state: AmmCalculatedState,
     currentSnapshotOrdinal: SnapshotOrdinal
   ): Either[CorrectionError, AmmCalculatedState] =
-    // Exactly at the ordinal, never from it onwards: this is a one-shot delta and `>=` would
-    // re-apply it on every subsequent snapshot. Retries of the same ordinal are safe because each
-    // combine attempt starts from the state at ordinal-1.
-    if (currentSnapshotOrdinal =!= ProtocolActivation.swapRollbackCorrection)
+    // `combine` runs once per accepted data block and chains the resulting state, so the same
+    // currency ordinal can be observed more than once. The exact-ordinal check prevents the delta
+    // from leaking into later snapshots; the state-carried ordinal prevents a second data block in
+    // the activation snapshot from applying it again. A replay starts from the previous ordinal and
+    // therefore still applies the correction exactly once.
+    if (
+      currentSnapshotOrdinal =!= ProtocolActivation.swapRollbackCorrection ||
+      state.lastProcessedCurrencyOrdinal.exists(_ >= ProtocolActivation.swapRollbackCorrection)
+    )
       Right(state)
     else
       for {

@@ -87,8 +87,13 @@ object ProtocolActivation {
   def collateralInvariantEnforcedActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= collateralInvariantEnforced.value.value
 
-  /** Restores the book after the 741789 rollback. See IncidentSwapRollbackCorrection. */
-  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(745000L))
+  /** Restores the book after the 741789 rollback. See IncidentSwapRollbackCorrection.
+    *
+    * Prepared against live ordinal 743536 on 2026-09-01. At the nominal ~43s cadence, 747000 leaves about 41 hours for CI and the
+    * coordinated full-cluster rollout. This exact ordinal MUST be checked against the live head immediately before deployment; if it can no
+    * longer be reached by every node on the new binary, move it forward before publishing the release.
+    */
+  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(747000L))
 
   def swapRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= swapRollbackCorrection.value.value
