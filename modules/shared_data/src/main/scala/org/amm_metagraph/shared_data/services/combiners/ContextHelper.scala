@@ -7,8 +7,8 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 
 import org.amm_metagraph.shared_data.ProtocolActivation
@@ -27,6 +27,22 @@ trait ContextHelper[F[_]] {
 }
 
 object ContextHelper {
+  private[shared_data] def selectCurrentSnapshotOrdinal(
+    contextPredecessorOrdinal: SnapshotOrdinal,
+    lastProcessedCurrencyOrdinal: Option[SnapshotOrdinal]
+  ): SnapshotOrdinal = {
+    val contextFrame = contextPredecessorOrdinal.next
+
+    // v3.5.29 exposes the live currency head while DataApplicationTraverse replays historical
+    // states, so the context can be far ahead of the state being rebuilt. Conversely, live
+    // acceptance calls combine once per data block: after block one the chained state is one frame
+    // ahead while the context still identifies the same snapshot. The earlier frame is correct in
+    // both cases.
+    lastProcessedCurrencyOrdinal
+      .map(_.next)
+      .fold(contextFrame)(stateFrame => if (stateFrame < contextFrame) stateFrame else contextFrame)
+  }
+
   def make[F[_]: Async](
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     globalSyncDataIntegrityActivation: EpochProgress = EpochProgress.MaxValue
@@ -54,7 +70,10 @@ object ContextHelper {
           logger.error(message) >> Async[F].raiseError(new Exception(message))
         }
 
-        currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+        currentSnapshotOrdinal = selectCurrentSnapshotOrdinal(
+          lastCurrencySnapshot.ordinal,
+          state.calculated.lastProcessedCurrencyOrdinal
+        )
         currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
 
         _ <- logger.info(s"lastSyncGlobalEpochProgress=$lastSyncGlobalEpochProgress")

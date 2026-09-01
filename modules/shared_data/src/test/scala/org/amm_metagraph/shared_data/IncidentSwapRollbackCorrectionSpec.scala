@@ -10,6 +10,7 @@ import io.constellationnetwork.security.hash.Hash
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.services.combiners.ContextHelper
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, LiquidityPoolCalculatedState, OperationType}
 import weaver.SimpleIOSuite
@@ -58,6 +59,21 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
 
   private val at = ProtocolActivation.swapRollbackCorrection
   private def ord(o: Long): SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(o))
+
+  pureTest("the ordinal frame is stable across live blocks and advances deterministically during replay") {
+    val predecessor = ord(at.value.value - 1L)
+
+    expect.all(
+      // First live block.
+      ContextHelper.selectCurrentSnapshotOrdinal(predecessor, Some(predecessor)) == at,
+      // Second live block receives block one's finalized state but the same context predecessor.
+      ContextHelper.selectCurrentSnapshotOrdinal(predecessor, Some(at)) == at,
+      // Historical replay ignores a live context far ahead of the state being reconstructed.
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(at.value.value + 100000L), Some(predecessor)) == at,
+      // Legacy states without the persisted field preserve the original context behavior.
+      ContextHelper.selectCurrentSnapshotOrdinal(predecessor, None) == at
+    )
+  }
 
   pureTest("the correction closes exactly the divergence the monitor measured") {
     val before = stateWith(poolAt(liveSwapLeg, liveDagLeg))
