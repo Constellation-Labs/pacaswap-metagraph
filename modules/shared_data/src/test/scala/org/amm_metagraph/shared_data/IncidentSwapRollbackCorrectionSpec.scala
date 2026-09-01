@@ -103,6 +103,18 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
     )
   }
 
+  pureTest("it retries after activation when SDK fallback preserved the pre-correction state") {
+    val before = stateWith(poolAt(liveSwapLeg, liveDagLeg))
+      .focus(_.lastProcessedCurrencyOrdinal)
+      .replace(Some(ord(at.value.value - 1L)))
+    val retried = IncidentSwapRollbackCorrection.applyTo(before, ord(at.value.value + 1L)).toOption.get
+
+    expect.all(
+      legs(retried)._1 - liveSwapLeg == measuredSwapShortfall,
+      liveDagLeg - legs(retried)._2 == measuredDagExcess
+    )
+  }
+
   pureTest("it refuses rather than guessing when the pool is not the shape it expects") {
     val flipped = poolAt(liveSwapLeg, liveDagLeg)
       .focus(_.tokenA.identifier)
