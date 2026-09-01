@@ -54,6 +54,19 @@ object IncidentSwapRollbackCorrection {
 
   case class CorrectionError(message: String)
 
+  private def adjustLeg(label: String, current: Long, delta: Long): Either[CorrectionError, PosLong] = {
+    val adjusted = BigInt(current) + BigInt(delta)
+
+    for {
+      value <- Either.cond(
+        adjusted.isValidLong,
+        adjusted.toLong,
+        CorrectionError(s"$label leg is outside Long range after correction: $adjusted")
+      )
+      positive <- PosLong.from(value).leftMap(e => CorrectionError(s"$label leg would become invalid: $e"))
+    } yield positive
+  }
+
   /** Left on anything unexpected. The caller fails the snapshot rather than applying a partial correction. */
   def applyTo(
     state: AmmCalculatedState,
@@ -80,12 +93,8 @@ object IncidentSwapRollbackCorrection {
           (),
           CorrectionError(s"expected tokenB of $poolId to be DAG, found ${pool.tokenB.identifier}")
         )
-        newSwap <- PosLong
-          .from(pool.tokenA.amount.value + swapDelta)
-          .leftMap(e => CorrectionError(s"SWAP leg would become invalid: $e"))
-        newDag <- PosLong
-          .from(pool.tokenB.amount.value + dagDelta)
-          .leftMap(e => CorrectionError(s"DAG leg would become invalid: $e"))
+        newSwap <- adjustLeg("SWAP", pool.tokenA.amount.value, swapDelta)
+        newDag <- adjustLeg("DAG", pool.tokenB.amount.value, dagDelta)
         corrected = pool
           .focus(_.tokenA.amount)
           .replace(newSwap)

@@ -161,8 +161,8 @@ object States {
 
     def getPendingUpdates: SortedSet[Signed[UpdateType]] =
       pending.collect {
-        case PendingAllowSpend(update, _, _)        => update
-        case PendingSpendAction(update, _, _, _, _) => update
+        case PendingAllowSpend(update, _, _)     => update
+        case PendingSpendAction(update, _, _, _) => update
       }
   }
 
@@ -314,14 +314,7 @@ object States {
     update: Signed[A],
     updateHash: Hash,
     generatedSpendAction: SpendAction,
-    override val pricingTokenInfo: Option[PricingTokenInfo] = None,
-    /** The global cursor when this SpendAction was generated, so a later scan can tell whether it ever covered this operation's lifetime.
-      * Absence in a scan that STARTED after the operation was generated proves nothing, and concluding otherwise is what rolled back two
-      * already-settled swaps at ordinal 741789.
-      *
-      * Option/None so states written before this field decode unchanged. None means "unknown", which is treated as not-provable.
-      */
-    generatedAtGlobalOrdinal: Option[SnapshotOrdinal] = None
+    override val pricingTokenInfo: Option[PricingTokenInfo] = None
   ) extends PendingAction[A]
 
   object PendingSpendAction {

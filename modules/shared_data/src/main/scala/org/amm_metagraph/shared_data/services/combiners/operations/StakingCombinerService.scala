@@ -146,8 +146,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                        => false
+          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                     => false
         }
 
       def combineNew(
@@ -332,8 +332,7 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  pendingAllowSpendUpdate.pricingTokenInfo,
-                  oldState.calculated.lastSyncGlobalSnapshotOrdinal.some
+                  pendingAllowSpendUpdate.pricingTokenInfo
                 )
 
                 updatedPendingSpendActionCalculatedState =

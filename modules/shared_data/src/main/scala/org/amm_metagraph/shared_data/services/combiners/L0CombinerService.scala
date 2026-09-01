@@ -9,6 +9,7 @@ import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -22,6 +23,12 @@ trait L0CombinerService[F[_]] {
 }
 
 object L0CombinerService {
+  private[shared_data] def mustFailClosed(
+    nextOrdinal: Option[io.constellationnetwork.schema.SnapshotOrdinal],
+    atOneTimeFix: Boolean
+  ): Boolean =
+    atOneTimeFix || nextOrdinal.contains(ProtocolActivation.swapRollbackCorrection)
+
   def make[F[_]: Async](
     stateManager: StateManager[F],
     updateProcessor: NewUpdatesProcessor[F],
@@ -98,15 +105,15 @@ object L0CombinerService {
         atOneTimeFix = nextOrdinal.exists(oneTimeFixesHandler.isOneTimeFixOrdinal)
         result <- run(currencySnapshotOpt).handleErrorWith { e =>
           val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
-          if (atOneTimeFix)
+          if (L0CombinerService.mustFailClosed(nextOrdinal, atOneTimeFix))
             // A one-time state rewrite is paired with balance artifacts emitted on a separate
             // path, which fails closed. Swallowing here would ship the deductions WITHOUT the
             // reserve restoration and the frozen-state purge, leaving a partial, unrecoverable
             // snapshot. The two must land together or the snapshot must not be built at all.
             logger.error(e)(
-              s"COMBINE_FAILED_AT_ONE_TIME_FIX ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
-                "build this snapshot. The paired balance artifacts must not ship without this state " +
-                "change. Fix the cause and restart; do NOT let the node proceed past this ordinal."
+              s"COMBINE_FAILED_AT_CONSENSUS_CORRECTION ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
+                "build this snapshot. A required one-shot state transition did not apply atomically. " +
+                "Fix the cause and restart; do NOT let the node proceed past this ordinal."
             ) >> Async[F].raiseError[DataState[AmmOnChainState, AmmCalculatedState]](e)
           else
             logger

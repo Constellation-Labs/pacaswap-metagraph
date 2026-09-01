@@ -50,7 +50,7 @@ case class StakingRoutes[F[_]: Async](
             stakingTokenInfo.incomingPairAmount.value.some,
             stateTransitionType
           )
-        case PendingSpendAction(update, _, _, Some(stakingTokenInfo: StakingTokenInfo), _) =>
+        case PendingSpendAction(update, _, _, Some(stakingTokenInfo: StakingTokenInfo)) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,
@@ -68,7 +68,7 @@ case class StakingRoutes[F[_]: Async](
             none,
             stateTransitionType
           )
-        case PendingSpendAction(update, _, _, _, _) =>
+        case PendingSpendAction(update, _, _, _) =>
           StakingStateResponse(
             update.source.some,
             update.tokenAId,

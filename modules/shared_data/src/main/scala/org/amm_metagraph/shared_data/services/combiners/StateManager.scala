@@ -30,31 +30,21 @@ trait StateManager[F[_]] {
 }
 
 object StateManager {
-
-  /** How far the cursor may fall behind the synchronized head before it is released.
-    *
-    * Holding on incomplete evidence is correct in principle and self-sustaining in practice: the in-memory global snapshot store is
-    * forward-only, so after a restart the first ordinal above the cursor is never resolvable, the hold never lifts, and the cursor never
-    * advances. On 2026-08-31 that pinned the cursor at global 6855921 for three hours. The monitoring service watches exactly this value,
-    * saw no progress, and force-restarted all three nodes thirteen times, each restart re-emptying the cache that caused the hold.
-    *
-    * So the hold is bounded. Past the bound the cursor advances and says so, which restores liveness. It does NOT make expiry safe again -
-    * that is what `generatedAtGlobalOrdinal` is for, and the two must ship together: releasing the cursor without it is precisely how an
-    * already-settled operation gets judged against a window that never contained it.
-    */
-  val maxCursorHoldOrdinals: Long = 500L
-
   private[shared_data] def selectNextGlobalSnapshotCursor(
     currentSnapshotOrdinal: SnapshotOrdinal,
     evidenceComplete: Boolean,
     lastSyncGlobalOrdinal: SnapshotOrdinal,
-    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal
+    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,
+    hasPendingSpendActions: Boolean
   ): SnapshotOrdinal =
-    if (
-      ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) &&
-      !evidenceComplete &&
-      lastSyncGlobalOrdinal.value.value - lastContiguousGlobalSnapshotOrdinal.value.value <= maxCursorHoldOrdinals
-    ) lastContiguousGlobalSnapshotOrdinal
+    if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal)) {
+      // Skipping a cold-cache gap is harmless only when no pending settlement can be hidden in it.
+      // With pending SpendActions, preserve the unresolved range until it can be read. This favors
+      // a visible liveness failure over silently rolling back a transfer that already settled.
+      if (!evidenceComplete && hasPendingSpendActions) lastContiguousGlobalSnapshotOrdinal
+      else lastSyncGlobalOrdinal
+    } else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete)
+      lastContiguousGlobalSnapshotOrdinal
     else lastSyncGlobalOrdinal
 
   def make[F[_]: Async](
@@ -179,7 +169,8 @@ object StateManager {
           context.currentSnapshotOrdinal,
           context.spendActionsEvidenceComplete,
           context.lastSyncGlobalOrdinal,
-          context.lastContiguousGlobalSnapshotOrdinal
+          context.lastContiguousGlobalSnapshotOrdinal,
+          PendingOperationsProcessor.hasPendingSpendActions(rewardsCleanedState.calculated)
         )
 
         stateUpdatedByLastGlobalSync = rewardsCleanedState

@@ -59,6 +59,22 @@ object ProtocolActivation {
   def evidenceCompletenessFirstActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= evidenceCompletenessFirst.value.value
 
+  /** Makes settlement resolution operation-specific and prevents the global evidence cursor from skipping an unresolved range while a
+    * SpendAction is pending.
+    *
+    * `evidenceCompletenessFirst` is already part of signed history, so the stronger rule needs a new activation. From this ordinal, an
+    * incomplete scan may confirm an operation only when it contains that operation's exact SpendAction. Absence is not evidence, and
+    * therefore cannot expire or roll back an operation. The cursor may skip a cold-cache gap only when there are no pending SpendActions
+    * whose settlement could be hidden by that gap.
+    *
+    * PacaSwap deploys a single version to the full ML0 cluster; mixed-version operation is not a supported rollout mode. Set this ordinal
+    * far enough ahead for that coordinated rollout.
+    */
+  val spendActionEvidenceSafety: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(750000L))
+
+  def spendActionEvidenceSafetyActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= spendActionEvidenceSafety.value.value
+
   /** Roll an expired governance month before applying updates from the first epoch of the next month.
     *
     * This ships in the same coordinated, not-yet-released upgrade as `evidenceCompletenessFirst`, so both corrections intentionally share

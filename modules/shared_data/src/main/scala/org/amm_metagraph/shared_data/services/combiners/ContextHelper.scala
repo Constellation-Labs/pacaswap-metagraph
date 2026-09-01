@@ -83,7 +83,8 @@ object ContextHelper {
             logger.warn(
               s"Spend-action evidence INCOMPLETE for range " +
                 s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
-                "No pending operation will be expired and the global evidence cursor will stop at " +
+                "No unmatched pending operation will be expired. When pending SpendActions remain, " +
+                "the global evidence cursor will stop at " +
                 s"${spendActionsRead.lastContiguousGlobalSnapshotOrdinal.show}."
             )
           else Async[F].unit

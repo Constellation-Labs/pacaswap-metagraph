@@ -10,6 +10,7 @@ import io.constellationnetwork.security.hash.Hash
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.services.combiners.L0CombinerService
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, LiquidityPoolCalculatedState, OperationType}
 import weaver.SimpleIOSuite
@@ -106,6 +107,20 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
       IncidentSwapRollbackCorrection.applyTo(AmmCalculatedState(), at).isLeft,
       // A DAG leg too small to absorb the reduction must fail, not wrap into a bogus PosLong.
       IncidentSwapRollbackCorrection.applyTo(stateWith(poolAt(liveSwapLeg, 1000L)), at).isLeft
+    )
+  }
+
+  pureTest("correction arithmetic rejects Long overflow before narrowing") {
+    expect(
+      IncidentSwapRollbackCorrection.applyTo(stateWith(poolAt(Long.MaxValue, liveDagLeg)), at).isLeft
+    )
+  }
+
+  pureTest("the correction ordinal is fail-closed even though it is not a legacy one-time-fix ordinal") {
+    expect.all(
+      L0CombinerService.mustFailClosed(Some(at), atOneTimeFix = false),
+      !L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), atOneTimeFix = false),
+      L0CombinerService.mustFailClosed(Some(ord(1L)), atOneTimeFix = true)
     )
   }
 
