@@ -43,14 +43,15 @@ object PendingOperationsProcessor {
     evidenceComplete: Boolean,
     readReturnedActions: Boolean,
     pendingSpendActions: SortedSet[A],
-    isAccepted: A => Boolean = (_: A) => false
+    isAccepted: A => Boolean = (_: A) => false,
+    evidenceCovers: A => Boolean = (_: A) => true
   )(isExpired: A => Boolean): SortedSet[A] = {
     val none = pendingSpendActions.filter(_ => false)
 
     if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal))
       // Positive evidence is operation-specific and safe even when another ordinal was missing.
       // Negative evidence is range-wide: only a complete scan may expire an unmatched operation.
-      pendingSpendActions.filter(p => isAccepted(p) || (evidenceComplete && isExpired(p)))
+      pendingSpendActions.filter(p => isAccepted(p) || (evidenceComplete && evidenceCovers(p) && isExpired(p)))
     else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete) none
     else if (readReturnedActions) pendingSpendActions
     else if (!evidenceComplete) none
@@ -62,6 +63,24 @@ object PendingOperationsProcessor {
       getPendingSpendActionStakingUpdates(state).nonEmpty ||
       getPendingSpendActionSwapUpdates(state).nonEmpty ||
       getPendingSpendActionWithdrawalUpdates(state).nonEmpty
+
+  private[shared_data] def pendingSpendActionEvidenceLowerBound(
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    cursor: SnapshotOrdinal,
+    state: AmmCalculatedState
+  ): SnapshotOrdinal =
+    if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal)) {
+      val provenances =
+        (getPendingSpendActionLiquidityPoolUpdates(state).toList ++
+          getPendingSpendActionStakingUpdates(state).toList ++
+          getPendingSpendActionSwapUpdates(state).toList ++
+          getPendingSpendActionWithdrawalUpdates(state).toList)
+          .flatMap(_.generatedAfterGlobalOrdinal)
+
+      provenances.minByOption(_.value.value).fold(cursor) { earliest =>
+        if (earliest.value.value < cursor.value.value) earliest else cursor
+      }
+    } else cursor
 
   def make[F[_]: Async: HasherSelector](
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
@@ -283,7 +302,11 @@ object PendingOperationsProcessor {
           context.spendActionsEvidenceComplete,
           context.globalSnapshotsSyncSpendActions.nonEmpty,
           pendingSpendActions,
-          acceptedPendingSpendActions.contains
+          acceptedPendingSpendActions.contains,
+          (pending: PendingSpendAction[AmmUpdate]) =>
+            pending.generatedAfterGlobalOrdinal.exists(
+              _.value.value >= context.spendActionsEvidenceLowerBound.value.value
+            )
         ) { pending =>
           pending.update.value match {
             case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
@@ -313,7 +336,8 @@ object PendingOperationsProcessor {
                           Signed(lpUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -332,7 +356,8 @@ object PendingOperationsProcessor {
                           Signed(stakingUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -351,7 +376,8 @@ object PendingOperationsProcessor {
                           Signed(withdrawalUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -371,7 +397,8 @@ object PendingOperationsProcessor {
                           Signed(swapUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,

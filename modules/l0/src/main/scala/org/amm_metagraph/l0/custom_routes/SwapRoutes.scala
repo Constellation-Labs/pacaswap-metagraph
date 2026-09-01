@@ -65,7 +65,7 @@ object SwapRoutes {
             stateTransitionType
           )
 
-        case PendingSpendAction(update, _, _, Some(swapInfo: SwapTokenInfo)) =>
+        case PendingSpendAction(update, _, _, Some(swapInfo: SwapTokenInfo), _) =>
           SwapStateResponse(
             update.source.some,
             update.swapFromPair,
@@ -78,7 +78,7 @@ object SwapRoutes {
             stateTransitionType
           )
 
-        case PendingSpendAction(update, _, _, _) =>
+        case PendingSpendAction(update, _, _, _, _) =>
           SwapStateResponse(
             update.source.some,
             update.swapFromPair,

@@ -7,8 +7,8 @@ import cats.syntax.all._
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
 import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.{GlobalSnapshotInfo, SnapshotOrdinal}
 import io.constellationnetwork.security.Hashed
 
 import org.amm_metagraph.shared_data.ProtocolActivation
@@ -27,6 +27,15 @@ trait ContextHelper[F[_]] {
 }
 
 object ContextHelper {
+  private[shared_data] def selectCurrentSnapshotOrdinal(
+    contextPredecessorOrdinal: SnapshotOrdinal,
+    lastProcessedCurrencyOrdinal: Option[SnapshotOrdinal]
+  ): SnapshotOrdinal =
+    // The SDK context is the live node context even while v3.5.29 rebuilds historical state.
+    // Once the state-carried ordinal exists it must win on BOTH sides of every gate; otherwise
+    // replaying a pre-activation snapshot after activation evaluates it as present-day history.
+    lastProcessedCurrencyOrdinal.map(_.next).getOrElse(contextPredecessorOrdinal.next)
+
   def make[F[_]: Async](
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     globalSyncDataIntegrityActivation: EpochProgress = EpochProgress.MaxValue
@@ -54,14 +63,23 @@ object ContextHelper {
           logger.error(message) >> Async[F].raiseError(new Exception(message))
         }
 
-        currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+        currentSnapshotOrdinal = selectCurrentSnapshotOrdinal(
+          lastCurrencySnapshot.ordinal,
+          state.calculated.lastProcessedCurrencyOrdinal
+        )
         currentSnapshotEpochProgress = lastCurrencySnapshot.epochProgress.next
+
+        evidenceLowerBound = PendingOperationsProcessor.pendingSpendActionEvidenceLowerBound(
+          currentSnapshotOrdinal,
+          state.calculated.lastSyncGlobalSnapshotOrdinal,
+          state.calculated
+        )
 
         _ <- logger.info(s"lastSyncGlobalEpochProgress=$lastSyncGlobalEpochProgress")
         _ <- logger.info(s"lastSyncGlobalOrdinal=$lastSyncGlobalOrdinal")
 
         spendActionsRead <- getSpendActionsFromGlobalSnapshots(
-          state.calculated.lastSyncGlobalSnapshotOrdinal,
+          evidenceLowerBound,
           lastSyncGlobalOrdinal,
           globalSnapshotsStorage,
           // Gated: below the activation ordinal the cold-cache read stays empty, so all
@@ -82,7 +100,7 @@ object ContextHelper {
           )
             logger.warn(
               s"Spend-action evidence INCOMPLETE for range " +
-                s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
+                s"${evidenceLowerBound.show}..${lastSyncGlobalOrdinal.show}. " +
                 "No unmatched pending operation will be expired. When pending SpendActions remain, " +
                 "the global evidence cursor will stop at " +
                 s"${spendActionsRead.lastContiguousGlobalSnapshotOrdinal.show}."
@@ -105,6 +123,7 @@ object ContextHelper {
             // Pre-activation the flag is forced true so the old (unsafe) expiry behaviour is
             // reproduced exactly and history replays byte for byte.
             !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
+          spendActionsEvidenceLowerBound = evidenceLowerBound,
           lastContiguousGlobalSnapshotOrdinal = spendActionsRead.lastContiguousGlobalSnapshotOrdinal,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,

@@ -23,6 +23,7 @@ import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAccept
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -146,8 +147,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                     => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                        => false
         }
 
       def combineNew(
@@ -325,6 +326,9 @@ object StakingCombinerService {
                   allowSpendTokenB,
                   amountToSpendB
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(stakingCalculatedState, pendingAllowSpendUpdate.update)
@@ -332,7 +336,8 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  pendingAllowSpendUpdate.pricingTokenInfo
+                  pendingAllowSpendUpdate.pricingTokenInfo,
+                  generatedAfterGlobalOrdinal
                 )
 
                 updatedPendingSpendActionCalculatedState =

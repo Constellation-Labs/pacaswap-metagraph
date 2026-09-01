@@ -21,6 +21,9 @@ case class ProcessingContext(
   // False when the spend-action read could not resolve every ordinal in the range. An empty
   // list then proves nothing, so no pending operation may be expired on the strength of it.
   spendActionsEvidenceComplete: Boolean,
+  // Inclusive lower bound of the scan represented by the actions/completeness fields. Negative
+  // evidence is valid for an operation only if this bound is no later than its generation view.
+  spendActionsEvidenceLowerBound: SnapshotOrdinal,
   // The greatest ordinal in the contiguous resolved prefix above the previous cursor. When
   // evidence is incomplete this prevents cleanup from advancing past the first unresolved gap.
   lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,

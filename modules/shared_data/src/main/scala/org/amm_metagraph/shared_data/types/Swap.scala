@@ -148,7 +148,8 @@ object Swap {
         pendingSpend.update,
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
-        pendingSpend.pricingTokenInfo
+        pendingSpend.pricingTokenInfo,
+        pendingSpend.generatedAfterGlobalOrdinal
       )
     }.toSortedSet
   }

@@ -7,7 +7,7 @@ import io.constellationnetwork.schema.artifact.SpendAction
 
 import eu.timepit.refined.types.all.NonNegLong
 import org.amm_metagraph.shared_data.globalSnapshots.summarizeSpendActionsRead
-import org.amm_metagraph.shared_data.services.combiners.{PendingOperationsProcessor, StateManager}
+import org.amm_metagraph.shared_data.services.combiners.{ContextHelper, PendingOperationsProcessor, StateManager}
 import weaver.SimpleIOSuite
 
 /** Regression coverage for settlement evidence used to confirm or expire pending SpendActions. */
@@ -22,6 +22,7 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
     evidenceComplete: Boolean,
     readReturnedActions: Boolean,
     accepted: Set[Int] = Set.empty,
+    covered: Int => Boolean = _ => true,
     expired: Int => Boolean = _ => true
   ): SortedSet[Int] =
     PendingOperationsProcessor.selectPendingSpendActions(
@@ -29,7 +30,8 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       evidenceComplete,
       readReturnedActions,
       pending,
-      accepted.contains
+      accepted.contains,
+      covered
     )(expired)
 
   pureTest("new gate: incomplete evidence can confirm only the exact matching SpendAction") {
@@ -51,6 +53,19 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
         expired = _ == 2
       ) == pending,
       selected(750000L, evidenceComplete = true, readReturnedActions = true, expired = _ == 2) == SortedSet(2)
+    )
+  }
+
+  pureTest("new gate: a complete scan still cannot expire an operation whose lifetime it did not cover") {
+    expect.all(
+      selected(750000L, evidenceComplete = true, readReturnedActions = false, covered = _ => false).isEmpty,
+      selected(
+        750000L,
+        evidenceComplete = true,
+        readReturnedActions = true,
+        accepted = Set(1),
+        covered = _ => false
+      ) == SortedSet(1)
     )
   }
 
@@ -130,6 +145,14 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       ProtocolActivation.spendActionEvidenceSafety.value.value > ProtocolActivation.evidenceCompletenessFirst.value.value,
       !ProtocolActivation.spendActionEvidenceSafetyActive(ord(749999L)),
       ProtocolActivation.spendActionEvidenceSafetyActive(ord(750000L))
+    )
+  }
+
+  pureTest("new gate: the state ordinal wins over a live-context tip during historical replay") {
+    expect.all(
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(749999L))) == ord(750000L),
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(739999L))) == ord(740000L),
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), None) == ord(900001L)
     )
   }
 }
