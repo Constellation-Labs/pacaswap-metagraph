@@ -25,9 +25,13 @@ trait L0CombinerService[F[_]] {
 object L0CombinerService {
   private[shared_data] def mustFailClosed(
     nextOrdinal: Option[io.constellationnetwork.schema.SnapshotOrdinal],
+    lastProcessedCurrencyOrdinal: Option[io.constellationnetwork.schema.SnapshotOrdinal],
     atOneTimeFix: Boolean
   ): Boolean =
-    atOneTimeFix || nextOrdinal.contains(ProtocolActivation.swapRollbackCorrection)
+    atOneTimeFix || nextOrdinal.exists { ordinal =>
+      ProtocolActivation.swapRollbackCorrectionActive(ordinal) &&
+      lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.swapRollbackCorrection)
+    }
 
   def make[F[_]: Async](
     stateManager: StateManager[F],
@@ -105,7 +109,13 @@ object L0CombinerService {
         atOneTimeFix = nextOrdinal.exists(oneTimeFixesHandler.isOneTimeFixOrdinal)
         result <- run(currencySnapshotOpt).handleErrorWith { e =>
           val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
-          if (L0CombinerService.mustFailClosed(nextOrdinal, atOneTimeFix))
+          if (
+            L0CombinerService.mustFailClosed(
+              nextOrdinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal,
+              atOneTimeFix
+            )
+          )
             // Consensus corrections must never be converted into an apparently successful
             // old-state result. The resource-backed one-time fixes have paired balance artifacts;
             // the rollback correction is an exact-ordinal delta. Skipping either transition would

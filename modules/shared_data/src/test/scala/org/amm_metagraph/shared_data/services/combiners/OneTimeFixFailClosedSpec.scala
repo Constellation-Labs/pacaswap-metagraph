@@ -170,6 +170,21 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
       )
   }
 
+  test("rollback correction failure remains fail-closed after activation until completion is recorded") { _ =>
+    val at = ProtocolActivation.swapRollbackCorrection
+    val before = Some(ord(at.value.value - 1L))
+    val completed = Some(at)
+
+    expect
+      .all(
+        L0CombinerService.mustFailClosed(Some(at), before, atOneTimeFix = false),
+        L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), before, atOneTimeFix = false),
+        !L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), completed, atOneTimeFix = false),
+        !L0CombinerService.mustFailClosed(Some(ord(at.value.value - 1L)), before, atOneTimeFix = false)
+      )
+      .pure[IO]
+  }
+
   test("the real handler declares 731647, and only fix ordinals, as one-time") { _ =>
     for {
       ref <- SignallingRef.of[IO, SnapshotOrdinal](SnapshotOrdinal.MinValue)
