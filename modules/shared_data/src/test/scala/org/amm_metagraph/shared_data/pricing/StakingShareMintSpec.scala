@@ -4,7 +4,7 @@ import cats.effect.IO
 
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
-import io.constellationnetwork.schema.swap.CurrencyId
+import io.constellationnetwork.schema.swap.{CurrencyId, SwapAmount}
 import io.constellationnetwork.security.hash.Hash
 
 import eu.timepit.refined.auto._
@@ -67,15 +67,28 @@ object StakingShareMintSpec extends SimpleIOSuite {
   // 100-token deposit -> floor(1e10 * 1e8 / 1e12) = 1e6 shares
   private val normal: PosLong = PosLong.unsafeFrom(toFixedPoint(100.0))
 
-  // A pool whose pair reserve dwarfs its primary reserve, so a small primary deposit produces a proportional
-  // pair leg above the Long range: incomingPair = floor(incomingPrimary * pairReserve / primaryReserve).
-  private val skewedPrimary = TokenInformation(tokenAId, PosLong.unsafeFrom(1L))
-  private val skewedPair = TokenInformation(tokenBId, PosLong.unsafeFrom(Long.MaxValue))
-  private val (_, skewedLpState) = buildLiquidityPoolCalculatedState(skewedPrimary, skewedPair, owner)
-  private val skewedPool: LiquidityPool = skewedLpState.confirmed.value.head._2
-  // incomingPair = floor(3 * Long.MaxValue / 1) ~= 2.77e19 > 2^64, which BigInt.toLong would wrap to a bogus
-  // in-range value (~9.22e18) that toPosLong accepts, instead of rejecting the deposit.
-  private val overflowing: PosLong = PosLong.unsafeFrom(3L)
+  // This witness reaches 2^64 + 448,384 on the pair leg. The legacy BigInt.toLong narrowing therefore charged
+  // only 448,384 while issuing 184,467,440,737,100 shares. Crucially, all of the subsequently updated reserves and
+  // share totals remain representable, so the vulnerable pool mutation succeeds instead of failing downstream.
+  private val overflowPrimaryReserve = PosLong.unsafeFrom(10_000_000L)
+  private val overflowPairReserve = PosLong.unsafeFrom(10_000_000_000_000L)
+  private val overflowPrimary = TokenInformation(tokenAId, overflowPrimaryReserve)
+  private val overflowPair = TokenInformation(tokenBId, overflowPairReserve)
+  private val (_, overflowLpState) = buildLiquidityPoolCalculatedState(overflowPrimary, overflowPair, owner)
+  private val overflowPool: LiquidityPool = overflowLpState.confirmed.value.head._2
+  private val overflowDeposit = PosLong.unsafeFrom(18_446_744_073_710L)
+  private val exactPairAmount =
+    (BigInt(overflowDeposit.value) * BigInt(overflowPairReserve.value)) / BigInt(overflowPrimaryReserve.value)
+  private val wrappedPairAmount = PosLong.unsafeFrom(exactPairAmount.toLong)
+  private val exactIssuedShares =
+    (BigInt(overflowDeposit.value) * BigInt(overflowPool.poolShares.totalShares.value)) / BigInt(overflowPrimaryReserve.value)
+
+  // A separate fixture reaches the minted-share guard while keeping the proportional pair leg inside Long.
+  private val shareOverflowPrimary = TokenInformation(tokenAId, PosLong.unsafeFrom(1L))
+  private val shareOverflowPair = TokenInformation(tokenBId, PosLong.unsafeFrom(1L))
+  private val (_, shareOverflowLpState) = buildLiquidityPoolCalculatedState(shareOverflowPrimary, shareOverflowPair, owner)
+  private val shareOverflowPool: LiquidityPool = shareOverflowLpState.confirmed.value.head._2
+  private val shareOverflowDeposit = PosLong.unsafeFrom(Long.MaxValue - 1L)
 
   test("D2-01/D2-02 (active): a dust deposit is REJECTED as StakingAmountTooSmall, not absorbed with 0 shares") {
     ops(config).map { o =>
@@ -95,9 +108,41 @@ object StakingShareMintSpec extends SimpleIOSuite {
     }
   }
 
-  test("active: a deposit whose proportional pair leg overflows Long is REJECTED, not wrapped to a tiny charge") {
+  test("active: reject a pair-leg overflow whose legacy wrapped result could complete the pool mutation") {
+    val signedUpdate = getFakeSignedUpdate(stakingUpdate(overflowDeposit))
+    val vulnerableInfo = StakingTokenInfo(
+      overflowPrimary.copy(amount = overflowDeposit),
+      overflowPair.copy(amount = wrappedPairAmount),
+      SwapAmount(wrappedPairAmount),
+      exactIssuedShares.toLong
+    )
+
+    ops(config).flatMap { o =>
+      val rejected = o.calculateStakingInfo(signedUpdate, Hash.empty, overflowPool, anyEpoch, activeOrdinal)
+
+      o.updatePoolForStaking(overflowPool, signedUpdate, Hash.empty, owner, vulnerableInfo, anyEpoch, activeOrdinal).map { legacyMutation =>
+        expect.all(
+          exactPairAmount == (BigInt(1) << 64) + BigInt(448_384L),
+          wrappedPairAmount.value == 448_384L,
+          exactIssuedShares == BigInt(184_467_440_737_100L),
+          legacyMutation.isRight
+        ) && matches(rejected) {
+          case Left(FailedCalculatedState(_: ArithmeticError, _, _, _)) => success
+        }
+      }
+    }
+  }
+
+  test("active: reject an exact minted-share count outside Long even when the pair leg is representable") {
     ops(config).map { o =>
-      val result = o.calculateStakingInfo(getFakeSignedUpdate(stakingUpdate(overflowing)), Hash.empty, skewedPool, anyEpoch, activeOrdinal)
+      val result = o.calculateStakingInfo(
+        getFakeSignedUpdate(stakingUpdate(shareOverflowDeposit)),
+        Hash.empty,
+        shareOverflowPool,
+        anyEpoch,
+        activeOrdinal
+      )
+
       matches(result) {
         case Left(FailedCalculatedState(_: ArithmeticError, _, _, _)) => success
       }
