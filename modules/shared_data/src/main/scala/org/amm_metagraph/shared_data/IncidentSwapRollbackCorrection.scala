@@ -9,37 +9,20 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.types.LiquidityPool.{LiquidityPool, getLiquidityPoolCalculatedState}
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, OperationType}
 
-/** Undoes the rollback the combine applied to two already-settled swaps at currency ordinal 741789.
+/** One-shot reserve correction for the SWAP/DAG pool.
   *
-  * WHAT HAPPENED
+  * A pair of pending swap operations was reverted after their spend actions had already been accepted on the global layer, leaving the pool
+  * book holding reserves the custody address does not back. These are the exact amounts the revert moved, taken from the pool balance log,
+  * and they equal the difference the collateral check measures against the wallet on both ledgers with no remainder:
   *
-  * The three metagraph L0 nodes restarted at 20:16:39Z on 2026-08-31. At ordinal 741789 the combine judged three pending spend actions,
-  * found no acceptance for them in the global range it scanned, and expired all three. Two of them had in fact settled hours earlier:
+  * tokenA (SWAP) +1955265547325 tokenB (DAG) -437171305445
   *
-  * 700ae9df… SWAP -> DAG, forward applied 17:43:59Z, rolled back 20:21:05Z 96e16834… SWAP -> DAG, forward applied 18:45:22Z, rolled back
-  * 20:21:05Z
+  * Applied as a delta rather than as absolute reserves: the chain keeps trading between the moment the amounts were measured and the
+  * activation ordinal, and absolute values would discard everything in between.
   *
-  * The external collateral monitor read book == wallet at 17:02, 18:04, 19:02 and 20:03, which is the proof that both forward credits were
-  * matched on the ledger: had they not settled, the book would already have disagreed from 17:43 onward. The rollbacks then moved the book
-  * away from a wallet that had genuinely paid.
-  *
-  * The third expiry (c5113977…, DAG -> DOR) applied +0/+0 and is correctly excluded here. DOR reconciles to zero.
-  *
-  * WHY A DELTA AND NOT ABSOLUTE RESERVES
-  *
-  * updated-pools-14.json could carry absolute reserves because the chain was stopped. It is running now, so absolute values would silently
-  * discard every trade between the moment they were measured and the activation ordinal. These are the exact amounts the rollback moved,
-  * read from the SWAP_ROLLBACK entries in the node's own pool log, and they are applied to whatever the reserves are at activation:
-  *
-  * 700ae9df SWAP 5100830170115943 -> 5098896903620698 (-1933266495245) DAG 1143472155147592 -> 1143904409617034 (+432254469442) 96e16834
-  * SWAP 5098896903620698 -> 5098874904568618 (-21999052080) DAG 1143904409617034 -> 1143909326453037 (+4916836003)
-  *
-  * Summed, and independently equal to the divergence the monitor measures against the live wallet:
-  *
-  * SWAP +1955265547325 (book was short by this) DAG -437171305445 (book was long by this)
-  *
-  * This restores the book. It does not compensate anyone: the two swappers received what the ledger paid them, and the pool holds what the
-  * ledger gave it. Only the book was wrong.
+  * It stays armed at and after the activation ordinal until a finalized state proves it was applied, because a failed combine is turned
+  * into the previous calculated state and the snapshot can still be built. It refuses rather than guessing if the pool is not the shape it
+  * expects, including which side carries which token.
   */
 object IncidentSwapRollbackCorrection {
 

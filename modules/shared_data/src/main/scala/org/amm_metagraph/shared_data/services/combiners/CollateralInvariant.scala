@@ -43,12 +43,9 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   *   - Rewards. Minted by the currency reward mechanism, never custodied at the metagraph address, so outstanding rewards are not a claim
   *     on the wallet and are not subtracted.
   *
-  * Advisory always, on every ordinal. `ProtocolActivation.collateralInvariantEnforced` is defined but deliberately not read here yet. It
-  * was written advisory because the book was short 1,641,127.95926795 DAG by construction at the time, pending treasury funding; rejecting
-  * then would have refused every snapshot. That funding landed on 2026-08-27 and every ledger read 1:1, but the check was left sampling one
-  * ordinal in fifty and only warning. On 2026-08-31 the combine rolled back two already-settled swaps at ordinal 741789 and built the
-  * snapshot anyway. The invariant saw it - `COLLATERAL_INVARIANT BREACH ordinal=741800 ledger=DAG` is in the node log - four ordinals too
-  * late to prevent anything.
+  * Advisory always, on every ordinal. `ProtocolActivation.collateralInvariantEnforced` is defined but deliberately not read here yet:
+  * refusing a snapshot converts a book discrepancy into a halt, and that is only worth enabling once every-ordinal reporting has shown how
+  * often it would trigger under normal trading.
   *
   * DAG is fungible and shared across every pool, so only the aggregate is meaningful. Each token belongs to exactly one pool, so those are
   * exact per pool. Never derive one from the other: that conflation previously produced a 147,940.10 DAG error.
@@ -126,12 +123,6 @@ object CollateralInvariant {
     dagRow ++ tokenRows
   }
 
-  /** How often the check runs. It sits inside consensus, so it must never become a cost the combine has to pay every snapshot: it reads
-    * collections and writes log lines, both of which are real work on the critical path. Sampling keeps drift detection within a couple of
-    * minutes while making the amortised cost negligible. It touches no state, so sampling cannot affect consensus.
-    */
-  val checkEveryNOrdinals: Long = 50L
-
   def make[F[_]: Async]: CollateralInvariant[F] = new CollateralInvariant[F] {
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CollateralInvariant")
 
@@ -145,14 +136,8 @@ object CollateralInvariant {
       // malformed state - can throw while the effect is being BUILT. An eager throw here would
       // escape the caller's error handling and take the whole combine down with it, which is
       // exactly what happened the first time this was written.
-      // Sampling only applies while the check is advisory. Once it can refuse a snapshot it has to
-      // look at every one: a breach the combine is allowed to skip past is the failure this whole
-      // mechanism exists to prevent, and 49 unchecked ordinals in 50 is how 741789 got built.
-      // Every ordinal, not one in fifty. It still only reports: refusing a snapshot during the kind
-      // of restart loop that produced 741789 would stack a halt on top of an outage, and the
-      // monitoring service would restart the nodes for not producing. Enforcement stays behind
-      // `ProtocolActivation.collateralInvariantEnforced`, unused, until a week of every-ordinal
-      // reporting shows how often it would have fired under normal trading.
+      // Every ordinal. Sampling left most snapshots unchecked, which made a discrepancy detectable
+      // only after it had already been committed.
       Async[F].defer {
         val self = context.currencyId.value
 

@@ -28,7 +28,7 @@ import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChai
 import org.amm_metagraph.shared_data.types.Swap.SwapReference
 import weaver.MutableIOSuite
 
-/** Pins the two SpendActions incorrectly rolled back at currency ordinal 741789 against their signed GL0 JSON representation.
+/** Pins the two SpendActions incorrectly rolled back at currency ordinal the incident against their signed GL0 JSON representation.
   *
   * Paca's pending-state JSON omits `None` fields while the GL0 artifact JSON renders them as null. Both must decode to the same protocol
   * value and therefore have the same current hash; otherwise an exact action present in the scanned range would look absent.

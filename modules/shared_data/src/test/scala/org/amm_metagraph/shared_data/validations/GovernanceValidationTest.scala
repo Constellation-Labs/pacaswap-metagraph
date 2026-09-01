@@ -56,10 +56,11 @@ object GovernanceValidationTest extends MutableIOSuite {
       )
       l1Result <- validations.l1Validations(update)
       l0Result <- validations.l0Validations(signedUpdate, state, EpochProgress.MinValue)
-    } yield expect.all(
-      l1Result == Valid(()),
-      l0Result == Right(signedUpdate)
-    )
+    } yield
+      expect.all(
+        l1Result == Valid(()),
+        l0Result == Right(signedUpdate)
+      )
   }
 
   test("empty governance weights retain their historical L1 and L0 behavior") { implicit res =>
@@ -82,9 +83,10 @@ object GovernanceValidationTest extends MutableIOSuite {
       )
       l1Result <- validations.l1Validations(update)
       l0Result <- validations.l0Validations(signedUpdate, state, EpochProgress.MinValue)
-    } yield expect.all(
-      l1Result == Valid(()),
-      l0Result == Right(signedUpdate)
-    )
+    } yield
+      expect.all(
+        l1Result == Valid(()),
+        l0Result == Right(signedUpdate)
+      )
   }
 }

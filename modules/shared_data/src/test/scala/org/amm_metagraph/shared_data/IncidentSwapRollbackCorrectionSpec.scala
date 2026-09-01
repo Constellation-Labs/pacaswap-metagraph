@@ -15,7 +15,7 @@ import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, LiquidityPoolCalculatedState, OperationType}
 import weaver.SimpleIOSuite
 
-/** The book correction for the 741789 rollback.
+/** The book correction for the the incident rollback.
   *
   * The deltas are pinned against the divergence measured on the live chain, not restated from the object under test: the monitor read the
   * book 4,371.71305445 DAG above the wallet and 19,552.65547325 SWAP below it, unchanged across four samples over forty minutes.
@@ -24,7 +24,7 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
 
   private val SWAP = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
 
-  /** Reserves read from the live pool at 2026-08-31 21:43Z, before the correction. */
+  /** Reserves read from the live pool before the correction. */
   private val liveSwapLeg = 5111911820916687L
   private val liveDagLeg = 1145998709526253L
 

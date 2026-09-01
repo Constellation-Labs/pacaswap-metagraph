@@ -38,9 +38,9 @@ object StateManager {
     hasPendingSpendActions: Boolean
   ): SnapshotOrdinal =
     if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal)) {
-      // Skipping a cold-cache gap is harmless only when no pending settlement can be hidden in it.
-      // With pending SpendActions, preserve the unresolved range until it can be read. This favors
-      // a visible liveness failure over silently rolling back a transfer that already settled.
+      // Skipping an unresolved range is harmless only when no pending settlement can be hidden in
+      // it. While spend actions are pending, keep the range until it can be read: a visible stall is
+      // preferable to reverting a transfer that already settled.
       if (!evidenceComplete && hasPendingSpendActions) lastContiguousGlobalSnapshotOrdinal
       else lastSyncGlobalOrdinal
     } else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete)
@@ -109,8 +109,7 @@ object StateManager {
           context.currentSnapshotOrdinal
         )
 
-        // One-shot: restores the two swaps the combine rolled back at 741789 after they had already
-        // settled. Left aborts the combine rather than committing a partial correction.
+        // One-shot reserve correction. Left aborts the combine rather than committing it partially.
         correctedOperations <- IncidentSwapRollbackCorrection
           .applyTo(newState.calculated, context.currentSnapshotOrdinal)
           .fold(
