@@ -30,11 +30,18 @@ object ContextHelper {
   private[shared_data] def selectCurrentSnapshotOrdinal(
     contextPredecessorOrdinal: SnapshotOrdinal,
     lastProcessedCurrencyOrdinal: Option[SnapshotOrdinal]
-  ): SnapshotOrdinal =
-    // The SDK context is the live node context even while v3.5.29 rebuilds historical state.
-    // Once the state-carried ordinal exists it must win on BOTH sides of every gate; otherwise
-    // replaying a pre-activation snapshot after activation evaluates it as present-day history.
-    lastProcessedCurrencyOrdinal.map(_.next).getOrElse(contextPredecessorOrdinal.next)
+  ): SnapshotOrdinal = {
+    val contextFrame = contextPredecessorOrdinal.next
+
+    // v3.5.29 exposes the live currency head while DataApplicationTraverse replays historical
+    // states, so the context can be far ahead of the state being rebuilt. Conversely, live
+    // acceptance calls combine once per data block: after block one the chained state is one frame
+    // ahead while the context still identifies the same snapshot. The earlier frame is correct in
+    // both cases.
+    lastProcessedCurrencyOrdinal
+      .map(_.next)
+      .fold(contextFrame)(stateFrame => if (stateFrame < contextFrame) stateFrame else contextFrame)
+  }
 
   def make[F[_]: Async](
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
@@ -79,7 +86,7 @@ object ContextHelper {
         _ <- logger.info(s"lastSyncGlobalOrdinal=$lastSyncGlobalOrdinal")
 
         spendActionsRead <- getSpendActionsFromGlobalSnapshots(
-          evidenceLowerBound,
+          state.calculated.lastSyncGlobalSnapshotOrdinal,
           lastSyncGlobalOrdinal,
           globalSnapshotsStorage,
           // Gated: below the activation ordinal the cold-cache read stays empty, so all
@@ -100,9 +107,8 @@ object ContextHelper {
           )
             logger.warn(
               s"Spend-action evidence INCOMPLETE for range " +
-                s"${evidenceLowerBound.show}..${lastSyncGlobalOrdinal.show}. " +
-                "No unmatched pending operation will be expired. When pending SpendActions remain, " +
-                "the global evidence cursor will stop at " +
+                s"${state.calculated.lastSyncGlobalSnapshotOrdinal.show}..${lastSyncGlobalOrdinal.show}. " +
+                "No pending operation will be expired and the global evidence cursor will stop at " +
                 s"${spendActionsRead.lastContiguousGlobalSnapshotOrdinal.show}."
             )
           else Async[F].unit

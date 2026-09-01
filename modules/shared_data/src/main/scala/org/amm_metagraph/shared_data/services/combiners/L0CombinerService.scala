@@ -5,7 +5,6 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
-import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
 
@@ -53,7 +52,10 @@ object L0CombinerService {
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
         result <- currencySnapshotOpt match {
           case Some((lastCurrencySnapshot, lastCurrencySnapshotInfo)) =>
-            val currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+            val currentSnapshotOrdinal = ContextHelper.selectCurrentSnapshotOrdinal(
+              lastCurrencySnapshot.ordinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal
+            )
 
             for {
               _ <- logger.info(s"currentSnapshotOrdinal=$currentSnapshotOrdinal")
@@ -105,7 +107,13 @@ object L0CombinerService {
       for {
         _ <- logger.info("Starting combine function")
         currencySnapshotOpt <- context.getLastCurrencySnapshotCombined
-        nextOrdinal = currencySnapshotOpt.map { case (snapshot, _) => snapshot.ordinal.next }
+        nextOrdinal = currencySnapshotOpt.map {
+          case (snapshot, _) =>
+            ContextHelper.selectCurrentSnapshotOrdinal(
+              snapshot.ordinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal
+            )
+        }
         atOneTimeFix = nextOrdinal.exists(oneTimeFixesHandler.isOneTimeFixOrdinal)
         result <- run(currencySnapshotOpt).handleErrorWith { e =>
           val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
