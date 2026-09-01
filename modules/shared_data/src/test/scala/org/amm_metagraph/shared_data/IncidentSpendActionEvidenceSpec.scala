@@ -57,18 +57,20 @@ object IncidentSpendActionEvidenceSpec extends MutableIOSuite {
   private def decodeAction(value: String): SpendAction =
     decode[SpendAction](value).fold(throw _, identity)
 
-  test("incident SpendActions decode and hash identically across pending and GL0 JSON") { case (hasher, _) =>
-    val pairs = List(
-      decodeAction(pending700ae9df) -> decodeAction(global700ae9df),
-      decodeAction(pending96e16834) -> decodeAction(global96e16834)
-    )
+  test("incident SpendActions decode and hash identically across pending and GL0 JSON") {
+    case (hasher, _) =>
+      val pairs = List(
+        decodeAction(pending700ae9df) -> decodeAction(global700ae9df),
+        decodeAction(pending96e16834) -> decodeAction(global96e16834)
+      )
 
-    pairs.traverse { case (pending, global) =>
-      for {
-        pendingHash <- hasher.hash(pending)
-        globalHash <- hasher.hash(global)
-      } yield expect.all(pending == global, pendingHash == globalHash)
-    }.map(_.combineAll)
+      pairs.traverse {
+        case (pending, global) =>
+          for {
+            pendingHash <- hasher.hash(pending)
+            globalHash <- hasher.hash(global)
+          } yield expect.all(pending == global, pendingHash == globalHash)
+      }.map(_.combineAll)
   }
 
   test("pending actions written before evidence provenance existed still decode fail-closed") { _ =>

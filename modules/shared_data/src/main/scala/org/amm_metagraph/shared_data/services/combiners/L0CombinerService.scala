@@ -106,10 +106,12 @@ object L0CombinerService {
         result <- run(currencySnapshotOpt).handleErrorWith { e =>
           val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
           if (L0CombinerService.mustFailClosed(nextOrdinal, atOneTimeFix))
-            // A one-time state rewrite is paired with balance artifacts emitted on a separate
-            // path, which fails closed. Swallowing here would ship the deductions WITHOUT the
-            // reserve restoration and the frozen-state purge, leaving a partial, unrecoverable
-            // snapshot. The two must land together or the snapshot must not be built at all.
+            // Consensus corrections must never be converted into an apparently successful
+            // old-state result. The resource-backed one-time fixes have paired balance artifacts
+            // emitted on a separate path, so swallowing here would ship the deductions WITHOUT the
+            // reserve restoration and the frozen-state purge. The rollback correction is an
+            // exact-ordinal delta that gets no second chance. Either must land with its snapshot
+            // or the snapshot must not be built at all.
             logger.error(e)(
               s"COMBINE_FAILED_AT_CONSENSUS_CORRECTION ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
                 "build this snapshot. A required one-shot state transition did not apply atomically. " +

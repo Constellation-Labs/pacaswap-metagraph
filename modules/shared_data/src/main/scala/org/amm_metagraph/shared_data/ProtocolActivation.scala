@@ -103,8 +103,17 @@ object ProtocolActivation {
   def collateralInvariantEnforcedActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= collateralInvariantEnforced.value.value
 
-  /** Restores the book after the 741789 rollback. See IncidentSwapRollbackCorrection. */
-  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(745000L))
+  /** Restores the book after the 741789 rollback. See IncidentSwapRollbackCorrection.
+    *
+    * Deliberately AFTER `spendActionEvidenceSafety`. Correcting the book while the defect that corrupted it is still gated off would fix
+    * the number and leave the mechanism live: a restart in the window between the two would roll back another settled operation on top of a
+    * book we had just declared correct, and the fixed deltas here would then close the old gap and not the new one. Ordering it after means
+    * that when the delta lands, the thing that made it necessary can no longer happen. There is a test asserting this.
+    *
+    * Prepared against live ordinal 743582 on 2026-09-01. This exact ordinal MUST be re-checked against the live head immediately before
+    * deployment; if it can no longer be reached by every node on the new binary, move it forward before publishing the release.
+    */
+  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(752000L))
 
   def swapRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= swapRollbackCorrection.value.value

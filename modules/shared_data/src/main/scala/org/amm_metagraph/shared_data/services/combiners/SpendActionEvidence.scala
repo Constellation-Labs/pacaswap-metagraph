@@ -10,14 +10,12 @@ import io.constellationnetwork.schema.SnapshotOrdinal
 import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 
-/** Derives settlement provenance from a signed currency snapshot, never from the node's live GL0
-  * head.
+/** Derives settlement provenance from a signed currency snapshot, never from the node's live GL0 head.
   *
-  * Tessellation 3.5.29 supplies the live node context while rebuilding historical calculated
-  * state, so its `getLastCurrencySnapshot` accessor cannot safely be used here. The calculated
-  * state carries the exact predecessor currency ordinal; looking that snapshot up by ordinal gives
-  * the same signed global view during live consensus and replay. Once active, missing predecessor
-  * data fails closed instead of allowing validators to persist different provenance.
+  * Tessellation 3.5.29 supplies the live node context while rebuilding historical calculated state, so its `getLastCurrencySnapshot`
+  * accessor cannot safely be used here. The calculated state carries the exact predecessor currency ordinal; looking that snapshot up by
+  * ordinal gives the same signed global view during live consensus and replay. Once active, missing predecessor data fails closed instead
+  * of allowing validators to persist different provenance.
   */
 object SpendActionEvidence {
 
@@ -25,8 +23,7 @@ object SpendActionEvidence {
     state: DataState[AmmOnChainState, AmmCalculatedState]
   )(implicit context: L0NodeContext[F]): F[Option[SnapshotOrdinal]] =
     state.calculated.lastProcessedCurrencyOrdinal match {
-      case Some(expectedPredecessorOrdinal)
-          if ProtocolActivation.spendActionEvidenceSafetyActive(expectedPredecessorOrdinal.next) =>
+      case Some(expectedPredecessorOrdinal) if ProtocolActivation.spendActionEvidenceSafetyActive(expectedPredecessorOrdinal.next) =>
         context.getCurrencySnapshot(expectedPredecessorOrdinal).flatMap {
           case Some(snapshot) if snapshot.ordinal === expectedPredecessorOrdinal =>
             snapshot.signed.value.globalSyncView
