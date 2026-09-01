@@ -20,6 +20,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -111,7 +112,7 @@ object WithdrawalCombinerService {
         pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(
@@ -246,12 +247,21 @@ object WithdrawalCombinerService {
                   signedUpdate.source,
                   currencyId
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 newLiquidityPoolState = liquidityPoolsCalculatedState
                   .focus(_.confirmed.value)
                   .modify(_.updated(poolId.value, updatedPool))
 
-                pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, Some(withdrawalAmounts))
+                pendingAllowSpend = PendingSpendAction(
+                  signedUpdate,
+                  updateHashed.hash,
+                  spendAction,
+                  Some(withdrawalAmounts),
+                  generatedAfterGlobalOrdinal
+                )
 
                 updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
                   .focus(_.pending)

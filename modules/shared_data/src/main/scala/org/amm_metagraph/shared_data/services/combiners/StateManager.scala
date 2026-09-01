@@ -13,7 +13,7 @@ import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
-import org.amm_metagraph.shared_data.{IncidentTokenLockRemediation, ProtocolActivation}
+import org.amm_metagraph.shared_data.{IncidentSwapRollbackCorrection, IncidentTokenLockRemediation, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -34,12 +34,17 @@ object StateManager {
     currentSnapshotOrdinal: SnapshotOrdinal,
     evidenceComplete: Boolean,
     lastSyncGlobalOrdinal: SnapshotOrdinal,
-    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal
+    lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,
+    hasPendingSpendActions: Boolean
   ): SnapshotOrdinal =
-    if (
-      ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) &&
-      !evidenceComplete
-    ) lastContiguousGlobalSnapshotOrdinal
+    if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal)) {
+      // Skipping a cold-cache gap is harmless only when no pending settlement can be hidden in it.
+      // With pending SpendActions, preserve the unresolved range until it can be read. This favors
+      // a visible liveness failure over silently rolling back a transfer that already settled.
+      if (!evidenceComplete && hasPendingSpendActions) lastContiguousGlobalSnapshotOrdinal
+      else lastSyncGlobalOrdinal
+    } else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete)
+      lastContiguousGlobalSnapshotOrdinal
     else lastSyncGlobalOrdinal
 
   def make[F[_]: Async](
@@ -104,7 +109,19 @@ object StateManager {
           context.currentSnapshotOrdinal
         )
 
-        updatedVotingPowerState = newState.calculated
+        // One-shot: restores the two swaps the combine rolled back at 741789 after they had already
+        // settled. Left aborts the combine rather than committing a partial correction.
+        correctedOperations <- IncidentSwapRollbackCorrection
+          .applyTo(newState.calculated, context.currentSnapshotOrdinal)
+          .fold(
+            err =>
+              logger.error(s"INCIDENT_SWAP_ROLLBACK_CORRECTION refused: ${err.message}") >>
+                new IllegalStateException(s"swap rollback correction failed: ${err.message}")
+                  .raiseError[F, AmmCalculatedState],
+            _.pure[F]
+          )
+
+        updatedVotingPowerState = correctedOperations
           .focus(_.votingPowers)
           .replace(updatedVotingPowers)
 
@@ -152,7 +169,8 @@ object StateManager {
           context.currentSnapshotOrdinal,
           context.spendActionsEvidenceComplete,
           context.lastSyncGlobalOrdinal,
-          context.lastContiguousGlobalSnapshotOrdinal
+          context.lastContiguousGlobalSnapshotOrdinal,
+          PendingOperationsProcessor.hasPendingSpendActions(rewardsCleanedState.calculated)
         )
 
         stateUpdatedByLastGlobalSync = rewardsCleanedState

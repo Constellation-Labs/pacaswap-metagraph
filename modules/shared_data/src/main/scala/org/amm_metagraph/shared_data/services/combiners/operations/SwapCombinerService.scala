@@ -21,6 +21,7 @@ import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAccept
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendGlobalSnapshotsState
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -237,8 +238,8 @@ object SwapCombinerService {
           swapStateValue = SwapCalculatedStateValue(expirationEpoch, swapStateAddress)
 
           updatedPending = swapCalculatedState.pending.filterNot {
-            case PendingSpendAction(update, _, _, _) => update === pendingAction.update
-            case _                                   => false
+            case PendingSpendAction(update, _, _, _, _) => update === pendingAction.update
+            case _                                      => false
           }
 
           newSwapState = swapCalculatedState
@@ -407,6 +408,9 @@ object SwapCombinerService {
                   swapTokenInfo.netReceived,
                   currencyId.value
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 updatedPool <- EitherT(
                   pricingService.getUpdatedLiquidityPoolDueNewSwap(
@@ -448,7 +452,8 @@ object SwapCombinerService {
                       primaryTokenInformationUpdated = primaryTokenInfo,
                       pairTokenInformationUpdated = pairTokenInfo
                     )
-                    .some
+                    .some,
+                  generatedAfterGlobalOrdinal
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {
