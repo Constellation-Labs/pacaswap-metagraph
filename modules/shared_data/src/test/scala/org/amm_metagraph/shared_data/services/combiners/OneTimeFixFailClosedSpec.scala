@@ -124,7 +124,7 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
       )
   }
 
-  test("an ordinary combine still swallows and returns oldState") { res =>
+  test("an ordinary combine drops updates but records the deterministic snapshot frame") { res =>
     implicit val (h, sp) = res
     for {
       kp <- KeyPairGenerator.makeKeyPair[IO]
@@ -138,10 +138,46 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         AMM
       )
-      // Same failure, but no ordinal is declared a fix ordinal: the ordinary product behaviour is
-      // preserved, so the change is scoped to the incident branch only.
+      // Same failure, but no ordinal is declared a fix ordinal: updates are still dropped. The
+      // ordinal marker must advance with the accepted wrapper snapshot or this node remains one
+      // frame behind and stalls when a later activation is reached.
       r <- combinerWith(handler(Set.empty, raiseAlways = true)).combine(emptyState, List.empty)(ctx).attempt
-    } yield expect.all(r.isRight, r.exists(_ == emptyState))
+    } yield
+      expect.all(
+        r.isRight,
+        r.exists(_.onChain == emptyState.onChain),
+        r.exists(_.calculated.copy(lastProcessedCurrencyOrdinal = None) == emptyState.calculated),
+        r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(1L)))
+      )
+  }
+
+  test("a replay fallback advances the state frame, not the live context head") { res =>
+    implicit val (h, sp) = res
+    val historicalPredecessor = ord(749000L)
+    val liveContextPredecessor = ord(900000L)
+    val replayState = emptyState.copy(
+      calculated = emptyState.calculated.copy(lastProcessedCurrencyOrdinal = historicalPredecessor.some)
+    )
+
+    for {
+      kp <- KeyPairGenerator.makeKeyPair[IO]
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        liveContextPredecessor,
+        AMM
+      )
+      r <- combinerWith(handler(Set.empty, raiseAlways = true)).combine(replayState, List.empty)(ctx).attempt
+    } yield
+      expect.all(
+        r.isRight,
+        r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(749001L))),
+        !r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(900001L)))
+      )
   }
 
   test("a failure at the swap rollback correction ordinal must NOT return oldState") { res =>

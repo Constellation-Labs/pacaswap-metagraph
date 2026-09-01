@@ -135,13 +135,25 @@ object L0CombinerService {
                 "build this snapshot. A required one-shot state transition did not apply atomically. " +
                 "Fix the cause and restart; do NOT let the node proceed past this ordinal."
             ) >> Async[F].raiseError[DataState[AmmOnChainState, AmmCalculatedState]](e)
-          else
+          else {
+            // The SDK can accept the snapshot after this fallback because the ordinal marker is not
+            // part of the calculated-state proof. Returning it unchanged would leave this node one
+            // frame behind forever; at a later activation it would evaluate the wrong rules and
+            // stall against the majority proof. Advance only the deterministic frame selected above
+            // (never the live context head), which is equally safe during live processing and replay.
+            val recoveredState = nextOrdinal.fold(oldState) { ordinal =>
+              oldState.copy(
+                calculated = oldState.calculated.copy(lastProcessedCurrencyOrdinal = ordinal.some)
+              )
+            }
+
             logger
               .error(e)(
                 s"COMBINE_FAILED: dropping ${incomingUpdates.size} update(s) $updateHashes and returning previous state. " +
                   s"If this error is non-deterministic across nodes it WILL fork consensus — investigate immediately."
               )
-              .as(oldState)
+              .as(recoveredState)
+          }
         }
       } yield result
     }
