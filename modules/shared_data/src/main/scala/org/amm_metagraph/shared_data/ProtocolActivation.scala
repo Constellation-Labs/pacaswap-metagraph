@@ -70,7 +70,7 @@ object ProtocolActivation {
     * PacaSwap deploys a single version to the full ML0 cluster; mixed-version operation is not a supported rollout mode. Set this ordinal
     * far enough ahead for that coordinated rollout.
     */
-  val spendActionEvidenceSafety: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(750000L))
+  val spendActionEvidenceSafety: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(743656L))
 
   def spendActionEvidenceSafetyActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= spendActionEvidenceSafety.value.value
@@ -110,10 +110,14 @@ object ProtocolActivation {
     * book we had just declared correct, and the fixed deltas here would then close the old gap and not the new one. Ordering it after means
     * that when the delta lands, the thing that made it necessary can no longer happen. There is a test asserting this.
     *
-    * Prepared against live ordinal 743582 on 2026-09-01. This exact ordinal MUST be re-checked against the live head immediately before
+    * The metagraph was stopped at 743646 on 2026-09-01 before this release, so there is no race against a moving head: 743656 is ten
+    * ordinals after the last signed snapshot and is reached within seconds of the cluster coming back. The correction sits one ordinal
+    * later so the defect is gated off first.
+    *
+    * Prepared against stopped head 743646 on 2026-09-01. This exact ordinal MUST be re-checked against the live head immediately before
     * deployment; if it can no longer be reached by every node on the new binary, move it forward before publishing the release.
     */
-  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(752000L))
+  val swapRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(743657L))
 
   def swapRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= swapRollbackCorrection.value.value

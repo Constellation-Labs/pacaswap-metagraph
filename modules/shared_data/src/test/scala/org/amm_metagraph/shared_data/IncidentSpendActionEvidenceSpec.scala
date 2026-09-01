@@ -35,6 +35,10 @@ import weaver.MutableIOSuite
   */
 object IncidentSpendActionEvidenceSpec extends MutableIOSuite {
 
+  private val gate = ProtocolActivation.spendActionEvidenceSafety.value.value
+  private val belowGate = gate - 1L
+  private val belowGate2 = gate - 2L
+
   type Res = (Hasher[IO], SecurityProvider[IO])
 
   override def sharedResource: Resource[IO, Res] = for {
@@ -103,7 +107,7 @@ object IncidentSpendActionEvidenceSpec extends MutableIOSuite {
 
   test("new SpendActions bind provenance to the exact signed predecessor snapshot") { implicit resources =>
     implicit val (hasher, securityProvider) = resources
-    val predecessor = SnapshotOrdinal(NonNegLong.unsafeFrom(749999L))
+    val predecessor = SnapshotOrdinal(NonNegLong.unsafeFrom(belowGate))
     val globalViewOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(6855978L))
     val metagraphId = Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9z5")
     val state = DataState(
@@ -127,7 +131,7 @@ object IncidentSpendActionEvidenceSpec extends MutableIOSuite {
 
   test("new SpendActions fail closed when the signed predecessor is unavailable") { implicit resources =>
     implicit val (hasher, securityProvider) = resources
-    val predecessor = SnapshotOrdinal(NonNegLong.unsafeFrom(749999L))
+    val predecessor = SnapshotOrdinal(NonNegLong.unsafeFrom(belowGate))
     val metagraphId = Address("DAG0KpQNqMsED4FC5grhFCBWG8iwU8Gm6aLhB9z5")
     val state = DataState(
       AmmOnChainState.empty,
@@ -140,7 +144,7 @@ object IncidentSpendActionEvidenceSpec extends MutableIOSuite {
         keyPair = keyPair,
         gsAllowSpends = SortedMap.empty,
         csAllowSpends = SortedMap.empty,
-        csSnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(749998L)),
+        csSnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(belowGate2)),
         ammMetagraphAddress = metagraphId
       )
       result <- SpendActionEvidence.generatedAfterGlobalOrdinal[IO](state).attempt

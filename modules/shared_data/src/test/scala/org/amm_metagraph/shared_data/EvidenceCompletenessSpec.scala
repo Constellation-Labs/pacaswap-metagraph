@@ -15,6 +15,11 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
 
   private def ord(o: Long): SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(o))
 
+  // Relative to the gate, never hardcoded: these ordinals are re-pinned against the live head at
+  // every release, and a literal here silently turns "below the gate" into "above it".
+  private val gate = ProtocolActivation.spendActionEvidenceSafety.value.value
+  private val belowGate = gate - 1L
+
   private val pending = SortedSet(1, 2)
 
   private def selected(
@@ -36,31 +41,31 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
 
   pureTest("new gate: incomplete evidence can confirm only the exact matching SpendAction") {
     expect.all(
-      selected(750000L, evidenceComplete = false, readReturnedActions = true, accepted = Set(1)) == SortedSet(1),
-      selected(750000L, evidenceComplete = false, readReturnedActions = true).isEmpty,
-      selected(750000L, evidenceComplete = false, readReturnedActions = false).isEmpty
+      selected(gate, evidenceComplete = false, readReturnedActions = true, accepted = Set(1)) == SortedSet(1),
+      selected(gate, evidenceComplete = false, readReturnedActions = true).isEmpty,
+      selected(gate, evidenceComplete = false, readReturnedActions = false).isEmpty
     )
   }
 
   pureTest("new gate: only a complete read may expire an unmatched operation") {
     expect.all(
-      selected(750000L, evidenceComplete = true, readReturnedActions = false) == pending,
+      selected(gate, evidenceComplete = true, readReturnedActions = false) == pending,
       selected(
-        750000L,
+        gate,
         evidenceComplete = true,
         readReturnedActions = true,
         accepted = Set(1),
         expired = _ == 2
       ) == pending,
-      selected(750000L, evidenceComplete = true, readReturnedActions = true, expired = _ == 2) == SortedSet(2)
+      selected(gate, evidenceComplete = true, readReturnedActions = true, expired = _ == 2) == SortedSet(2)
     )
   }
 
   pureTest("new gate: a complete scan still cannot expire an operation whose lifetime it did not cover") {
     expect.all(
-      selected(750000L, evidenceComplete = true, readReturnedActions = false, covered = _ => false).isEmpty,
+      selected(gate, evidenceComplete = true, readReturnedActions = false, covered = _ => false).isEmpty,
       selected(
-        750000L,
+        gate,
         evidenceComplete = true,
         readReturnedActions = true,
         accepted = Set(1),
@@ -95,21 +100,21 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
 
     expect.all(
       StateManager.selectNextGlobalSnapshotCursor(
-        ord(750000L),
+        ord(gate),
         evidenceComplete = false,
         head,
         contiguous,
         hasPendingSpendActions = true
       ) == contiguous,
       StateManager.selectNextGlobalSnapshotCursor(
-        ord(750000L),
+        ord(gate),
         evidenceComplete = false,
         head,
         contiguous,
         hasPendingSpendActions = false
       ) == head,
       StateManager.selectNextGlobalSnapshotCursor(
-        ord(750000L),
+        ord(gate),
         evidenceComplete = true,
         head,
         contiguous,
@@ -143,14 +148,14 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
   pureTest("the stronger evidence rule has its own future activation") {
     expect.all(
       ProtocolActivation.spendActionEvidenceSafety.value.value > ProtocolActivation.evidenceCompletenessFirst.value.value,
-      !ProtocolActivation.spendActionEvidenceSafetyActive(ord(749999L)),
-      ProtocolActivation.spendActionEvidenceSafetyActive(ord(750000L))
+      !ProtocolActivation.spendActionEvidenceSafetyActive(ord(belowGate)),
+      ProtocolActivation.spendActionEvidenceSafetyActive(ord(gate))
     )
   }
 
   pureTest("new gate: the state ordinal wins over a live-context tip during historical replay") {
     expect.all(
-      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(749999L))) == ord(750000L),
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(belowGate))) == ord(gate),
       ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(739999L))) == ord(740000L),
       ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), None) == ord(900001L)
     )

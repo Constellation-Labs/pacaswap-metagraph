@@ -43,11 +43,12 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   *   - Rewards. Minted by the currency reward mechanism, never custodied at the metagraph address, so outstanding rewards are not a claim
   *     on the wallet and are not subtracted.
   *
-  * Advisory below `ProtocolActivation.collateralInvariantEnforced`, refusing from it onwards. It was written advisory because the book was
-  * short 1,641,127.95926795 DAG by construction at the time, pending treasury funding; rejecting then would have refused every snapshot.
-  * That funding landed on 2026-08-27 and every ledger read 1:1, but the check was left sampling one ordinal in fifty and only warning. On
-  * 2026-08-31 the combine rolled back two already-settled swaps at ordinal 741789 and built the snapshot anyway. The invariant saw it -
-  * `COLLATERAL_INVARIANT BREACH ordinal=741800 ledger=DAG` is in the node log - four ordinals too late to prevent anything.
+  * Advisory always, on every ordinal. `ProtocolActivation.collateralInvariantEnforced` is defined but deliberately not read here yet. It
+  * was written advisory because the book was short 1,641,127.95926795 DAG by construction at the time, pending treasury funding; rejecting
+  * then would have refused every snapshot. That funding landed on 2026-08-27 and every ledger read 1:1, but the check was left sampling one
+  * ordinal in fifty and only warning. On 2026-08-31 the combine rolled back two already-settled swaps at ordinal 741789 and built the
+  * snapshot anyway. The invariant saw it - `COLLATERAL_INVARIANT BREACH ordinal=741800 ledger=DAG` is in the node log - four ordinals too
+  * late to prevent anything.
   *
   * DAG is fungible and shared across every pool, so only the aggregate is meaningful. Each token belongs to exactly one pool, so those are
   * exact per pool. Never derive one from the other: that conflation previously produced a 147,940.10 DAG error.
