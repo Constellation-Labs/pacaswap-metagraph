@@ -135,11 +135,21 @@ object IncidentSwapRollbackCorrectionSpec extends SimpleIOSuite {
     )
   }
 
-  pureTest("the correction ordinal is fail-closed even though it is not a legacy one-time-fix ordinal") {
+  pureTest("the correction stays fail-closed until a finalized state proves it was applied") {
+    val before = ord(at.value.value - 1L)
+    val after = ord(at.value.value + 1L)
     expect.all(
-      L0CombinerService.mustFailClosed(Some(at), atOneTimeFix = false),
-      !L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), atOneTimeFix = false),
-      L0CombinerService.mustFailClosed(Some(ord(1L)), atOneTimeFix = true)
+      // At the activation ordinal, with nothing finalized past it yet.
+      L0CombinerService.mustFailClosed(Some(at), Some(before), atOneTimeFix = false),
+      // Still armed afterwards while the last finalized state is below activation. A failed combine
+      // is turned into the previous state by the SDK and the snapshot can still be built, so an
+      // exact-ordinal-only guard would let the correction be skipped permanently.
+      L0CombinerService.mustFailClosed(Some(after), Some(before), atOneTimeFix = false),
+      // Disarmed once a finalized state at or past activation proves it landed.
+      !L0CombinerService.mustFailClosed(Some(after), Some(at), atOneTimeFix = false),
+      // Untouched below activation, and the legacy one-time-fix ordinals still fail closed.
+      !L0CombinerService.mustFailClosed(Some(before), Some(ord(1L)), atOneTimeFix = false),
+      L0CombinerService.mustFailClosed(Some(ord(1L)), Some(ord(0L)), atOneTimeFix = true)
     )
   }
 
