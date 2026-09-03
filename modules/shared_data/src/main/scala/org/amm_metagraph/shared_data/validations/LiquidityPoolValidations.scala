@@ -6,11 +6,13 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
+import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.AllowSpends._
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.app.ApplicationConfig.Environment
@@ -49,7 +51,8 @@ trait LiquidityPoolValidations[F[_]] {
     lastSyncGlobalEpochProgress: EpochProgress,
     currencyId: CurrencyId,
     allowSpendTokenA: Hashed[AllowSpend],
-    allowSpendTokenB: Hashed[AllowSpend]
+    allowSpendTokenB: Hashed[AllowSpend],
+    currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]]
 
   def pendingSpendActionsValidation(
@@ -157,7 +160,8 @@ object LiquidityPoolValidations {
       lastSyncGlobalEpochProgress: EpochProgress,
       currencyId: CurrencyId,
       allowSpendTokenA: Hashed[AllowSpend],
-      allowSpendTokenB: Hashed[AllowSpend]
+      allowSpendTokenB: Hashed[AllowSpend],
+      currentSnapshotOrdinal: SnapshotOrdinal
     ): F[Either[FailedCalculatedState, Signed[LiquidityPoolUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
@@ -180,9 +184,25 @@ object LiquidityPoolValidations {
             failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
           } else if (update.tokenBAmount.value > allowSpendTokenB.amount.value.value) {
             failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
-          } else if (allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+          } else if (
+            AllowSpendSettlement.expiredForSettlement(
+              allowSpendTokenA.lastValidEpochProgress,
+              lastSyncGlobalEpochProgress,
+              legacyExpired =
+                allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value,
+              currentSnapshotOrdinal
+            )
+          ) {
             failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
-          } else if (allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+          } else if (
+            AllowSpendSettlement.expiredForSettlement(
+              allowSpendTokenB.lastValidEpochProgress,
+              lastSyncGlobalEpochProgress,
+              legacyExpired =
+                allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value,
+              currentSnapshotOrdinal
+            )
+          ) {
             failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
           } else {
             Right(signedUpdate)

@@ -215,6 +215,7 @@ object PendingOperationsProcessor {
                         acc,
                         context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotSyncAllowSpends,
+                        context.currentSnapshotOrdinal,
                         context.currencyId
                       )
                       _ <- logger.debug(s"Successfully processed LP pending allow spend ${pendingUpdate.updateHash}")
@@ -232,6 +233,7 @@ object PendingOperationsProcessor {
                         acc,
                         context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotSyncAllowSpends,
+                        context.currentSnapshotOrdinal,
                         context.currencyId
                       )
                       _ <- logger.debug(s"Successfully processed staking pending allow spend ${pendingUpdate.updateHash}")
