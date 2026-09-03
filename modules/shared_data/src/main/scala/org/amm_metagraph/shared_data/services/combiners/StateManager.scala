@@ -11,9 +11,9 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 
 import fs2.concurrent.SignallingRef
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data._
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
-import org.amm_metagraph.shared_data.{IncidentSwapRollbackCorrection, IncidentTokenLockRemediation, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -116,6 +116,17 @@ object StateManager {
             err =>
               logger.error(s"INCIDENT_SWAP_ROLLBACK_CORRECTION refused: ${err.message}") >>
                 new IllegalStateException(s"swap rollback correction failed: ${err.message}")
+                  .raiseError[F, AmmCalculatedState],
+            _.pure[F]
+          )
+
+        // Second one-shot correction, USDC.dag/DAG pool. Chained so both are all-or-nothing.
+        correctedOperations <- IncidentUsdcRollbackCorrection
+          .applyTo(correctedOperations, context.currentSnapshotOrdinal)
+          .fold(
+            err =>
+              logger.error(s"INCIDENT_USDC_ROLLBACK_CORRECTION refused: ${err.message}") >>
+                new IllegalStateException(s"usdc rollback correction failed: ${err.message}")
                   .raiseError[F, AmmCalculatedState],
             _.pure[F]
           )
