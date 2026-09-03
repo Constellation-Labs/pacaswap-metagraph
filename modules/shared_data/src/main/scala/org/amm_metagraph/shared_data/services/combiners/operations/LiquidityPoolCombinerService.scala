@@ -43,6 +43,7 @@ trait LiquidityPoolCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -51,6 +52,7 @@ trait LiquidityPoolCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -156,6 +158,7 @@ object LiquidityPoolCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolUpdate = signedUpdate.value
@@ -248,6 +251,7 @@ object LiquidityPoolCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -270,6 +274,7 @@ object LiquidityPoolCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
@@ -291,7 +296,8 @@ object LiquidityPoolCombinerService {
                     globalEpochProgress,
                     currencyId,
                     allowSpendTokenA,
-                    allowSpendTokenB
+                    allowSpendTokenB,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
                 amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)

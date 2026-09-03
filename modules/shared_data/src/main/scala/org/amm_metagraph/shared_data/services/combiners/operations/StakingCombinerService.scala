@@ -42,6 +42,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -50,6 +51,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -156,6 +158,7 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
@@ -248,6 +251,7 @@ object StakingCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -270,6 +274,7 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
 
@@ -304,7 +309,8 @@ object StakingCombinerService {
                     currencyId,
                     stakingTokenInfo,
                     allowSpendTokenA,
-                    allowSpendTokenB
+                    allowSpendTokenB,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
                 (amountToSpendA, amountToSpendB) =

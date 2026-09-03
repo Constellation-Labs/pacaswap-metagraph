@@ -142,4 +142,21 @@ object ProtocolActivation {
 
   def usdcRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= usdcRollbackCorrection.value.value
+
+  /** Stop emitting SpendActions the global layer can no longer settle.
+    *
+    * The allow-spend stage accepted an AllowSpend whose `lastValidEpochProgress` equalled the synced global epoch (swaps), or was up to
+    * `allowSpendEpochBufferDelay` behind it (pools and staking). The global layer expires an AllowSpend as soon as its epoch passes
+    * `lastValidEpochProgress` and applies a SpendAction no earlier than the next global snapshot, so a SpendAction emitted at that edge is
+    * refused there while the book has already moved. That is the trigger of the 747126 incident; the direction-blind rollback was the
+    * damage. From this ordinal an AllowSpend must have `spendActionSettlementHeadroom` epochs left, or the operation fails at the
+    * allow-spend stage before any reserve is touched. See AllowSpendSettlement.
+    *
+    * Later than `usdcRollbackCorrection` so it ships in the same coordinated upgrade without reordering the corrections. Re-check against
+    * the live head immediately before deployment.
+    */
+  val spendActionHeadroom: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(754000L))
+
+  def spendActionHeadroomActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= spendActionHeadroom.value.value
 }

@@ -384,7 +384,8 @@ object SwapCombinerService {
                     globalEpochProgress,
                     currencyId,
                     swapTokenInfo,
-                    allowSpendToken
+                    allowSpendToken,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
 
