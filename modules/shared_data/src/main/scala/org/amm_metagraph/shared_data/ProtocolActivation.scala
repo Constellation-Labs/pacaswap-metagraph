@@ -130,4 +130,16 @@ object ProtocolActivation {
 
   def rollbackDirectionFixActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= rollbackDirectionFix.value.value
+
+  /** Applies the one-shot USDC.dag/DAG reserve correction. See IncidentUsdcRollbackCorrection.
+    *
+    * One ordinal after `rollbackDirectionFix`, for the same reason `swapRollbackCorrection` follows `spendActionEvidenceSafety`: the defect
+    * that corrupted the book must be gated off before the number is fixed, or a second failed token B -> token A swap in the window would
+    * leave a fresh gap that these fixed deltas would not close. Before `collateralInvariantEnforced`, so the book is right before the
+    * invariant may refuse snapshots on it. There is a test asserting both orderings.
+    */
+  val usdcRollbackCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(rollbackDirectionFix.value.value + 1L))
+
+  def usdcRollbackCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= usdcRollbackCorrection.value.value
 }

@@ -28,8 +28,10 @@ object L0CombinerService {
     atOneTimeFix: Boolean
   ): Boolean =
     atOneTimeFix || nextOrdinal.exists { ordinal =>
-      ProtocolActivation.swapRollbackCorrectionActive(ordinal) &&
-      lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.swapRollbackCorrection)
+      (ProtocolActivation.swapRollbackCorrectionActive(ordinal) &&
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.swapRollbackCorrection)) ||
+      (ProtocolActivation.usdcRollbackCorrectionActive(ordinal) &&
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.usdcRollbackCorrection))
     }
 
   def make[F[_]: Async](
