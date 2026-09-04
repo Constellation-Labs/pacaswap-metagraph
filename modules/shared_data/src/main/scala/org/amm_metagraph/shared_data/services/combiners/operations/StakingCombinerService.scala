@@ -23,6 +23,7 @@ import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAccept
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -41,6 +42,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -49,6 +51,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -146,8 +149,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                     => false
+          case PendingSpendAction(update, _, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                        => false
         }
 
       def combineNew(
@@ -155,6 +158,7 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
@@ -247,6 +251,7 @@ object StakingCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -269,6 +274,7 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
 
@@ -303,7 +309,8 @@ object StakingCombinerService {
                     currencyId,
                     stakingTokenInfo,
                     allowSpendTokenA,
-                    allowSpendTokenB
+                    allowSpendTokenB,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
                 (amountToSpendA, amountToSpendB) =
@@ -325,6 +332,9 @@ object StakingCombinerService {
                   allowSpendTokenB,
                   amountToSpendB
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(stakingCalculatedState, pendingAllowSpendUpdate.update)
@@ -332,7 +342,8 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  pendingAllowSpendUpdate.pricingTokenInfo
+                  pendingAllowSpendUpdate.pricingTokenInfo,
+                  generatedAfterGlobalOrdinal
                 )
 
                 updatedPendingSpendActionCalculatedState =

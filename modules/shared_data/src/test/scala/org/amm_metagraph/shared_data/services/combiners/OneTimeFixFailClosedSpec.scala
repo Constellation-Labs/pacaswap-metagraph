@@ -19,6 +19,7 @@ import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.NonNegLong
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States._
 import weaver.MutableIOSuite
@@ -123,7 +124,7 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
       )
   }
 
-  test("an ordinary combine still swallows and returns oldState") { res =>
+  test("an ordinary combine drops updates but records the deterministic snapshot frame") { res =>
     implicit val (h, sp) = res
     for {
       kp <- KeyPairGenerator.makeKeyPair[IO]
@@ -137,10 +138,87 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         SnapshotOrdinal.MinValue,
         AMM
       )
-      // Same failure, but no ordinal is declared a fix ordinal: the ordinary product behaviour is
-      // preserved, so the change is scoped to the incident branch only.
+      // Same failure, but no ordinal is declared a fix ordinal: updates are still dropped. The
+      // ordinal marker must advance with the accepted wrapper snapshot or this node remains one
+      // frame behind and stalls when a later activation is reached.
       r <- combinerWith(handler(Set.empty, raiseAlways = true)).combine(emptyState, List.empty)(ctx).attempt
-    } yield expect.all(r.isRight, r.exists(_ == emptyState))
+    } yield
+      expect.all(
+        r.isRight,
+        r.exists(_.onChain == emptyState.onChain),
+        r.exists(_.calculated.copy(lastProcessedCurrencyOrdinal = None) == emptyState.calculated),
+        r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(1L)))
+      )
+  }
+
+  test("a replay fallback advances the state frame, not the live context head") { res =>
+    implicit val (h, sp) = res
+    val historicalPredecessor = ord(749000L)
+    val liveContextPredecessor = ord(900000L)
+    val replayState = emptyState.copy(
+      calculated = emptyState.calculated.copy(lastProcessedCurrencyOrdinal = historicalPredecessor.some)
+    )
+
+    for {
+      kp <- KeyPairGenerator.makeKeyPair[IO]
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        liveContextPredecessor,
+        AMM
+      )
+      r <- combinerWith(handler(Set.empty, raiseAlways = true)).combine(replayState, List.empty)(ctx).attempt
+    } yield
+      expect.all(
+        r.isRight,
+        r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(749001L))),
+        !r.exists(_.calculated.lastProcessedCurrencyOrdinal.contains(ord(900001L)))
+      )
+  }
+
+  test("a failure at the swap rollback correction ordinal must NOT return oldState") { res =>
+    implicit val (h, sp) = res
+    for {
+      kp <- KeyPairGenerator.makeKeyPair[IO]
+      ctx = buildL0NodeContext[IO](
+        kp,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        ord(ProtocolActivation.swapRollbackCorrection.value.value - 1L),
+        AMM
+      )
+      // No OneTimeFixesHandler ordinal is active. The stub StateManager raises after that handler,
+      // proving the correction ordinal itself selects the fail-closed branch in the production
+      // L0CombinerService wrapper.
+      r <- combinerWith(handler(Set.empty)).combine(emptyState, List.empty)(ctx).attempt
+    } yield
+      expect.all(
+        r.isLeft,
+        r.swap.exists(_.getMessage.contains("must not be reached")),
+        !r.exists(_ == emptyState)
+      )
+  }
+
+  test("rollback correction failure remains fail-closed after activation until completion is recorded") { _ =>
+    val at = ProtocolActivation.swapRollbackCorrection
+    val before = Some(ord(at.value.value - 1L))
+    val completed = Some(at)
+
+    expect
+      .all(
+        L0CombinerService.mustFailClosed(Some(at), before, atOneTimeFix = false),
+        L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), before, atOneTimeFix = false),
+        !L0CombinerService.mustFailClosed(Some(ord(at.value.value + 1L)), completed, atOneTimeFix = false),
+        !L0CombinerService.mustFailClosed(Some(ord(at.value.value - 1L)), before, atOneTimeFix = false)
+      )
+      .pure[IO]
   }
 
   test("the real handler declares 731647, and only fix ordinals, as one-time") { _ =>
@@ -153,8 +231,13 @@ object OneTimeFixFailClosedSpec extends MutableIOSuite {
         real.isOneTimeFixOrdinal(ord(111700L)),
         real.isOneTimeFixOrdinal(ord(161148L)),
         real.isOneTimeFixOrdinal(ord(731648L)), // normalization, updated-pools-14
+        // The incident token-lock remediation is NOT a one-time fix: it is applied every ordinal by
+        // the persistent filter in StateManager.prepareStateForNewOrdinal, so it must not short-circuit
+        // the normal snapshot transition.
+        !real.isOneTimeFixOrdinal(ProtocolActivation.incidentTokenLockRemediation),
         !real.isOneTimeFixOrdinal(ord(731646L)), // the last ordinal before the stop
-        !real.isOneTimeFixOrdinal(ord(731649L)) // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(731649L)), // and ordinary ordinals after
+        !real.isOneTimeFixOrdinal(ord(ProtocolActivation.incidentTokenLockRemediation.value.value - 1L))
       )
   }
 }

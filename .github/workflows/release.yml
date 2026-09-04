@@ -110,12 +110,26 @@ jobs:
           VERSION: v${{ steps.get_version.outputs.VERSION }}
 
       - name: Copy dependencies
-        env:
-          VERSION: ${{ steps.get_version.outputs.VERSION }}
         run: |
-          cp ./modules/l0/target/scala-2.13/amm_metagraph-currency-l0-assembly-$VERSION.jar ./metagraph-l0.jar
-          cp ./modules/l1/target/scala-2.13/amm_metagraph-currency-l1-assembly-$VERSION.jar ./currency-l1.jar
-          cp ./modules/data_l1/target/scala-2.13/amm_metagraph-data_l1-assembly-$VERSION.jar ./data-l1.jar
+          # The assembly step and this one disagreed on whether VERSION carries the leading "v",
+          # so reconstructing the filename guessed wrong and the release died after a green build.
+          # Take whatever assembly actually produced, and fail loudly if it is not exactly one jar.
+          copy_assembly() {
+            local dir="$1" prefix="$2" dest="$3"
+            local matches
+            mapfile -t matches < <(find "$dir" -maxdepth 1 -name "${prefix}-assembly-*.jar" | sort)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "::error::expected exactly one ${prefix} assembly jar in $dir, found ${#matches[@]}"
+              printf '::error::  %s\n' "${matches[@]}"
+              exit 1
+            fi
+            echo "Using $(basename "${matches[0]}")"
+            cp "${matches[0]}" "$dest"
+          }
+
+          copy_assembly ./modules/l0/target/scala-2.13 amm_metagraph-currency-l0 ./metagraph-l0.jar
+          copy_assembly ./modules/l1/target/scala-2.13 amm_metagraph-currency-l1 ./currency-l1.jar
+          copy_assembly ./modules/data_l1/target/scala-2.13 amm_metagraph-data_l1 ./data-l1.jar
 
       - name: Upload JAR artifacts
         uses: actions/upload-artifact@v4

@@ -182,14 +182,9 @@ object CollateralInvariantSpec extends SimpleIOSuite {
 
   // ------------------------------------------- it must never break the combine
 
-  pureTest("the check is sampled, so it is not a cost paid on every snapshot") {
-    // It runs inside consensus. Reading collections and writing log lines is real work on the
-    // critical path; a check that slows the combine can itself cause the problem it looks for.
-    expect.all(
-      CollateralInvariant.checkEveryNOrdinals > 1L,
-      731650L % CollateralInvariant.checkEveryNOrdinals == 0L
-    )
-  }
+  // Sampling was removed: the check now runs on every ordinal, so there is no interval left to
+  // assert. What matters instead is that it can never fail the combine, and that is covered end to
+  // end by CombinerTest below.
 
   // The regression for "the check must never fail the combine" is covered end to end by
   // CombinerTest, which runs the whole combine with the invariant wired in. It is what caught

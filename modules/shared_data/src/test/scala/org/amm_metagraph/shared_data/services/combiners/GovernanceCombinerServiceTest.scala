@@ -34,6 +34,7 @@ import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChai
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.amm_metagraph.shared_data.types.{DataUpdates, States}
 import org.amm_metagraph.shared_data.validations.GovernanceValidations
+import org.amm_metagraph.shared_data.{IncidentTokenLockRemediation, ProtocolActivation}
 import weaver.MutableIOSuite
 
 object GovernanceCombinerServiceTest extends MutableIOSuite {
@@ -158,6 +159,63 @@ object GovernanceCombinerServiceTest extends MutableIOSuite {
         expect(res.calculated.allocations.frozenUsedUserVotes.votes == expectedAllocations) &&
         expect(res.calculated.allocations.frozenUsedUserVotes.votingPowerForAddresses == actualVotingWeights) &&
         expect(res.onChain.governanceVotingResult == voteResult.some)
+  }
+
+  test("incident TokenLocks cannot enter the monthly vote freeze or its reward inputs") { implicit res =>
+    implicit val (h, hs, sp) = res
+    val incidentOwner = Address("DAG6zZakMJrrf25FSvPZAi8QA9wVDdmvFkPvTbKu")
+    val incidentLock = IncidentTokenLockRemediation.incidentTokenLocks.find(_.source == incidentOwner).get
+    val legitimateLock = TokenLock(
+      incidentOwner,
+      TokenLockAmount(PosLong(1000L)),
+      TokenLockFee(NonNegLong.MinValue),
+      TokenLockReference(TokenLockOrdinal(99L), io.constellationnetwork.security.hash.Hash("legitimate-lock")),
+      CurrencyId(Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")).some,
+      EpochProgress(4000000L).some
+    )
+    val incidentInfo = VotingPowerInfo(NonNegLong(140000000000000000L), incidentLock, EpochProgress(2855078L))
+    val legitimateInfo = VotingPowerInfo(NonNegLong(1000L), legitimateLock, EpochProgress(2500000L))
+    val importedVotingPowers = SortedMap(
+      incidentOwner -> VotingPower(NonNegLong(140000000000001000L), SortedSet(incidentInfo, legitimateInfo))
+    )
+    val filteredVotingPowers = IncidentTokenLockRemediation.removeFromVotingPowers(
+      importedVotingPowers,
+      ProtocolActivation.incidentTokenLockRemediation
+    )
+    val currentMonthReference =
+      MonthlyReference(EpochProgress(1L), EpochProgress(10L), NonNegLong.MinValue)
+    val currentAllocations = Allocations(
+      currentMonthReference,
+      buildAllocations(Map(incidentOwner -> Map("validator" -> 1.0)), Map(incidentOwner -> 10L)),
+      GovernanceVotingResult.empty
+    )
+    val state = DataState(AmmOnChainState.empty, AmmCalculatedState())
+      .focus(_.calculated.allocations)
+      .replace(currentAllocations)
+      .focus(_.calculated.votingPowers)
+      .replace(filteredVotingPowers)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+      implicit0(context: L0NodeContext[IO]) = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MaxValue,
+        SnapshotOrdinal.MinValue,
+        ownerAddress
+      )
+      governanceCombiner = GovernanceCombinerService.make[IO](config, dummyGovernanceValidation)
+      result <- governanceCombiner.handleMonthExpiration(state, EpochProgress(11L))
+      frozenVotingPower = result.calculated.allocations.frozenUsedUserVotes.votingPowerForAddresses(incidentOwner)
+    } yield
+      expect.all(
+        frozenVotingPower.total.value == 1000L,
+        frozenVotingPower.info == SortedSet(legitimateInfo),
+        !frozenVotingPower.info.exists(info => IncidentTokenLockRemediation.isIncidentTokenLock(info.tokenLock))
+      )
   }
 
   test("a vote accepted at the first epoch of a new month survives the preceding month rollover") { implicit res =>

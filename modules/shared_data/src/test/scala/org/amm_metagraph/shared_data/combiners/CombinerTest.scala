@@ -10,9 +10,11 @@ import io.constellationnetwork.ext.cats.effect.ResourceIO
 import io.constellationnetwork.json.JsonSerializer
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
-import io.constellationnetwork.schema.artifact.SpendAction
+import io.constellationnetwork.schema.artifact.{AllowSpendExpiration, SharedArtifact, SpendAction}
+import io.constellationnetwork.schema.balance.Amount
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap._
+import io.constellationnetwork.schema.tokenLock._
 import io.constellationnetwork.security.hash.Hash
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvider}
@@ -20,15 +22,18 @@ import io.constellationnetwork.security.{Hasher, KeyPairGenerator, SecurityProvi
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.{NonNegLong, PosLong}
 import org.amm_metagraph.shared_data.DummyL0Context.buildL0NodeContext
+import org.amm_metagraph.shared_data.IncidentTokenLockRemediation
 import org.amm_metagraph.shared_data.Shared._
 import org.amm_metagraph.shared_data.calculated_state.CalculatedStateService
 import org.amm_metagraph.shared_data.refined._
-import org.amm_metagraph.shared_data.rewards.RewardCalculator
+import org.amm_metagraph.shared_data.rewards.{RewardCalculator, RewardDistributionChunk}
 import org.amm_metagraph.shared_data.services.combiners._
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
 import org.amm_metagraph.shared_data.types.DataUpdates._
+import org.amm_metagraph.shared_data.types.Governance.{VotingPower, VotingPowerInfo}
+import org.amm_metagraph.shared_data.types.Rewards.RewardTypeExtended
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations._
@@ -503,10 +508,116 @@ object CombinerTest extends MutableIOSuite {
         .asInstanceOf[LiquidityPoolCalculatedState]
     } yield
       expect.all(
-        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _) => update }.size === 1 &&
-          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _) => update }.size === 1 &&
+        pendingLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _, _) => update }.size === 1 &&
+          confirmedLiquidityPoolCalculatedState.pending.collect { case PendingSpendAction(update, _, _, _, _) => update }.size === 1 &&
           pendingLiquidityPoolCalculatedState.confirmed.value.size === 0 &&
           confirmedLiquidityPoolCalculatedState.confirmed.value.size === 0
+      )
+  }
+
+  test("Test combiner - incident token-lock remediation runs the normal transition at the activation ordinal") { implicit res =>
+    implicit val (h, hs, sp) = res
+
+    val ammAddress = Address("DAG7X5idd4aLfp4XC6WQdG1eDfR3LGPVEwtUUB2W")
+    val swapCurrencyId = CurrencyId(ammAddress)
+    val owner = Address("DAG6zZakMJrrf25FSvPZAi8QA9wVDdmvFkPvTbKu")
+    val incidentOnlyOwner = Address("DAG4fVZch1qTY2ccA5eHkxe2RMTFsnNDU6Zu6mUU")
+
+    val ownerIncidentLock = IncidentTokenLockRemediation.incidentTokenLocks.find(_.source == owner).get
+    val incidentOnlyLock = IncidentTokenLockRemediation.incidentTokenLocks.find(_.source == incidentOnlyOwner).get
+    val legitimateLock = TokenLock(
+      source = owner,
+      amount = TokenLockAmount(PosLong.unsafeFrom(1000L)),
+      fee = TokenLockFee(NonNegLong.MinValue),
+      parent = TokenLockReference(TokenLockOrdinal(NonNegLong.unsafeFrom(99L)), Hash("legitimate-lock")),
+      currencyId = Some(swapCurrencyId),
+      unlockEpoch = Some(EpochProgress(NonNegLong.unsafeFrom(4000000L)))
+    )
+
+    val incidentInfo =
+      VotingPowerInfo(NonNegLong.unsafeFrom(140000000000000000L), ownerIncidentLock, EpochProgress(NonNegLong.unsafeFrom(2855078L)))
+    val legitimateInfo =
+      VotingPowerInfo(NonNegLong.unsafeFrom(7000L), legitimateLock, EpochProgress(NonNegLong.unsafeFrom(2500000L)))
+    val incidentOnlyInfo =
+      VotingPowerInfo(NonNegLong.unsafeFrom(7000000000000000L), incidentOnlyLock, EpochProgress(NonNegLong.unsafeFrom(2855087L)))
+
+    val votingPowers = SortedMap(
+      owner -> VotingPower(NonNegLong.unsafeFrom(140000000000007000L), SortedSet(incidentInfo, legitimateInfo)),
+      incidentOnlyOwner -> VotingPower(incidentOnlyInfo.votingPower, SortedSet(incidentOnlyInfo))
+    )
+
+    // Prior onChain and sharedArtifacts are seeded non-empty. The removed one-time-fix branch returned
+    // early and preserved both; the persistent-filter path runs the normal transition, which clears them.
+    val staleReward = RewardDistributionChunk(incidentOnlyOwner, RewardTypeExtended.Dao, Amount(NonNegLong.unsafeFrom(1L)))
+    val onChainSentinel = AmmOnChainState.empty.copy(rewardsUpdate = Seq(staleReward))
+    val staleArtifacts: SortedSet[SharedArtifact] = SortedSet(AllowSpendExpiration(Hash.empty))
+
+    val state = DataState(onChainSentinel, AmmCalculatedState(votingPowers = votingPowers))
+      .copy(sharedArtifacts = staleArtifacts)
+
+    for {
+      keyPair <- KeyPairGenerator.makeKeyPair[IO]
+
+      // csSnapshotOrdinal 739999 -> the combine runs at 740000, the activation ordinal.
+      context = buildL0NodeContext(
+        keyPair,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        EpochProgress.MinValue,
+        SnapshotOrdinal(NonNegLong.unsafeFrom(739999L)),
+        ammAddress
+      )
+
+      calculatedStateService <- CalculatedStateService.make[IO]
+      _ <- calculatedStateService.update(SnapshotOrdinal.MinValue, state.calculated)
+      jsonBase64BinaryCodec <- JsonWithBase64BinaryCodec.forSync[IO, AmmUpdate]
+      globalSnapshotService <- GlobalSnapshotsStorage.make[IO]
+
+      liquidityPoolValidations = LiquidityPoolValidations.make[IO](config, jsonBase64BinaryCodec)
+      stakingValidations = StakingValidations.make[IO](config, jsonBase64BinaryCodec)
+      swapValidations = SwapValidations.make[IO](config, jsonBase64BinaryCodec)
+      withdrawalValidations = WithdrawalValidations.make[IO](config, jsonBase64BinaryCodec)
+      governanceValidations = GovernanceValidations.make[IO](config, jsonBase64BinaryCodec)
+      rewardsValidations = RewardWithdrawValidations.make[IO](config, jsonBase64BinaryCodec)
+
+      pricingService <- PricingService.make[IO](config, calculatedStateService)
+      governanceCombinerService = GovernanceCombinerService.make[IO](config, governanceValidations)
+      liquidityPoolCombinerService = LiquidityPoolCombinerService.make[IO](config, liquidityPoolValidations, jsonBase64BinaryCodec)
+      stakingCombinerService = StakingCombinerService.make[IO](config, pricingService, stakingValidations, jsonBase64BinaryCodec)
+      swapCombinerService = SwapCombinerService.make[IO](config, pricingService, swapValidations, jsonBase64BinaryCodec)
+      withdrawalCombinerService = WithdrawalCombinerService.make[IO](config, pricingService, withdrawalValidations, jsonBase64BinaryCodec)
+      rewardCalculator <- RewardCalculator.make[IO](config.rewards, config.epochInfo)
+      rewardsCombinerService = RewardsDistributionService.make[IO](rewardCalculator, config.rewards, config.epochInfo)
+      rewardsWithdrawService = RewardsWithdrawService.make[IO](config.rewards, rewardsValidations, jsonBase64BinaryCodec)
+
+      combinerService <- L0CombinerServiceFactory
+        .make[IO](
+          globalSnapshotService,
+          governanceCombinerService,
+          liquidityPoolCombinerService,
+          stakingCombinerService,
+          swapCombinerService,
+          withdrawalCombinerService,
+          rewardsCombinerService,
+          rewardsWithdrawService
+        )
+
+      t <- context.getLastSynchronizedGlobalSnapshot
+      _ <- globalSnapshotService.set(t.get)
+
+      result <- combinerService.combine(state, List.empty)(context)
+    } yield
+      expect.all(
+        // The incident lock is stripped and the owner's legitimate lock is retained.
+        result.calculated.votingPowers(owner).info == SortedSet(legitimateInfo),
+        // The owner that held only an incident lock is dropped entirely.
+        !result.calculated.votingPowers.contains(incidentOnlyOwner),
+        // sharedArtifacts and the onChain sentinel are cleared, proving the normal snapshot
+        // transition ran rather than the one-time short-circuit (which preserved both).
+        result.sharedArtifacts.isEmpty,
+        !result.onChain.rewardsUpdate.contains(staleReward)
       )
   }
 }

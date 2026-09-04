@@ -5,10 +5,10 @@ import cats.syntax.all._
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshotInfo}
-import io.constellationnetwork.ext.cats.syntax.next.catsSyntaxNext
 import io.constellationnetwork.security.Hashed
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.DataUpdates.AmmUpdate
 import org.amm_metagraph.shared_data.types.States.{AmmCalculatedState, AmmOnChainState}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -22,6 +22,18 @@ trait L0CombinerService[F[_]] {
 }
 
 object L0CombinerService {
+  private[shared_data] def mustFailClosed(
+    nextOrdinal: Option[io.constellationnetwork.schema.SnapshotOrdinal],
+    lastProcessedCurrencyOrdinal: Option[io.constellationnetwork.schema.SnapshotOrdinal],
+    atOneTimeFix: Boolean
+  ): Boolean =
+    atOneTimeFix || nextOrdinal.exists { ordinal =>
+      (ProtocolActivation.swapRollbackCorrectionActive(ordinal) &&
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.swapRollbackCorrection)) ||
+      (ProtocolActivation.usdcRollbackCorrectionActive(ordinal) &&
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.usdcRollbackCorrection))
+    }
+
   def make[F[_]: Async](
     stateManager: StateManager[F],
     updateProcessor: NewUpdatesProcessor[F],
@@ -42,7 +54,10 @@ object L0CombinerService {
       ): F[DataState[AmmOnChainState, AmmCalculatedState]] = for {
         result <- currencySnapshotOpt match {
           case Some((lastCurrencySnapshot, lastCurrencySnapshotInfo)) =>
-            val currentSnapshotOrdinal = lastCurrencySnapshot.ordinal.next
+            val currentSnapshotOrdinal = ContextHelper.selectCurrentSnapshotOrdinal(
+              lastCurrencySnapshot.ordinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal
+            )
 
             for {
               _ <- logger.info(s"currentSnapshotOrdinal=$currentSnapshotOrdinal")
@@ -94,27 +109,53 @@ object L0CombinerService {
       for {
         _ <- logger.info("Starting combine function")
         currencySnapshotOpt <- context.getLastCurrencySnapshotCombined
-        nextOrdinal = currencySnapshotOpt.map { case (snapshot, _) => snapshot.ordinal.next }
+        nextOrdinal = currencySnapshotOpt.map {
+          case (snapshot, _) =>
+            ContextHelper.selectCurrentSnapshotOrdinal(
+              snapshot.ordinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal
+            )
+        }
         atOneTimeFix = nextOrdinal.exists(oneTimeFixesHandler.isOneTimeFixOrdinal)
         result <- run(currencySnapshotOpt).handleErrorWith { e =>
           val updateHashes = incomingUpdates.map(_.value.getClass.getSimpleName)
-          if (atOneTimeFix)
-            // A one-time state rewrite is paired with balance artifacts emitted on a separate
-            // path, which fails closed. Swallowing here would ship the deductions WITHOUT the
-            // reserve restoration and the frozen-state purge, leaving a partial, unrecoverable
-            // snapshot. The two must land together or the snapshot must not be built at all.
+          if (
+            L0CombinerService.mustFailClosed(
+              nextOrdinal,
+              oldState.calculated.lastProcessedCurrencyOrdinal,
+              atOneTimeFix
+            )
+          )
+            // Consensus corrections must never be converted into an apparently successful
+            // old-state result. The resource-backed one-time fixes have paired balance artifacts
+            // emitted on a separate path, so swallowing here would ship the deductions WITHOUT the
+            // reserve restoration and the frozen-state purge. The rollback correction is an
+            // exact-ordinal delta that gets no second chance. Either must land with its snapshot
+            // or the snapshot must not be built at all.
             logger.error(e)(
-              s"COMBINE_FAILED_AT_ONE_TIME_FIX ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
-                "build this snapshot. The paired balance artifacts must not ship without this state " +
-                "change. Fix the cause and restart; do NOT let the node proceed past this ordinal."
+              s"COMBINE_FAILED_AT_CONSENSUS_CORRECTION ordinal=${nextOrdinal.fold("?")(_.show)}: refusing to " +
+                "build this snapshot. A required one-shot state transition did not apply atomically. " +
+                "Fix the cause and restart; do NOT let the node proceed past this ordinal."
             ) >> Async[F].raiseError[DataState[AmmOnChainState, AmmCalculatedState]](e)
-          else
+          else {
+            // The SDK can accept the snapshot after this fallback because the ordinal marker is not
+            // part of the calculated-state proof. Returning it unchanged would leave this node one
+            // frame behind forever; at a later activation it would evaluate the wrong rules and
+            // stall against the majority proof. Advance only the deterministic frame selected above
+            // (never the live context head), which is equally safe during live processing and replay.
+            val recoveredState = nextOrdinal.fold(oldState) { ordinal =>
+              oldState.copy(
+                calculated = oldState.calculated.copy(lastProcessedCurrencyOrdinal = ordinal.some)
+              )
+            }
+
             logger
               .error(e)(
                 s"COMBINE_FAILED: dropping ${incomingUpdates.size} update(s) $updateHashes and returning previous state. " +
                   s"If this error is non-deterministic across nodes it WILL fork consensus — investigate immediately."
               )
-              .as(oldState)
+              .as(recoveredState)
+          }
         }
       } yield result
     }

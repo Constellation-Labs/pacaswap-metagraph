@@ -7,6 +7,8 @@ import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.{DataState, L0NodeContext}
 import io.constellationnetwork.schema.SnapshotOrdinal
+import io.constellationnetwork.schema.artifact.SpendAction
+import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
 import org.amm_metagraph.shared_data.ProtocolActivation
@@ -17,6 +19,7 @@ import org.amm_metagraph.shared_data.types.Staking._
 import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.Withdrawal._
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -31,25 +34,55 @@ object PendingOperationsProcessor {
 
   /** Selects pending SpendActions that may be resolved from the Global L0 evidence currently available.
     *
-    * The completeness check intentionally precedes `readReturnedActions`. A partial read can contain unrelated SpendActions while omitting
-    * the one needed by a pending operation, so non-empty partial evidence must never authorize a failed/expired decision. The
-    * pre-activation ordering is retained for deterministic replay of already-signed history.
+    * A partial read can contain unrelated SpendActions while omitting the one needed by a pending operation. After
+    * `spendActionEvidenceSafety`, positive evidence is matched per operation, while only a complete read can authorize a failed/expired
+    * decision. The pre-activation ordering is retained for deterministic replay of already-signed history.
     */
   private[shared_data] def selectPendingSpendActions[A](
     currentSnapshotOrdinal: SnapshotOrdinal,
     evidenceComplete: Boolean,
     readReturnedActions: Boolean,
-    pendingSpendActions: SortedSet[A]
+    pendingSpendActions: SortedSet[A],
+    isAccepted: A => Boolean = (_: A) => false,
+    evidenceCovers: A => Boolean = (_: A) => true
   )(isExpired: A => Boolean): SortedSet[A] = {
     val none = pendingSpendActions.filter(_ => false)
 
-    if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete) none
+    if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal))
+      // Positive evidence is operation-specific and safe even when another ordinal was missing.
+      // Negative evidence is range-wide: only a complete scan may expire an unmatched operation.
+      pendingSpendActions.filter(p => isAccepted(p) || (evidenceComplete && evidenceCovers(p) && isExpired(p)))
+    else if (ProtocolActivation.evidenceCompletenessFirstActive(currentSnapshotOrdinal) && !evidenceComplete) none
     else if (readReturnedActions) pendingSpendActions
     else if (!evidenceComplete) none
     else pendingSpendActions.filter(isExpired)
   }
 
-  def make[F[_]: Async](
+  private[shared_data] def hasPendingSpendActions(state: AmmCalculatedState): Boolean =
+    getPendingSpendActionLiquidityPoolUpdates(state).nonEmpty ||
+      getPendingSpendActionStakingUpdates(state).nonEmpty ||
+      getPendingSpendActionSwapUpdates(state).nonEmpty ||
+      getPendingSpendActionWithdrawalUpdates(state).nonEmpty
+
+  private[shared_data] def pendingSpendActionEvidenceLowerBound(
+    currentSnapshotOrdinal: SnapshotOrdinal,
+    cursor: SnapshotOrdinal,
+    state: AmmCalculatedState
+  ): SnapshotOrdinal =
+    if (ProtocolActivation.spendActionEvidenceSafetyActive(currentSnapshotOrdinal)) {
+      val provenances =
+        (getPendingSpendActionLiquidityPoolUpdates(state).toList ++
+          getPendingSpendActionStakingUpdates(state).toList ++
+          getPendingSpendActionSwapUpdates(state).toList ++
+          getPendingSpendActionWithdrawalUpdates(state).toList)
+          .flatMap(_.generatedAfterGlobalOrdinal)
+
+      provenances.minByOption(_.value.value).fold(cursor) { earliest =>
+        if (earliest.value.value < cursor.value.value) earliest else cursor
+      }
+    } else cursor
+
+  def make[F[_]: Async: HasherSelector](
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],
     stakingCombinerService: StakingCombinerService[F],
     swapCombinerService: SwapCombinerService[F],
@@ -182,6 +215,7 @@ object PendingOperationsProcessor {
                         acc,
                         context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotSyncAllowSpends,
+                        context.currentSnapshotOrdinal,
                         context.currencyId
                       )
                       _ <- logger.debug(s"Successfully processed LP pending allow spend ${pendingUpdate.updateHash}")
@@ -199,6 +233,7 @@ object PendingOperationsProcessor {
                         acc,
                         context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotSyncAllowSpends,
+                        context.currentSnapshotOrdinal,
                         context.currencyId
                       )
                       _ <- logger.debug(s"Successfully processed staking pending allow spend ${pendingUpdate.updateHash}")
@@ -247,19 +282,33 @@ object PendingOperationsProcessor {
         _ <- logger.info(s"Starting to combine ${pendingSpendActions.size} pending spend actions")
         _ <- logger.debug(s"Global snapshot sync spend actions available: ${context.globalSnapshotsSyncSpendActions.nonEmpty}")
 
-        // The completeness guard has to come FIRST. It used to sit behind `nonEmpty`, so a node that
-        // resolved even one ordinal containing any spend action treated a PARTIAL list as proof and
-        // processed every pending operation against it - including operations whose evidence lived
-        // in the ordinals it could not read. That is how a settled SpendAction gets expired and
-        // rolled back, which is precisely what stranded the DOR/DAG deposit in PROT-1695. Finding
-        // some actions says nothing about the ones you could not look for.
-        //
-        // Gated on its own later ordinal because 731647 is long past; see ProtocolActivation.
+        acceptedPendingSpendActions <-
+          if (
+            ProtocolActivation.spendActionEvidenceSafetyActive(context.currentSnapshotOrdinal) &&
+            context.globalSnapshotsSyncSpendActions.nonEmpty
+          )
+            HasherSelector[F].withCurrent { implicit hasher =>
+              for {
+                returnedHashes <- context.globalSnapshotsSyncSpendActions.traverse(action => Hasher[F].hash[SpendAction](action))
+                accepted <- pendingSpendActions.toList.filterA { pending =>
+                  Hasher[F].hash[SpendAction](pending.generatedSpendAction).map(returnedHashes.contains)
+                }
+              } yield accepted.toSet
+            }
+          else Set.empty[PendingSpendAction[AmmUpdate]].pure[F]
+
+        // An unrelated action in a partial range cannot authorize expiry. Exact positive matches
+        // are safe to process; unmatched operations require complete evidence.
         pendingSpendActionsToCombine = PendingOperationsProcessor.selectPendingSpendActions(
           context.currentSnapshotOrdinal,
           context.spendActionsEvidenceComplete,
           context.globalSnapshotsSyncSpendActions.nonEmpty,
-          pendingSpendActions
+          pendingSpendActions,
+          acceptedPendingSpendActions.contains,
+          (pending: PendingSpendAction[AmmUpdate]) =>
+            pending.generatedAfterGlobalOrdinal.exists(
+              _.value.value >= context.spendActionsEvidenceLowerBound.value.value
+            )
         ) { pending =>
           pending.update.value match {
             case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
@@ -289,7 +338,8 @@ object PendingOperationsProcessor {
                           Signed(lpUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -308,7 +358,8 @@ object PendingOperationsProcessor {
                           Signed(stakingUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -327,7 +378,8 @@ object PendingOperationsProcessor {
                           Signed(withdrawalUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
@@ -347,7 +399,8 @@ object PendingOperationsProcessor {
                           Signed(swapUpdate, pendingUpdate.update.proofs),
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
-                          pendingUpdate.pricingTokenInfo
+                          pendingUpdate.pricingTokenInfo,
+                          pendingUpdate.generatedAfterGlobalOrdinal
                         ),
                         acc,
                         context.lastSyncGlobalEpochProgress,
