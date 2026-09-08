@@ -32,6 +32,7 @@ import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SwapValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -238,8 +239,8 @@ object SwapCombinerService {
           swapStateValue = SwapCalculatedStateValue(expirationEpoch, swapStateAddress)
 
           updatedPending = swapCalculatedState.pending.filterNot {
-            case PendingSpendAction(update, _, _, _, _) => update === pendingAction.update
-            case _                                      => false
+            case PendingSpendAction(update, _, _, _, _, _) => update === pendingAction.update
+            case _                                         => false
           }
 
           newSwapState = swapCalculatedState
@@ -454,7 +455,12 @@ object SwapCombinerService {
                       pairTokenInformationUpdated = pairTokenInfo
                     )
                     .some,
-                  generatedAfterGlobalOrdinal
+                  generatedAfterGlobalOrdinal,
+                  // Gated at population: this action is embedded in on-chain state, so a value written
+                  // below the activation ordinal would change signed bytes during the rollout window.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    allowSpendToken.lastValidEpochProgress
+                  )
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {
@@ -538,12 +544,27 @@ object SwapCombinerService {
 
           isAccepted = checkIfSpendActionAcceptedInGl0(metagraphHash, globalHashes)
 
-          _ <- EitherT(swapValidations.pendingSpendActionsValidation(pendingSpendAction.update, isAccepted, globalEpochProgress))
+          _ <- EitherT(
+            swapValidations.pendingSpendActionsValidation(
+              pendingSpendAction.update,
+              isAccepted,
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
+            )
+          )
             .leftWiden[FailedCalculatedState]
 
           finalState <-
             if (!isAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),

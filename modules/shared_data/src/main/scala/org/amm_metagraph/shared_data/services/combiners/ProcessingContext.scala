@@ -27,6 +27,10 @@ case class ProcessingContext(
   // The greatest ordinal in the contiguous resolved prefix above the previous cursor. When
   // evidence is incomplete this prevents cleanup from advancing past the first unresolved gap.
   lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,
+  // Epoch of lastContiguousGlobalSnapshotOrdinal: the only clock a pending SpendAction may be
+  // expired against, because "not accepted by epoch E" is only evidence if the read reached E.
+  // None when that snapshot's epoch could not be read; nothing is expired then.
+  settlementEpochProgress: Option[EpochProgress],
   currencyId: CurrencyId,
   lastCurrencySnapshot: Hashed[CurrencyIncrementalSnapshot],
   lastCurrencySnapshotInfo: CurrencySnapshotInfo,

@@ -156,7 +156,7 @@ object globalSnapshots {
       }
     }
 
-  private def findAllowSpendInGlobalState[F[_]: Async: Hasher](
+  def findAllowSpendInGlobalState[F[_]: Async: Hasher](
     allowSpendHash: Hash,
     tokenId: Option[Address],
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]]

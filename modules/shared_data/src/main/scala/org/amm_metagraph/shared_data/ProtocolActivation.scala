@@ -159,4 +159,33 @@ object ProtocolActivation {
 
   def spendActionHeadroomActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= spendActionHeadroom.value.value
+
+  /** Expire an emitted SpendAction on the deadline the global layer enforces, not the one the user wrote on the update.
+    *
+    * At currency ordinal 756059 (2026-09-08) a swap's SpendAction was emitted with the swap's own `maxValidGsEpochProgress` equal to the
+    * synced global epoch. The global layer never reads that field: it validated the SpendAction against the AllowSpend's
+    * `lastValidEpochProgress`, which still had headroom, and settled it at global 6887529. The metagraph had already expired the swap one
+    * ordinal earlier on `maxValidGsEpochProgress` and reversed the book. From this ordinal a pending SpendAction is expired only when the
+    * AllowSpend it spends can no longer be settled, the expiry clock is the epoch of the last global snapshot the evidence actually covers,
+    * and a SpendAction is not emitted unless the update's own deadline also has settlement headroom. See AllowSpendSettlement.
+    *
+    * Chosen at head 756520 (2026-09-08 19:07 UTC); at ~80 ordinals an hour, 758000 is roughly eighteen hours out, enough for the
+    * coordinated ML0 rollout this operator performs in one pass. Re-check against the live head immediately before deployment and move it
+    * forward if it can no longer be reached by every node on the new binary. Activate only once every metagraph L0 node runs a build
+    * containing it.
+    */
+  val settlementDeadlineExpiry: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(758000L))
+
+  def settlementDeadlineExpiryActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= settlementDeadlineExpiry.value.value
+
+  /** Applies the one-shot USDC.dag/DAG reserve correction for the swap reversed at 756063. See IncidentUsdcSettlementCorrection.
+    *
+    * One ordinal after `settlementDeadlineExpiry`, so the defect that opened the gap is gated off before the number is fixed, and before
+    * `collateralInvariantEnforced`. Both orderings are asserted in the spec.
+    */
+  val usdcSettlementCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(settlementDeadlineExpiry.value.value + 1L))
+
+  def usdcSettlementCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= usdcSettlementCorrection.value.value
 }

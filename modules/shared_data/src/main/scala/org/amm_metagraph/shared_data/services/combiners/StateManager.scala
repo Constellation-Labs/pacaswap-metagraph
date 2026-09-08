@@ -131,6 +131,17 @@ object StateManager {
             _.pure[F]
           )
 
+        // Third one-shot correction, USDC.dag/DAG pool again, for the swap reversed at 756063.
+        correctedOperations <- IncidentUsdcSettlementCorrection
+          .applyTo(correctedOperations, context.currentSnapshotOrdinal)
+          .fold(
+            err =>
+              logger.error(s"INCIDENT_USDC_SETTLEMENT_CORRECTION refused: ${err.message}") >>
+                new IllegalStateException(s"usdc settlement correction failed: ${err.message}")
+                  .raiseError[F, AmmCalculatedState],
+            _.pure[F]
+          )
+
         updatedVotingPowerState = correctedOperations
           .focus(_.votingPowers)
           .replace(updatedVotingPowers)

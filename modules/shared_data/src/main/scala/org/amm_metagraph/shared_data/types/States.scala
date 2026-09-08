@@ -161,8 +161,8 @@ object States {
 
     def getPendingUpdates: SortedSet[Signed[UpdateType]] =
       pending.collect {
-        case PendingAllowSpend(update, _, _)        => update
-        case PendingSpendAction(update, _, _, _, _) => update
+        case PendingAllowSpend(update, _, _)           => update
+        case PendingSpendAction(update, _, _, _, _, _) => update
       }
   }
 
@@ -321,7 +321,13 @@ object States {
       * deliberately fail-closed for states written before the field existed and for historical replay under an SDK that cannot expose the
       * replayed currency snapshot's real predecessor.
       */
-    generatedAfterGlobalOrdinal: Option[SnapshotOrdinal] = None
+    generatedAfterGlobalOrdinal: Option[SnapshotOrdinal] = None,
+    /** The deadline the global layer enforces on this SpendAction: the AllowSpend's `lastValidEpochProgress` (the earlier of the two for
+      * pools and staking). `None` when there is no such deadline, which is the case for withdrawals (they spend no AllowSpend, so the
+      * global layer applies their SpendAction under no deadline) and for states written before the field existed. `None` is fail-closed:
+      * such an action is never expired on a deadline. See AllowSpendSettlement.pendingExpired.
+      */
+    settlementDeadline: Option[EpochProgress] = None
   ) extends PendingAction[A]
 
   object PendingSpendAction {

@@ -18,7 +18,6 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -33,6 +32,7 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.StakingValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -149,8 +149,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                        => false
+          case PendingSpendAction(update, _, _, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                           => false
         }
 
       def combineNew(
@@ -343,7 +343,13 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
                   pendingAllowSpendUpdate.pricingTokenInfo,
-                  generatedAfterGlobalOrdinal
+                  generatedAfterGlobalOrdinal,
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
+                      allowSpendTokenA.lastValidEpochProgress
+                    else allowSpendTokenB.lastValidEpochProgress
+                  )
                 )
 
                 updatedPendingSpendActionCalculatedState =
@@ -441,12 +447,21 @@ object StakingCombinerService {
             stakingValidations.pendingSpendActionsValidation(
               pendingSpendAction.update,
               allSpendActionsAccepted,
-              globalEpochProgress
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
             )
           ).leftWiden[FailedCalculatedState]
           result <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),

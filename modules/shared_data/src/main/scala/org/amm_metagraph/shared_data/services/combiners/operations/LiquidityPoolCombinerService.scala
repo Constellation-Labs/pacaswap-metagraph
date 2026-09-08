@@ -20,7 +20,6 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
@@ -34,6 +33,7 @@ import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, OperationExpired}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, FeeDistributor, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -149,8 +149,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ): SortedSet[PendingAction[LiquidityPoolUpdate]] =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                              => false
+          case PendingSpendAction(update, _, _, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                                 => false
         }
 
       def combineNew(
@@ -320,7 +320,13 @@ object LiquidityPoolCombinerService {
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
                   None,
-                  generatedAfterGlobalOrdinal
+                  generatedAfterGlobalOrdinal,
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
+                      allowSpendTokenA.lastValidEpochProgress
+                    else allowSpendTokenB.lastValidEpochProgress
+                  )
                 )
 
                 updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + pendingSpendAction
@@ -426,14 +432,23 @@ object LiquidityPoolCombinerService {
             liquidityPoolValidations.pendingSpendActionsValidation(
               signedLiquidityPoolUpdate,
               allSpendActionsAccepted,
-              globalEpochProgress
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
             )
           ).leftWiden[FailedCalculatedState]
 
           fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
           result <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
