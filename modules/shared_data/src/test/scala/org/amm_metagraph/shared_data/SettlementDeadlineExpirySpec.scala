@@ -43,7 +43,7 @@ object SettlementDeadlineExpirySpec extends SimpleIOSuite {
   private val expiryReadEpoch = ep(2871491L)
 
   pureTest("the gate is fresh, follows every earlier activation, and the correction follows it before enforcement") {
-    expect(ACTIVE.value.value == 760500L, "pinned activation ordinal")
+    expect(ACTIVE.value.value == 758000L, "pinned activation ordinal")
       .and(expect(ACTIVE.value.value > ProtocolActivation.spendActionHeadroom.value.value, "after the AllowSpend headroom gate"))
       .and(expect(ACTIVE.value.value > ProtocolActivation.usdcRollbackCorrection.value.value, "after the previous correction"))
       .and(

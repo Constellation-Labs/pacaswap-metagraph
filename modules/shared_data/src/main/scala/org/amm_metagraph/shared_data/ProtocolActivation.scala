@@ -89,13 +89,10 @@ object ProtocolActivation {
 
   /** Reserved for switching the collateral check from reporting to refusing.
     *
-    * Moved from 760000 to 770000 on 2026-09-08 so the settlement-deadline correction below could keep the required ordering (every book
-    * correction lands before enforcement). Safe to move because nothing reads it yet; see CollateralInvariant.
-    *
     * Not read anywhere yet. Refusing a snapshot converts a book discrepancy into a halt, so it is only worth enabling once every-ordinal
     * reporting has shown how often it would trigger under normal trading.
     */
-  val collateralInvariantEnforced: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(770000L))
+  val collateralInvariantEnforced: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(760000L))
 
   def collateralInvariantEnforcedActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= collateralInvariantEnforced.value.value
@@ -172,10 +169,12 @@ object ProtocolActivation {
     * AllowSpend it spends can no longer be settled, the expiry clock is the epoch of the last global snapshot the evidence actually covers,
     * and a SpendAction is not emitted unless the update's own deadline also has settlement headroom. See AllowSpendSettlement.
     *
-    * Chosen at head ~756440; at ~80 ordinals an hour, 760500 is roughly two days out. Re-check against the live head immediately before
-    * deployment. Activate only once every metagraph L0 node runs a build containing it.
+    * Chosen at head 756520 (2026-09-08 19:07 UTC); at ~80 ordinals an hour, 758000 is roughly eighteen hours out, enough for the
+    * coordinated ML0 rollout this operator performs in one pass. Re-check against the live head immediately before deployment and move it
+    * forward if it can no longer be reached by every node on the new binary. Activate only once every metagraph L0 node runs a build
+    * containing it.
     */
-  val settlementDeadlineExpiry: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(760500L))
+  val settlementDeadlineExpiry: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(758000L))
 
   def settlementDeadlineExpiryActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= settlementDeadlineExpiry.value.value
