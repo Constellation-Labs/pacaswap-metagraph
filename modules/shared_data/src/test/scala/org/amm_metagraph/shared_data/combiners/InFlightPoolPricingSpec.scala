@@ -57,6 +57,10 @@ object InFlightPoolPricingSpec extends MutableIOSuite {
   pureTest("gate: activates at 758500, never before") {
     expect.all(
       ProtocolActivation.inFlightPoolPricing.value.value == 758500L,
+      // After #7's one-shot correction, so the settlement-deadline fix and its book correction land first; before the collateral
+      // invariant may refuse snapshots. Both orderings are claimed in the gate's doc comment.
+      ProtocolActivation.inFlightPoolPricing.value.value > ProtocolActivation.usdcSettlementCorrection.value.value,
+      ProtocolActivation.inFlightPoolPricing.value.value < ProtocolActivation.collateralInvariantEnforced.value.value,
       !ProtocolActivation.inFlightPoolPricingActive(SnapshotOrdinal.MinValue),
       !ProtocolActivation.inFlightPoolPricingActive(BEFORE),
       ProtocolActivation.inFlightPoolPricingActive(ACTIVE),
