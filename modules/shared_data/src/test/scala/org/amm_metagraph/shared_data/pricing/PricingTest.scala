@@ -273,7 +273,8 @@ object PricingTest extends SimpleIOSuite {
         swapUpdate,
         Hash.empty,
         poolId,
-        EpochProgress.MaxValue
+        EpochProgress.MaxValue,
+        None
       )
 
     } yield
@@ -328,7 +329,8 @@ object PricingTest extends SimpleIOSuite {
         Hash.empty,
         poolId,
         EpochProgress.MaxValue,
-        SnapshotOrdinal.MinValue
+        SnapshotOrdinal.MinValue,
+        None
       )
 
     } yield

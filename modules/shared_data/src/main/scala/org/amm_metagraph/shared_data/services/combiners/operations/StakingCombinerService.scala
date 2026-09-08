@@ -203,9 +203,12 @@ object StakingCombinerService {
           currentOrdinal <- EitherT.liftF[F, FailedCalculatedState, SnapshotOrdinal](
             context.getLastCurrencySnapshot.map(_.fold(SnapshotOrdinal.MinValue)(_.ordinal.next))
           )
+          poolOverride = Option.when(ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal))(
+            getLiquidityPoolCalculatedState(oldState.calculated).confirmed.value
+          )
           stakingTokenInfo <- EitherT(
             pricingService
-              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal)
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal, poolOverride)
           )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -280,6 +283,11 @@ object StakingCombinerService {
 
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
         val stakingUpdate = pendingAllowSpendUpdate.update.value
+        // Deliberately NOT requoted at execution, unlike the swap path: the pair amount is bounded
+        // by the user's second AllowSpend, so a fresh quote could demand more than the user signed
+        // for, and proportional share issuance is self-consistent under repetition — replaying the
+        // request-time quote cannot drain the pool. Quoting against the in-flight pool at request
+        // time (combineNew) removes the within-batch staleness, which is the exploitable part.
         val maybeStakingTokenInfo = pendingAllowSpendUpdate.pricingTokenInfo.collect {
           case stakingTokenInfo: StakingTokenInfo => stakingTokenInfo
         }
@@ -509,7 +517,8 @@ object StakingCombinerService {
                         pendingSpendAction.updateHash,
                         poolId,
                         globalEpochProgress,
-                        currentSnapshotOrdinal
+                        currentSnapshotOrdinal,
+                        None
                       )
                     )
 

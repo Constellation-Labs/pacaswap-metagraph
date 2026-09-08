@@ -246,8 +246,14 @@ object SwapCombinerService {
           newSwapState = swapCalculatedState
             .focus(_.confirmed.value)
             .modify(_.updatedWith(sourceAddress) {
-              case Some(info) => Some(info.focus(_.values).modify(_ + swapStateValue))
-              case None       => Some(SwapCalculatedStateInfo(swapReference, SortedSet(swapStateValue)))
+              case Some(info) =>
+                Some(
+                  if (ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal))
+                    SwapCalculatedStateInfo(swapReference, info.values + swapStateValue)
+                  else
+                    info.focus(_.values).modify(_ + swapStateValue)
+                )
+              case None => Some(SwapCalculatedStateInfo(swapReference, SortedSet(swapStateValue)))
             })
             .focus(_.pending)
             .replace(updatedPending)
@@ -306,11 +312,16 @@ object SwapCombinerService {
           poolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
             buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
           )
-          tokenInfo <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, updateHash, poolId, globalEpochProgress))
+          poolOverride = Option.when(ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal))(
+            getLiquidityPoolCalculatedState(oldState.calculated).confirmed.value
+          )
+          tokenInfo <- EitherT(pricingService.getSwapTokenInfo(signedUpdate, updateHash, poolId, globalEpochProgress, poolOverride))
 
           finalState <- updateAllowSpends match {
             case None =>
-              // Allow spend not confirmed - store as pending
+              // Allow spend not confirmed - store as pending. Past inFlightPoolPricing this stored
+              // quote is informational only: combinePendingAllowSpend recomputes it at execution, so
+              // the MissingSwapTokenInfo branch there is unreachable.
               val pendingAllowSpend = PendingAllowSpend(signedUpdate, updateHash, Some(tokenInfo))
               val updatedSwapState = swapCalculatedState.focus(_.pending).modify(_ + pendingAllowSpend)
               val dataUpdate = createPendingAllowSpendUpdate(signedUpdate, updateHash, Some(tokenInfo))
@@ -369,15 +380,37 @@ object SwapCombinerService {
           finalState <- updateAllowSpends match {
             case Some(allowSpendToken) =>
               for {
-                swapTokenInfo <- EitherT.fromOption[F](
-                  tokenInfo,
-                  FailedCalculatedState(
-                    MissingSwapTokenInfo(),
-                    getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
-                    pendingAllowSpend.updateHash,
-                    pendingAllowSpend.update
-                  ): FailedCalculatedState
-                )
+                swapTokenInfo <-
+                  if (ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal)) {
+                    // Recompute the quote at execution time against the same in-flight pool the
+                    // debit is applied to. The stored pricingTokenInfo is a request-time quote that
+                    // may be arbitrarily stale; the user's amountOutMinimum/amountOutMaximum bounds
+                    // are re-checked against this fresh quote in pendingAllowSpendsValidations.
+                    for {
+                      executionPoolId <- EitherT.liftF[F, FailedCalculatedState, PoolId](
+                        buildLiquidityPoolUniqueIdentifier(swapUpdate.swapFromPair, swapUpdate.swapToPair)
+                      )
+                      inFlightPools = getLiquidityPoolCalculatedState(oldState.calculated).confirmed.value
+                      info <- EitherT(
+                        pricingService.getSwapTokenInfo(
+                          pendingAllowSpend.update,
+                          pendingAllowSpend.updateHash,
+                          executionPoolId,
+                          globalEpochProgress,
+                          inFlightPools.some
+                        )
+                      )
+                    } yield info
+                  } else
+                    EitherT.fromOption[F](
+                      tokenInfo,
+                      FailedCalculatedState(
+                        MissingSwapTokenInfo(),
+                        getFailureExpireEpochProgress(applicationConfig, globalEpochProgress),
+                        pendingAllowSpend.updateHash,
+                        pendingAllowSpend.update
+                      ): FailedCalculatedState
+                    )
 
                 _ <- EitherT(
                   swapValidations.pendingAllowSpendsValidations(
