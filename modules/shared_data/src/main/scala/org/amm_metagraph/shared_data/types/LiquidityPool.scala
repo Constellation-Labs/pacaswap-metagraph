@@ -134,7 +134,8 @@ object LiquidityPool {
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo,
-        pendingSpend.generatedAfterGlobalOrdinal
+        pendingSpend.generatedAfterGlobalOrdinal,
+        pendingSpend.settlementDeadline
       )
     }.toSortedSet
   }

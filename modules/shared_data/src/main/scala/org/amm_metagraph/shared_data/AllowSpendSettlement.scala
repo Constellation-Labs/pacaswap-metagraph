@@ -8,8 +8,9 @@ import io.constellationnetwork.schema.epoch.EpochProgress
   * `lastSyncGlobalEpochProgress` is the epoch of a global snapshot that has already been produced. The SpendAction this metagraph emits is
   * carried in its next currency snapshot and applied by the global layer at least one global snapshot later, by which time the epoch may
   * have advanced. Measured on mainnet the gap between a currency snapshot's synced global ordinal and the global snapshot that applied its
-  * SpendAction was five ordinals, about one epoch, so one epoch of headroom is not enough either. Two is the smallest margin that covered
-  * every observed settlement.
+  * SpendAction was five ordinals; at the observed 2.5 to 4 global snapshots per epoch that is between one and two epochs, so two epochs of
+  * headroom is the observed gap with little to spare. That is acceptable only because a headroom miss now degrades safely: the AllowSpend
+  * genuinely expires, the metagraph rolls the operation back, and book and wallet agree. Widen it if settlement latency grows.
   */
 object AllowSpendSettlement {
 
@@ -45,14 +46,24 @@ object AllowSpendSettlement {
     ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal) &&
       maxValidGsEpochProgress.value.value < lastSyncGlobalEpochProgress.value.value + headroomEpochs
 
+  /** A settlement deadline meaning "the global layer never expires this action". Withdrawals spend no AllowSpend, so their SpendAction is
+    * applied whenever the global layer ingests the carrying currency snapshot; there is no epoch after which non-acceptance proves
+    * anything.
+    */
+  val noDeadline: EpochProgress = EpochProgress.MaxValue
+
   /** May a pending SpendAction be treated as expired, i.e. as one the global layer will never settle?
     *
     * From `settlementDeadlineExpiry` the only deadline consulted is the one the global layer enforces, carried on the pending action as
-    * `settlementDeadline` (the AllowSpend's `lastValidEpochProgress`; `None` for withdrawals, which spend no AllowSpend and are settled
-    * under no deadline, so they are never expired on non-acceptance). The global layer drops an AllowSpend once `lastValidEpochProgress <
-    * epochProgress`, so the action is unsettleable exactly when `settlementDeadline < epoch`, where `epoch` must be the epoch of a global
-    * snapshot the evidence has been read through. A `None` deadline (states written before the field existed) never expires: fail-closed,
-    * the same treatment `generatedAfterGlobalOrdinal` gets.
+    * `settlementDeadline` (the AllowSpend's `lastValidEpochProgress`, the earlier of two for pools and staking, `noDeadline` for
+    * withdrawals). The global layer validates a SpendAction against the PREVIOUS global snapshot's active AllowSpends and only purges an
+    * AllowSpend afterwards, retaining it while `lastValidEpochProgress >= epochProgress` (Tessellation v3.5.29
+    * GlobalSnapshotAcceptanceManager:373-377 and :469, AllowSpendAcceptance:83,:116). So an AllowSpend with deadline L can still be spent
+    * by a snapshot at epoch L + 1, and the action is unsettleable by epoch arithmetic only once `L + 1 < epoch`, where `epoch` is that of a
+    * global snapshot the evidence has been read through.
+    *
+    * `None` is a pending action written before this field was populated (population is gated on the same ordinal, so on-chain bytes do not
+    * change during the rollout window). Those keep the caller's legacy rule so nothing emitted before the gate is stranded.
     *
     * `legacyExpired` is the caller's pre-activation decision, passed through unchanged so history replays.
     */
@@ -63,8 +74,26 @@ object AllowSpendSettlement {
     currentSnapshotOrdinal: SnapshotOrdinal
   ): Boolean =
     if (ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))
-      settlementDeadline.exists(_.value.value < epoch.value.value)
+      // Written as `deadline < epoch - 1` so `noDeadline` (Long.MaxValue) cannot overflow into "expired".
+      settlementDeadline.fold(legacyExpired)(deadline => deadline.value.value < epoch.value.value - 1L)
     else legacyExpired
+
+  /** Epoch arithmetic alone is not sound for a token leg: the global layer re-filters a token's AllowSpend bucket only in rounds where that
+    * token's own metagraph submitted a currency snapshot (AllowSpendAcceptance.acceptAllowSpends folds over
+    * `activeAllowSpendsFromCurrencySnapshots`), so while that metagraph is stalled its expired AllowSpends stay spendable. The sound test
+    * is positive: every AllowSpend the action spends has left the active set of the last synced global snapshot, and the evidence covers
+    * every global snapshot through that one, so a spend of it would already have been seen. An action that spends no AllowSpend
+    * (withdrawal) can never be shown retired and is never expired.
+    */
+  def retiredForSettlement(
+    hasAllowSpendRefs: Boolean,
+    anyAllowSpendStillActive: Boolean,
+    evidenceGapless: Boolean,
+    currentSnapshotOrdinal: SnapshotOrdinal
+  ): Boolean =
+    if (ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))
+      hasAllowSpendRefs && !anyAllowSpendStillActive && evidenceGapless
+    else true
 
   /** The epoch against which pending SpendActions may be expired: that of the last global snapshot the evidence covers. Before activation
     * the newest synced epoch is used, as it always was.

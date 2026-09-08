@@ -26,7 +26,7 @@ object IncidentUsdcSettlementCorrectionSpec extends SimpleIOSuite {
   private val USDC = Address("DAG0S16WDgdAvh8VvroR6MWLdjmHYdzAF5S181xh")
   private val owner = Address("DAG62QdFnvW8xX3uGmo6F3yB2CT5i25hZoVmN6za")
 
-  /** Reserves read from the live pool at currency ordinal 747294, after the divergence. */
+  /** Reserves read from the live pool at currency ordinal 756436, after the divergence. */
   private val liveDagLeg = 104712276877445L
   private val liveUsdcLeg = 712488369605L
 

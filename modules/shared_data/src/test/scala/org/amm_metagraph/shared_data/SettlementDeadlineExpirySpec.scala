@@ -82,23 +82,59 @@ object SettlementDeadlineExpirySpec extends SimpleIOSuite {
     expect(
       !AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), expiryReadEpoch, legacyExpired = true, ACTIVE),
       "the legacy decision is ignored; the AllowSpend deadline has not passed"
-    ).and(
-      expect(
-        !AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), allowSpendDeadline, legacyExpired = true, ACTIVE),
-        "at epoch == deadline the global layer still settles, so not expired"
+    )
+  }
+
+  pureTest("from activation an AllowSpend can still be spent one epoch past its deadline, so expiry waits for L + 1 < epoch") {
+    // The global layer validates a SpendAction against the previous snapshot's active set and purges afterwards, retaining while
+    // lastValid >= epoch. An AllowSpend with L = 2871492 is therefore still spendable by a snapshot at epoch 2871493.
+    expect(!AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), allowSpendDeadline, legacyExpired = true, ACTIVE), "epoch == L")
+      .and(
+        expect(
+          !AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), ep(2871493L), legacyExpired = true, ACTIVE),
+          "epoch == L + 1: still settleable"
+        )
       )
-    )
+      .and(
+        expect(
+          AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), ep(2871494L), legacyExpired = false, ACTIVE),
+          "epoch == L + 2: unsettleable"
+        )
+      )
   }
 
-  pureTest("from activation the action expires exactly when the global layer would drop its AllowSpend") {
+  pureTest("from activation a pending action written before the field existed keeps the legacy rule, so it is not stranded") {
+    expect(AllowSpendSettlement.pendingExpired(None, ep(9999999L), legacyExpired = true, ACTIVE), "None + legacy expired")
+      .and(expect(!AllowSpendSettlement.pendingExpired(None, ep(9999999L), legacyExpired = false, ACTIVE), "None + legacy live"))
+  }
+
+  pureTest("an action with no settlement deadline is never expired") {
+    expect(!AllowSpendSettlement.pendingExpired(Some(AllowSpendSettlement.noDeadline), ep(Long.MaxValue / 4), legacyExpired = true, ACTIVE))
+  }
+
+  // ------------------------------------------------------------------ retiredForSettlement
+
+  pureTest("before activation retirement is not consulted") {
     expect(
-      AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), ep(2871493L), legacyExpired = false, ACTIVE),
-      "lastValid < epoch is the global layer's expiry rule"
+      AllowSpendSettlement.retiredForSettlement(hasAllowSpendRefs = false, anyAllowSpendStillActive = true, evidenceGapless = false, BEFORE)
     )
   }
 
-  pureTest("from activation a pending action without a recorded settlement deadline is never expired") {
-    expect(!AllowSpendSettlement.pendingExpired(None, ep(9999999L), legacyExpired = true, ACTIVE), "fail-closed on None")
+  pureTest("from activation expiry needs positive evidence: refs exist, none still active, evidence gapless") {
+    expect(AllowSpendSettlement.retiredForSettlement(true, false, true, ACTIVE), "retired")
+      .and(
+        expect(
+          !AllowSpendSettlement.retiredForSettlement(true, true, true, ACTIVE),
+          "an AllowSpend still in the active set can still be spent"
+        )
+      )
+      .and(expect(!AllowSpendSettlement.retiredForSettlement(true, false, false, ACTIVE), "a gap in the evidence could hide the spend"))
+      .and(
+        expect(
+          !AllowSpendSettlement.retiredForSettlement(false, false, true, ACTIVE),
+          "a withdrawal spends no AllowSpend and can never be shown retired"
+        )
+      )
   }
 
   // ------------------------------------------------------------------ emissionExpired

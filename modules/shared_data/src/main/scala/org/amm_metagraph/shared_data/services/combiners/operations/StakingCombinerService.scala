@@ -344,7 +344,8 @@ object StakingCombinerService {
                   spendAction,
                   pendingAllowSpendUpdate.pricingTokenInfo,
                   generatedAfterGlobalOrdinal,
-                  Some(
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
                     if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
                       allowSpendTokenA.lastValidEpochProgress
                     else allowSpendTokenB.lastValidEpochProgress

@@ -101,7 +101,8 @@ object Withdrawal {
         pendingSpend.updateHash,
         pendingSpend.generatedSpendAction,
         pendingSpend.pricingTokenInfo,
-        pendingSpend.generatedAfterGlobalOrdinal
+        pendingSpend.generatedAfterGlobalOrdinal,
+        pendingSpend.settlementDeadline
       )
     }.toSortedSet
   }

@@ -17,7 +17,6 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -31,6 +30,7 @@ import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -262,14 +262,14 @@ object WithdrawalCombinerService {
                   spendAction,
                   Some(withdrawalAmounts),
                   generatedAfterGlobalOrdinal,
-                  // A withdrawal's SpendAction spends no AllowSpend, so the global layer applies it whenever it
-                  // ingests the currency snapshot that carries it, under no deadline at all. There is therefore no
-                  // epoch after which "not yet accepted" proves "will never be accepted", and expiring on the
-                  // update's own deadline would reopen the exact divergence settlementDeadlineExpiry closes for
-                  // swaps: the metagraph restores the shares, the global layer pays the wallet anyway. None means
-                  // never expired on non-acceptance. A withdrawal the global layer refuses (custody balance short)
-                  // stays pending, visibly, which is the collateral breach the monitor exists to raise.
-                  None
+                  // A withdrawal's SpendAction spends no AllowSpend, so the global layer applies it under no
+                  // deadline whenever it ingests the carrying currency snapshot; there is no epoch after which
+                  // non-acceptance proves anything, and the retirement test can never be met either. It is never
+                  // expired: a withdrawal the global layer refuses (custody short) stays pending, visibly, which is
+                  // the collateral breach the monitor exists to raise. Gated at population like the others.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    AllowSpendSettlement.noDeadline
+                  )
                 )
 
                 updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState

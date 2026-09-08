@@ -33,7 +33,7 @@ import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, OperationExpired}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
-import org.amm_metagraph.shared_data.{AllowSpendSettlement, FeeDistributor}
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, FeeDistributor, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -321,7 +321,8 @@ object LiquidityPoolCombinerService {
                   spendAction,
                   None,
                   generatedAfterGlobalOrdinal,
-                  Some(
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
                     if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
                       allowSpendTokenA.lastValidEpochProgress
                     else allowSpendTokenB.lastValidEpochProgress

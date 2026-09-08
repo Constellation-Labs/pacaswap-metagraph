@@ -17,7 +17,6 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -33,6 +32,7 @@ import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.SwapValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -456,7 +456,11 @@ object SwapCombinerService {
                     )
                     .some,
                   generatedAfterGlobalOrdinal,
-                  Some(allowSpendToken.lastValidEpochProgress)
+                  // Gated at population: this action is embedded in on-chain state, so a value written
+                  // below the activation ordinal would change signed bytes during the rollout window.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    allowSpendToken.lastValidEpochProgress
+                  )
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {

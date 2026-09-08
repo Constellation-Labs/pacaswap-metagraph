@@ -11,6 +11,7 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
+import org.amm_metagraph.shared_data.globalSnapshots.findAllowSpendInGlobalState
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -302,9 +303,28 @@ object PendingOperationsProcessor {
           context.settlementEpochProgress,
           context.currentSnapshotOrdinal
         )
-        // The epoch handed to the combiners for the pending-spend-action stage: the newest synced
-        // epoch before activation, as always, and the evidence clock after.
-        pendingStageEpoch = expiryEpoch.getOrElse(context.lastSyncGlobalEpochProgress)
+
+        // Positive evidence that the AllowSpends an action spends have left the global active set,
+        // computed once per combine against the same synced snapshot the evidence range ends at.
+        evidenceGapless = context.lastContiguousGlobalSnapshotOrdinal === context.lastSyncGlobalOrdinal
+        retired <- HasherSelector[F].withCurrent { implicit hasher =>
+          pendingSpendActions.toList.traverse { pending =>
+            val refs = pending.generatedSpendAction.spendTransactions.toList.flatMap { t =>
+              t.allowSpendRef.map(ref => (t.currencyId.map(_.value), ref))
+            }
+            refs.existsM {
+              case (tokenId, ref) =>
+                findAllowSpendInGlobalState(ref, tokenId, context.globalSnapshotSyncAllowSpends).map(_.nonEmpty)
+            }.map { anyActive =>
+              pending.updateHash -> AllowSpendSettlement.retiredForSettlement(
+                refs.nonEmpty,
+                anyActive,
+                evidenceGapless,
+                context.currentSnapshotOrdinal
+              )
+            }
+          }.map(_.toMap)
+        }
 
         // An unrelated action in a partial range cannot authorize expiry. Exact positive matches
         // are safe to process; unmatched operations require complete evidence.
@@ -330,7 +350,7 @@ object PendingOperationsProcessor {
           // clock is the epoch the evidence actually reached. Either missing means not expired.
           expiryEpoch.exists(epoch =>
             AllowSpendSettlement.pendingExpired(pending.settlementDeadline, epoch, legacyExpired, context.currentSnapshotOrdinal)
-          )
+          ) && retired.getOrElse(pending.updateHash, false)
         }
 
         _ <- logger.info(s"Processing ${pendingSpendActionsToCombine.size} filtered pending spend actions")
@@ -357,7 +377,7 @@ object PendingOperationsProcessor {
                           pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        pendingStageEpoch,
+                        context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
@@ -378,7 +398,7 @@ object PendingOperationsProcessor {
                           pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        pendingStageEpoch,
+                        context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
@@ -399,7 +419,7 @@ object PendingOperationsProcessor {
                           pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        pendingStageEpoch,
+                        context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal
                       )
@@ -421,7 +441,7 @@ object PendingOperationsProcessor {
                           pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        pendingStageEpoch,
+                        context.lastSyncGlobalEpochProgress,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
