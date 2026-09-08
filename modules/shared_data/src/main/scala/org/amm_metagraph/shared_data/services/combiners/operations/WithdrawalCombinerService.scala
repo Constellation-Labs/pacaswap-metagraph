@@ -262,7 +262,14 @@ object WithdrawalCombinerService {
                   spendAction,
                   Some(withdrawalAmounts),
                   generatedAfterGlobalOrdinal,
-                  Some(signedUpdate.value.maxValidGsEpochProgress)
+                  // A withdrawal's SpendAction spends no AllowSpend, so the global layer applies it whenever it
+                  // ingests the currency snapshot that carries it, under no deadline at all. There is therefore no
+                  // epoch after which "not yet accepted" proves "will never be accepted", and expiring on the
+                  // update's own deadline would reopen the exact divergence settlementDeadlineExpiry closes for
+                  // swaps: the metagraph restores the shares, the global layer pays the wallet anyway. None means
+                  // never expired on non-acceptance. A withdrawal the global layer refuses (custody balance short)
+                  // stays pending, visibly, which is the collateral breach the monitor exists to raise.
+                  None
                 )
 
                 updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState

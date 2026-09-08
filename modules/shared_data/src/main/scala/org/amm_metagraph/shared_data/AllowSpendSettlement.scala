@@ -48,10 +48,11 @@ object AllowSpendSettlement {
   /** May a pending SpendAction be treated as expired, i.e. as one the global layer will never settle?
     *
     * From `settlementDeadlineExpiry` the only deadline consulted is the one the global layer enforces, carried on the pending action as
-    * `settlementDeadline` (the AllowSpend's `lastValidEpochProgress`; for withdrawals, which spend no AllowSpend, the update's own
-    * deadline). The global layer drops an AllowSpend once `lastValidEpochProgress < epochProgress`, so the action is unsettleable exactly
-    * when `settlementDeadline < epoch`, where `epoch` must be the epoch of a global snapshot the evidence has been read through. A `None`
-    * deadline (states written before the field existed) never expires: fail-closed, the same treatment `generatedAfterGlobalOrdinal` gets.
+    * `settlementDeadline` (the AllowSpend's `lastValidEpochProgress`; `None` for withdrawals, which spend no AllowSpend and are settled
+    * under no deadline, so they are never expired on non-acceptance). The global layer drops an AllowSpend once `lastValidEpochProgress <
+    * epochProgress`, so the action is unsettleable exactly when `settlementDeadline < epoch`, where `epoch` must be the epoch of a global
+    * snapshot the evidence has been read through. A `None` deadline (states written before the field existed) never expires: fail-closed,
+    * the same treatment `generatedAfterGlobalOrdinal` gets.
     *
     * `legacyExpired` is the caller's pre-activation decision, passed through unchanged so history replays.
     */

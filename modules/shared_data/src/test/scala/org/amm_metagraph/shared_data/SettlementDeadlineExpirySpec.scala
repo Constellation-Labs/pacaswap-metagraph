@@ -43,40 +43,51 @@ object SettlementDeadlineExpirySpec extends SimpleIOSuite {
   private val expiryReadEpoch = ep(2871491L)
 
   pureTest("the gate is fresh, follows every earlier activation, and the correction follows it before enforcement") {
-    expect(ACTIVE.value.value == 760500L, "pinned activation ordinal") and
-      expect(ACTIVE.value.value > ProtocolActivation.spendActionHeadroom.value.value, "after the AllowSpend headroom gate") and
-      expect(ACTIVE.value.value > ProtocolActivation.usdcRollbackCorrection.value.value, "after the previous correction") and
-      expect(
-        ProtocolActivation.usdcSettlementCorrection.value.value == ACTIVE.value.value + 1L,
-        "the correction lands one ordinal after the defect is gated off"
-      ) and
-      expect(
-        ProtocolActivation.usdcSettlementCorrection.value.value < ProtocolActivation.collateralInvariantEnforced.value.value,
-        "the book is right before the invariant may refuse snapshots"
-      ) and
-      expect(!ProtocolActivation.settlementDeadlineExpiryActive(BEFORE) && ProtocolActivation.settlementDeadlineExpiryActive(ACTIVE), "boundary")
+    expect(ACTIVE.value.value == 760500L, "pinned activation ordinal")
+      .and(expect(ACTIVE.value.value > ProtocolActivation.spendActionHeadroom.value.value, "after the AllowSpend headroom gate"))
+      .and(expect(ACTIVE.value.value > ProtocolActivation.usdcRollbackCorrection.value.value, "after the previous correction"))
+      .and(
+        expect(
+          ProtocolActivation.usdcSettlementCorrection.value.value == ACTIVE.value.value + 1L,
+          "the correction lands one ordinal after the defect is gated off"
+        )
+      )
+      .and(
+        expect(
+          ProtocolActivation.usdcSettlementCorrection.value.value < ProtocolActivation.collateralInvariantEnforced.value.value,
+          "the book is right before the invariant may refuse snapshots"
+        )
+      )
+      .and(
+        expect(
+          !ProtocolActivation.settlementDeadlineExpiryActive(BEFORE) && ProtocolActivation.settlementDeadlineExpiryActive(ACTIVE),
+          "boundary"
+        )
+      )
   }
 
   // ------------------------------------------------------------------ pendingExpired
 
   pureTest("before activation the caller's legacy decision stands: the incident swap was expired") {
     val legacy = swapDeadline < expiryReadEpoch
-    expect(legacy, "the legacy rule reads maxValid 2871490 < 2871491 as expired") and
+    expect(legacy, "the legacy rule reads maxValid 2871490 < 2871491 as expired").and(
       expect(
         AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), expiryReadEpoch, legacyExpired = legacy, BEFORE),
         "and below the gate that decision must be reproduced so 756063 replays as signed"
       )
+    )
   }
 
   pureTest("from activation the incident swap is NOT expired at 2871491, because its AllowSpend lives to 2871492") {
     expect(
       !AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), expiryReadEpoch, legacyExpired = true, ACTIVE),
       "the legacy decision is ignored; the AllowSpend deadline has not passed"
-    ) and
+    ).and(
       expect(
         !AllowSpendSettlement.pendingExpired(Some(allowSpendDeadline), allowSpendDeadline, legacyExpired = true, ACTIVE),
         "at epoch == deadline the global layer still settles, so not expired"
       )
+    )
   }
 
   pureTest("from activation the action expires exactly when the global layer would drop its AllowSpend") {
@@ -98,21 +109,26 @@ object SettlementDeadlineExpirySpec extends SimpleIOSuite {
 
   pureTest("from activation a SpendAction is not emitted unless the update's deadline has settlement headroom") {
     val headroom = AllowSpendSettlement.headroomEpochs
-    expect(AllowSpendSettlement.emissionExpired(swapDeadline, emissionEpoch, ACTIVE), "the incident case: zero headroom") and
-      expect(AllowSpendSettlement.emissionExpired(ep(emissionEpoch.value.value + headroom - 1), emissionEpoch, ACTIVE), "one short") and
-      expect(!AllowSpendSettlement.emissionExpired(ep(emissionEpoch.value.value + headroom), emissionEpoch, ACTIVE), "exactly the headroom")
+    expect(AllowSpendSettlement.emissionExpired(swapDeadline, emissionEpoch, ACTIVE), "the incident case: zero headroom")
+      .and(expect(AllowSpendSettlement.emissionExpired(ep(emissionEpoch.value.value + headroom - 1), emissionEpoch, ACTIVE), "one short"))
+      .and(
+        expect(
+          !AllowSpendSettlement.emissionExpired(ep(emissionEpoch.value.value + headroom), emissionEpoch, ACTIVE),
+          "exactly the headroom"
+        )
+      )
   }
 
   // ------------------------------------------------------------------ expiryEpoch
 
   pureTest("before activation the expiry clock is the newest synced epoch") {
-    expect(AllowSpendSettlement.expiryEpoch(ep(10L), Some(ep(9L)), BEFORE) == Some(ep(10L))) and
-      expect(AllowSpendSettlement.expiryEpoch(ep(10L), None, BEFORE) == Some(ep(10L)))
+    expect(AllowSpendSettlement.expiryEpoch(ep(10L), Some(ep(9L)), BEFORE) == Some(ep(10L)))
+      .and(expect(AllowSpendSettlement.expiryEpoch(ep(10L), None, BEFORE) == Some(ep(10L))))
   }
 
   pureTest("from activation the expiry clock is the epoch the evidence reached, and absent when unknown") {
-    expect(AllowSpendSettlement.expiryEpoch(ep(10L), Some(ep(9L)), ACTIVE) == Some(ep(9L)), "evidence one snapshot behind the sync") and
-      expect(AllowSpendSettlement.expiryEpoch(ep(10L), None, ACTIVE).isEmpty, "no evidence epoch, no expiry")
+    expect(AllowSpendSettlement.expiryEpoch(ep(10L), Some(ep(9L)), ACTIVE) == Some(ep(9L)), "evidence one snapshot behind the sync")
+      .and(expect(AllowSpendSettlement.expiryEpoch(ep(10L), None, ACTIVE).isEmpty, "no evidence epoch, no expiry"))
   }
 
   // ------------------------------------------------------------------ persistence
@@ -147,11 +163,13 @@ object SettlementDeadlineExpirySpec extends SimpleIOSuite {
     val legacyJson = pending.asJson.mapObject(_.remove("settlementDeadline")).noSpaces
 
     IO.pure(decode[PendingSpendAction[SwapUpdate]](legacyJson)).map { decoded =>
-      expect(decoded.isRight, s"legacy JSON must decode, got $decoded") and
-        expect(decoded.exists(_.settlementDeadline.isEmpty), "a missing field is None, which pendingExpired treats as never expired") and
-        expect(
-          decode[PendingSpendAction[SwapUpdate]](pending.asJson.noSpaces).exists(_.settlementDeadline.contains(allowSpendDeadline)),
-          "a present field round-trips"
+      expect(decoded.isRight, s"legacy JSON must decode, got $decoded")
+        .and(expect(decoded.exists(_.settlementDeadline.isEmpty), "a missing field is None, which pendingExpired treats as never expired"))
+        .and(
+          expect(
+            decode[PendingSpendAction[SwapUpdate]](pending.asJson.noSpaces).exists(_.settlementDeadline.contains(allowSpendDeadline)),
+            "a present field round-trips"
+          )
         )
     }
   }

@@ -18,8 +18,8 @@ import weaver.SimpleIOSuite
 /** The book correction for the USDC.dag pool after the swap reversed at 756063 that the global layer settled at 6887529.
   *
   * The deltas are pinned against the divergence measured on the live chain, not restated from the object under test: the monitor read the
-  * book 21,774.19860646 DAG above the wallet and 53.06141748 USDC.dag below it, unchanged to the datum across every hourly sample from 09:04
-  * UTC on 2026-09-08. The wallet holds this swap and the book does not, the opposite direction of the 747126 correction.
+  * book 21,774.19860646 DAG above the wallet and 53.06141748 USDC.dag below it, unchanged to the datum across every hourly sample from
+  * 09:04 UTC on 2026-09-08. The wallet holds this swap and the book does not, the opposite direction of the 747126 correction.
   */
 object IncidentUsdcSettlementCorrectionSpec extends SimpleIOSuite {
 
@@ -75,7 +75,7 @@ object IncidentUsdcSettlementCorrectionSpec extends SimpleIOSuite {
         )
       )
       .and(
-        // Independently: the deltas are the two legs of the SpendAction emitted at 747126 for allow-spend 036c98c3.
+        // Independently: the deltas are the two legs of the SpendAction emitted at 756059 for allow-spend cbe819da, accepted at global 6887529.
         expect(IncidentUsdcSettlementCorrection.dagDelta == -2177419860646L, "DAG delta is minus the SpendAction's DAG leg")
       )
       .and(expect(IncidentUsdcSettlementCorrection.usdcDelta == 5306141748L, "USDC.dag delta is the SpendAction's USDC.dag leg"))
@@ -124,7 +124,10 @@ object IncidentUsdcSettlementCorrectionSpec extends SimpleIOSuite {
       .and(expect(IncidentUsdcSettlementCorrection.applyTo(AmmCalculatedState(), at).isLeft, "missing pool must be refused"))
       .and(
         // A DAG leg too small to absorb the reduction must fail, not wrap into a bogus PosLong.
-        expect(IncidentUsdcSettlementCorrection.applyTo(stateWith(poolAt(1000L, liveUsdcLeg)), at).isLeft, "leg below delta must be refused")
+        expect(
+          IncidentUsdcSettlementCorrection.applyTo(stateWith(poolAt(1000L, liveUsdcLeg)), at).isLeft,
+          "leg below delta must be refused"
+        )
       )
   }
 
