@@ -17,6 +17,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, Hasher}
 
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -238,8 +239,8 @@ object SwapCombinerService {
           swapStateValue = SwapCalculatedStateValue(expirationEpoch, swapStateAddress)
 
           updatedPending = swapCalculatedState.pending.filterNot {
-            case PendingSpendAction(update, _, _, _, _) => update === pendingAction.update
-            case _                                      => false
+            case PendingSpendAction(update, _, _, _, _, _) => update === pendingAction.update
+            case _                                         => false
           }
 
           newSwapState = swapCalculatedState
@@ -454,7 +455,8 @@ object SwapCombinerService {
                       pairTokenInformationUpdated = pairTokenInfo
                     )
                     .some,
-                  generatedAfterGlobalOrdinal
+                  generatedAfterGlobalOrdinal,
+                  Some(allowSpendToken.lastValidEpochProgress)
                 )
 
                 updatedPending = swapCalculatedState.pending.filterNot {
@@ -538,12 +540,27 @@ object SwapCombinerService {
 
           isAccepted = checkIfSpendActionAcceptedInGl0(metagraphHash, globalHashes)
 
-          _ <- EitherT(swapValidations.pendingSpendActionsValidation(pendingSpendAction.update, isAccepted, globalEpochProgress))
+          _ <- EitherT(
+            swapValidations.pendingSpendActionsValidation(
+              pendingSpendAction.update,
+              isAccepted,
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
+            )
+          )
             .leftWiden[FailedCalculatedState]
 
           finalState <-
             if (!isAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),

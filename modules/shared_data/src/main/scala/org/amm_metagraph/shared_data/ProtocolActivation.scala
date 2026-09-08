@@ -89,10 +89,13 @@ object ProtocolActivation {
 
   /** Reserved for switching the collateral check from reporting to refusing.
     *
+    * Moved from 760000 to 770000 on 2026-09-08 so the settlement-deadline correction below could keep the required ordering (every book
+    * correction lands before enforcement). Safe to move because nothing reads it yet; see CollateralInvariant.
+    *
     * Not read anywhere yet. Refusing a snapshot converts a book discrepancy into a halt, so it is only worth enabling once every-ordinal
     * reporting has shown how often it would trigger under normal trading.
     */
-  val collateralInvariantEnforced: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(760000L))
+  val collateralInvariantEnforced: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(770000L))
 
   def collateralInvariantEnforcedActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= collateralInvariantEnforced.value.value
@@ -159,4 +162,31 @@ object ProtocolActivation {
 
   def spendActionHeadroomActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= spendActionHeadroom.value.value
+
+  /** Expire an emitted SpendAction on the deadline the global layer enforces, not the one the user wrote on the update.
+    *
+    * At currency ordinal 756059 (2026-09-08) a swap's SpendAction was emitted with the swap's own `maxValidGsEpochProgress` equal to the
+    * synced global epoch. The global layer never reads that field: it validated the SpendAction against the AllowSpend's
+    * `lastValidEpochProgress`, which still had headroom, and settled it at global 6887529. The metagraph had already expired the swap one
+    * ordinal earlier on `maxValidGsEpochProgress` and reversed the book. From this ordinal a pending SpendAction is expired only when the
+    * AllowSpend it spends can no longer be settled, the expiry clock is the epoch of the last global snapshot the evidence actually covers,
+    * and a SpendAction is not emitted unless the update's own deadline also has settlement headroom. See AllowSpendSettlement.
+    *
+    * Chosen at head ~756440; at ~80 ordinals an hour, 760500 is roughly two days out. Re-check against the live head immediately before
+    * deployment. Activate only once every metagraph L0 node runs a build containing it.
+    */
+  val settlementDeadlineExpiry: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(760500L))
+
+  def settlementDeadlineExpiryActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= settlementDeadlineExpiry.value.value
+
+  /** Applies the one-shot USDC.dag/DAG reserve correction for the swap reversed at 756063. See IncidentUsdcSettlementCorrection.
+    *
+    * One ordinal after `settlementDeadlineExpiry`, so the defect that opened the gap is gated off before the number is fixed, and before
+    * `collateralInvariantEnforced`. Both orderings are asserted in the spec.
+    */
+  val usdcSettlementCorrection: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(settlementDeadlineExpiry.value.value + 1L))
+
+  def usdcSettlementCorrectionActive(ordinal: SnapshotOrdinal): Boolean =
+    ordinal.value.value >= usdcSettlementCorrection.value.value
 }

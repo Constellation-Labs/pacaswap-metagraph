@@ -31,7 +31,9 @@ object L0CombinerService {
       (ProtocolActivation.swapRollbackCorrectionActive(ordinal) &&
         lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.swapRollbackCorrection)) ||
       (ProtocolActivation.usdcRollbackCorrectionActive(ordinal) &&
-        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.usdcRollbackCorrection))
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.usdcRollbackCorrection)) ||
+      (ProtocolActivation.usdcSettlementCorrectionActive(ordinal) &&
+        lastProcessedCurrencyOrdinal.forall(_ < ProtocolActivation.usdcSettlementCorrection))
     }
 
   def make[F[_]: Async](

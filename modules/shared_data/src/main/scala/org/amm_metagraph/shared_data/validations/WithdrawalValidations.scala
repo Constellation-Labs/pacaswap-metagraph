@@ -6,6 +6,7 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.security.signature.Signed
@@ -13,6 +14,7 @@ import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.numeric.NonNegLong
+import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
@@ -48,7 +50,9 @@ trait WithdrawalValidations[F[_]] {
   def pendingSpendActionsValidation(
     signedUpdate: Signed[WithdrawalUpdate],
     isSpendTransactionAcceptedInGL0: Boolean,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    settlementDeadline: Option[EpochProgress],
+    currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]]
 }
 
@@ -161,14 +165,23 @@ object WithdrawalValidations {
     def pendingSpendActionsValidation(
       signedUpdate: Signed[WithdrawalUpdate],
       isSpendTransactionAcceptedInGL0: Boolean,
-      lastSyncGlobalEpochProgress: EpochProgress
+      lastSyncGlobalEpochProgress: EpochProgress,
+      settlementDeadline: Option[EpochProgress],
+      currentSnapshotOrdinal: SnapshotOrdinal
     ): F[Either[FailedCalculatedState, Signed[WithdrawalUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
       for {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
+          if (
+            AllowSpendSettlement.pendingExpired(
+              settlementDeadline,
+              lastSyncGlobalEpochProgress,
+              legacyExpired = signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress,
+              currentSnapshotOrdinal
+            ) && !isSpendTransactionAcceptedInGL0
+          ) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             Right(signedUpdate)

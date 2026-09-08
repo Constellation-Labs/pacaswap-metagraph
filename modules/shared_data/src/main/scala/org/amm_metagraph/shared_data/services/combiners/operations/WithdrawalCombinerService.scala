@@ -17,6 +17,7 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
+import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
@@ -112,7 +113,7 @@ object WithdrawalCombinerService {
         pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(
@@ -260,7 +261,8 @@ object WithdrawalCombinerService {
                   updateHashed.hash,
                   spendAction,
                   Some(withdrawalAmounts),
-                  generatedAfterGlobalOrdinal
+                  generatedAfterGlobalOrdinal,
+                  Some(signedUpdate.value.maxValidGsEpochProgress)
                 )
 
                 updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
@@ -338,7 +340,14 @@ object WithdrawalCombinerService {
 
           combinedState <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 logger.warn(s"Withdrawal spend action expired for ${signedWithdrawalUpdate.source}") >> {
                   val failedState = FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
@@ -375,7 +384,9 @@ object WithdrawalCombinerService {
                   withdrawalValidations.pendingSpendActionsValidation(
                     signedWithdrawalUpdate,
                     allSpendActionsAccepted,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    pendingSpendAction.settlementDeadline,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
 

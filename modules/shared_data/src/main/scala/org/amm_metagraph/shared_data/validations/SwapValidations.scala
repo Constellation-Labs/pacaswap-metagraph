@@ -58,7 +58,9 @@ trait SwapValidations[F[_]] {
   def pendingSpendActionsValidation(
     signedUpdate: Signed[SwapUpdate],
     isSpendTransactionAcceptedInGL0: Boolean,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    settlementDeadline: Option[EpochProgress],
+    currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]]
 }
 
@@ -183,6 +185,10 @@ object SwapValidations {
           } else if (signedUpdate.amountOutMaximum.exists(_ < tokenInformation.netReceived)) {
             failWith(SwapHigherThanMaxAmount(), expireEpochProgress, signedUpdate, updateHash)
           } else if (
+            AllowSpendSettlement.emissionExpired(signedUpdate.maxValidGsEpochProgress, lastSyncGlobalEpochProgress, currentSnapshotOrdinal)
+          ) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
             AllowSpendSettlement.expiredForSettlement(
               allowSpendToken.lastValidEpochProgress,
               lastSyncGlobalEpochProgress,
@@ -215,14 +221,23 @@ object SwapValidations {
     def pendingSpendActionsValidation(
       signedUpdate: Signed[SwapUpdate],
       isSpendTransactionAcceptedInGL0: Boolean,
-      lastSyncGlobalEpochProgress: EpochProgress
+      lastSyncGlobalEpochProgress: EpochProgress,
+      settlementDeadline: Option[EpochProgress],
+      currentSnapshotOrdinal: SnapshotOrdinal
     ): F[Either[FailedCalculatedState, Signed[SwapUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
       for {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
+          if (
+            AllowSpendSettlement.pendingExpired(
+              settlementDeadline,
+              lastSyncGlobalEpochProgress,
+              legacyExpired = signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress,
+              currentSnapshotOrdinal
+            ) && !isSpendTransactionAcceptedInGL0
+          ) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             signedUpdate.asRight

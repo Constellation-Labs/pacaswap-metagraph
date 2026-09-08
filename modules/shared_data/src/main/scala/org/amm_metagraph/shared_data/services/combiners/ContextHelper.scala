@@ -113,6 +113,14 @@ object ContextHelper {
             )
           else Async[F].unit
 
+        settlementEpochProgress <-
+          if (spendActionsRead.lastContiguousGlobalSnapshotOrdinal === lastSyncGlobalOrdinal)
+            lastSyncGlobalEpochProgress.some.pure[F]
+          else
+            globalSnapshotsStorage
+              .get(spendActionsRead.lastContiguousGlobalSnapshotOrdinal)
+              .map(_.map(_.epochProgress))
+
         lastSyncGlobalSnapshotInfo <- context.getLastSynchronizedGlobalSnapshotCombined.map(_.map(_._2))
 
         currencyId <- context.getCurrencyId
@@ -131,6 +139,7 @@ object ContextHelper {
             !ProtocolActivation.reserveAccountingFixesActive(currentSnapshotOrdinal) || spendActionsRead.complete,
           spendActionsEvidenceLowerBound = evidenceLowerBound,
           lastContiguousGlobalSnapshotOrdinal = spendActionsRead.lastContiguousGlobalSnapshotOrdinal,
+          settlementEpochProgress = settlementEpochProgress,
           currencyId = currencyId,
           lastCurrencySnapshot = lastCurrencySnapshot,
           lastCurrencySnapshotInfo = lastCurrencySnapshotInfo,

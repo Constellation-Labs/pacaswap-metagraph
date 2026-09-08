@@ -11,7 +11,6 @@ import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.security.Hasher
 import io.constellationnetwork.security.signature.Signed
 
-import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.types.DataUpdates._
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -20,6 +19,7 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.Swap._
 import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.HasherSelector
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -297,6 +297,15 @@ object PendingOperationsProcessor {
             }
           else Set.empty[PendingSpendAction[AmmUpdate]].pure[F]
 
+        expiryEpoch = AllowSpendSettlement.expiryEpoch(
+          context.lastSyncGlobalEpochProgress,
+          context.settlementEpochProgress,
+          context.currentSnapshotOrdinal
+        )
+        // The epoch handed to the combiners for the pending-spend-action stage: the newest synced
+        // epoch before activation, as always, and the evidence clock after.
+        pendingStageEpoch = expiryEpoch.getOrElse(context.lastSyncGlobalEpochProgress)
+
         // An unrelated action in a partial range cannot authorize expiry. Exact positive matches
         // are safe to process; unmatched operations require complete evidence.
         pendingSpendActionsToCombine = PendingOperationsProcessor.selectPendingSpendActions(
@@ -310,13 +319,18 @@ object PendingOperationsProcessor {
               _.value.value >= context.spendActionsEvidenceLowerBound.value.value
             )
         ) { pending =>
-          pending.update.value match {
+          val legacyExpired = pending.update.value match {
             case lpUpdate: LiquidityPoolUpdate      => lpUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
             case stakingUpdate: StakingUpdate       => stakingUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
             case withdrawalUpdate: WithdrawalUpdate => withdrawalUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
             case swapUpdate: SwapUpdate             => swapUpdate.maxValidGsEpochProgress < context.lastSyncGlobalEpochProgress
             case _                                  => false
           }
+          // From settlementDeadlineExpiry the deadline is the one the global layer enforces and the
+          // clock is the epoch the evidence actually reached. Either missing means not expired.
+          expiryEpoch.exists(epoch =>
+            AllowSpendSettlement.pendingExpired(pending.settlementDeadline, epoch, legacyExpired, context.currentSnapshotOrdinal)
+          )
         }
 
         _ <- logger.info(s"Processing ${pendingSpendActionsToCombine.size} filtered pending spend actions")
@@ -339,10 +353,11 @@ object PendingOperationsProcessor {
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
                           pendingUpdate.pricingTokenInfo,
-                          pendingUpdate.generatedAfterGlobalOrdinal
+                          pendingUpdate.generatedAfterGlobalOrdinal,
+                          pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        context.lastSyncGlobalEpochProgress,
+                        pendingStageEpoch,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
@@ -359,10 +374,11 @@ object PendingOperationsProcessor {
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
                           pendingUpdate.pricingTokenInfo,
-                          pendingUpdate.generatedAfterGlobalOrdinal
+                          pendingUpdate.generatedAfterGlobalOrdinal,
+                          pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        context.lastSyncGlobalEpochProgress,
+                        pendingStageEpoch,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
@@ -379,10 +395,11 @@ object PendingOperationsProcessor {
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
                           pendingUpdate.pricingTokenInfo,
-                          pendingUpdate.generatedAfterGlobalOrdinal
+                          pendingUpdate.generatedAfterGlobalOrdinal,
+                          pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        context.lastSyncGlobalEpochProgress,
+                        pendingStageEpoch,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal
                       )
@@ -400,10 +417,11 @@ object PendingOperationsProcessor {
                           pendingUpdate.updateHash,
                           pendingUpdate.generatedSpendAction,
                           pendingUpdate.pricingTokenInfo,
-                          pendingUpdate.generatedAfterGlobalOrdinal
+                          pendingUpdate.generatedAfterGlobalOrdinal,
+                          pendingUpdate.settlementDeadline
                         ),
                         acc,
-                        context.lastSyncGlobalEpochProgress,
+                        pendingStageEpoch,
                         context.globalSnapshotsSyncSpendActions,
                         context.currentSnapshotOrdinal,
                         context.currencyId
