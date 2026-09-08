@@ -35,10 +35,10 @@ import weaver.MutableIOSuite
 
 /** Replays the 756059..756063 sequence through the real swap combiner, below and above the gate.
   *
-  * Incident: swap deadline 2871490, AllowSpend deadline 2871492, SpendAction emitted at synced epoch 2871490, no acceptance in evidence
-  * at epoch 2871491. Below the gate the combiner expires and rolls back at 2871491. Above it the same swap is refused at emission for
-  * lack of headroom, and a swap that IS emitted survives 2871491 and 2871493 (the last epoch the global layer can still settle it), is
-  * expired only at 2871494, and is confirmed whenever its SpendAction shows up in evidence.
+  * Incident: swap deadline 2871490, AllowSpend deadline 2871492, SpendAction emitted at synced epoch 2871490, no acceptance in evidence at
+  * epoch 2871491. Below the gate the combiner expires and rolls back at 2871491. Above it the same swap is refused at emission for lack of
+  * headroom, and a swap that IS emitted survives 2871491 and 2871493 (the last epoch the global layer can still settle it), is expired only
+  * at 2871494, and is confirmed whenever its SpendAction shows up in evidence.
   */
 object IncidentSettlementReplaySpec extends MutableIOSuite {
   type Res = (Hasher[IO], HasherSelector[IO], SecurityProvider[IO])
@@ -74,7 +74,9 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
     context: L0NodeContext[IO]
   )
 
-  /** A token/USDC.dag pool (token A = other, token B = USDC.dag) and one USDC.dag -> other swap whose AllowSpend lives to `allowSpendDeadline`. */
+  /** A token/USDC.dag pool (token A = other, token B = USDC.dag) and one USDC.dag -> other swap whose AllowSpend lives to
+    * `allowSpendDeadline`.
+    */
   private def rig(swapDeadline: EpochProgress)(implicit res: Res): IO[Rig] = {
     implicit val (h, hs, sp) = res
     val dagSide = TokenInformation(other.some, PosLong.unsafeFrom(toFixedPoint(1000000.0)))
@@ -84,19 +86,40 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
     for {
       keyPair <- KeyPairGenerator.makeKeyPair[IO]
       allowSpend = AllowSpend(
-        trader, metagraph, usdc.some, SwapAmount(PosLong.MaxValue), AllowSpendFee(PosLong.MinValue),
-        AllowSpendReference(AllowSpendOrdinal.first, io.constellationnetwork.security.hash.Hash.empty), allowSpendDeadline, List.empty
+        trader,
+        metagraph,
+        usdc.some,
+        SwapAmount(PosLong.MaxValue),
+        AllowSpendFee(PosLong.MinValue),
+        AllowSpendReference(AllowSpendOrdinal.first, io.constellationnetwork.security.hash.Hash.empty),
+        allowSpendDeadline,
+        List.empty
       )
       signedAllowSpend <- Signed.forAsyncHasher[IO, AllowSpend](allowSpend, keyPair).flatMap(_.toHashed[IO])
       update = getFakeSignedUpdate(
         SwapUpdate(
-          CurrencyId(metagraph), trader, usdc.some, other.some, signedAllowSpend.hash,
-          SwapAmount(PosLong.unsafeFrom(5306141748L)), SwapAmount(PosLong.unsafeFrom(1L)), none, swapDeadline, SwapReference.empty
+          CurrencyId(metagraph),
+          trader,
+          usdc.some,
+          other.some,
+          signedAllowSpend.hash,
+          SwapAmount(PosLong.unsafeFrom(5306141748L)),
+          SwapAmount(PosLong.unsafeFrom(1L)),
+          none,
+          swapDeadline,
+          SwapReference.empty
         )
       )
       allowSpends = SortedMap(usdc.value.some -> SortedMap(trader -> SortedSet(signedAllowSpend.signed)))
       context = buildL0NodeContext[IO](
-        keyPair, allowSpends, emissionEpoch, SnapshotOrdinal.MinValue, SortedMap.empty, emissionEpoch, SnapshotOrdinal.MinValue, metagraph
+        keyPair,
+        allowSpends,
+        emissionEpoch,
+        SnapshotOrdinal.MinValue,
+        SortedMap.empty,
+        emissionEpoch,
+        SnapshotOrdinal.MinValue,
+        metagraph
       )
       calc <- CalculatedStateService.make[IO]
       _ <- calc.update(SnapshotOrdinal.MinValue, state.calculated)
@@ -117,13 +140,27 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
   private def swapState(s: DataState[AmmOnChainState, AmmCalculatedState]) =
     s.calculated.operations(OperationType.Swap).asInstanceOf[SwapCalculatedState]
 
-  private def resolve(r: Rig, emitted: DataState[AmmOnChainState, AmmCalculatedState], epoch: EpochProgress, evidence: List[SpendAction], at: SnapshotOrdinal) = {
+  private def resolve(
+    r: Rig,
+    emitted: DataState[AmmOnChainState, AmmCalculatedState],
+    epoch: EpochProgress,
+    evidence: List[SpendAction],
+    at: SnapshotOrdinal
+  ) = {
     implicit val ctx: L0NodeContext[IO] = r.context
     val p = pendingOf(emitted).headOption.getOrElse(
       throw new AssertionError(s"nothing pending after emission; failed = ${swapState(emitted).failed.toList.map(_.reason)}")
     )
-    val pending = PendingSpendAction(r.update, p.updateHash, p.generatedSpendAction, p.pricingTokenInfo, p.generatedAfterGlobalOrdinal, p.settlementDeadline)
-    r.combiner.combinePendingSpendAction(pending, emitted.copy(sharedArtifacts = SortedSet.empty), epoch, evidence, at, CurrencyId(metagraph))
+    val pending = PendingSpendAction(
+      r.update,
+      p.updateHash,
+      p.generatedSpendAction,
+      p.pricingTokenInfo,
+      p.generatedAfterGlobalOrdinal,
+      p.settlementDeadline
+    )
+    r.combiner
+      .combinePendingSpendAction(pending, emitted.copy(sharedArtifacts = SortedSet.empty), epoch, evidence, at, CurrencyId(metagraph))
   }
 
   test("below the gate the incident swap is emitted at zero headroom and expired one epoch later, rolling the pool back") { implicit res =>
@@ -136,11 +173,16 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
       poolAfterFail = getLiquidityPoolCalculatedState(failed.calculated).confirmed.value.values.head
       poolBefore = getLiquidityPoolCalculatedState(r.state.calculated).confirmed.value.values.head
     } yield
-      expect(pending.size == 1, "the SpendAction was emitted") and
-        expect(pending.head.settlementDeadline.isEmpty, "no settlement deadline is written below the gate (on-chain bytes unchanged)") and
-        expect(poolAfterEmit.tokenB.amount.value > poolBefore.tokenB.amount.value, "USDC.dag credited on emission") and
-        expect(swapState(failed).failed.exists(_.reason == OperationExpired(r.update)), "expired at 2871491, the incident") and
-        expect(poolAfterFail.tokenA.amount == poolBefore.tokenA.amount && poolAfterFail.tokenB.amount == poolBefore.tokenB.amount, "and rolled back")
+      expect(pending.size == 1, "the SpendAction was emitted")
+        .and(expect(pending.head.settlementDeadline.isEmpty, "no settlement deadline is written below the gate (on-chain bytes unchanged)"))
+        .and(expect(poolAfterEmit.tokenB.amount.value > poolBefore.tokenB.amount.value, "USDC.dag credited on emission"))
+        .and(expect(swapState(failed).failed.exists(_.reason == OperationExpired(r.update)), "expired at 2871491, the incident"))
+        .and(
+          expect(
+            poolAfterFail.tokenA.amount == poolBefore.tokenA.amount && poolAfterFail.tokenB.amount == poolBefore.tokenB.amount,
+            "and rolled back"
+          )
+        )
   }
 
   test("from the gate the incident swap is refused at emission for lack of headroom and never touches the reserves") { implicit res =>
@@ -150,27 +192,49 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
       poolBefore = getLiquidityPoolCalculatedState(r.state.calculated).confirmed.value.values.head
       poolAfter = getLiquidityPoolCalculatedState(out.calculated).confirmed.value.values.head
     } yield
-      expect(pendingOf(out).isEmpty, "no SpendAction emitted") and
-        expect(swapState(out).failed.exists(_.reason == OperationExpired(r.update)), "refused as expired at the allow-spend stage") and
-        expect(poolAfter.tokenA.amount == poolBefore.tokenA.amount && poolAfter.tokenB.amount == poolBefore.tokenB.amount, "reserves untouched")
+      expect(pendingOf(out).isEmpty, "no SpendAction emitted")
+        .and(expect(swapState(out).failed.exists(_.reason == OperationExpired(r.update)), "refused as expired at the allow-spend stage"))
+        .and(
+          expect(
+            poolAfter.tokenA.amount == poolBefore.tokenA.amount && poolAfter.tokenB.amount == poolBefore.tokenB.amount,
+            "reserves untouched"
+          )
+        )
   }
 
-  test("from the gate an emitted swap carries the AllowSpend deadline and survives until the global layer could no longer settle it") { implicit res =>
-    for {
-      r <- rig(swapDeadline = ep(2871499L))
-      emitted <- emit(r, ACTIVE)
-      pending = pendingOf(emitted)
-      still1 <- resolve(r, emitted, ep(2871491L), List.empty, ACTIVE)
-      still3 <- resolve(r, emitted, ep(2871493L), List.empty, ACTIVE)
-      failed <- resolve(r, emitted, ep(2871494L), List.empty, ACTIVE)
-      poolBefore = getLiquidityPoolCalculatedState(r.state.calculated).confirmed.value.values.head
-      poolAfterFail = getLiquidityPoolCalculatedState(failed.calculated).confirmed.value.values.head
-    } yield
-      expect(pending.size == 1 && pending.head.settlementDeadline.contains(allowSpendDeadline), "settlementDeadline = the AllowSpend's lastValidEpochProgress") and
-        expect(pendingOf(still1).size == 1 && swapState(still1).failed.isEmpty, "still pending at 2871491, where the incident was reversed") and
-        expect(pendingOf(still3).size == 1 && swapState(still3).failed.isEmpty, "still pending at L + 1 = 2871493, which the global layer can still settle") and
-        expect(pendingOf(failed).isEmpty && swapState(failed).failed.exists(_.reason == OperationExpired(r.update)), "expired at L + 2") and
-        expect(poolAfterFail.tokenA.amount == poolBefore.tokenA.amount && poolAfterFail.tokenB.amount == poolBefore.tokenB.amount, "and rolled back")
+  test("from the gate an emitted swap carries the AllowSpend deadline and survives until the global layer could no longer settle it") {
+    implicit res =>
+      for {
+        r <- rig(swapDeadline = ep(2871499L))
+        emitted <- emit(r, ACTIVE)
+        pending = pendingOf(emitted)
+        still1 <- resolve(r, emitted, ep(2871491L), List.empty, ACTIVE)
+        still3 <- resolve(r, emitted, ep(2871493L), List.empty, ACTIVE)
+        failed <- resolve(r, emitted, ep(2871494L), List.empty, ACTIVE)
+        poolBefore = getLiquidityPoolCalculatedState(r.state.calculated).confirmed.value.values.head
+        poolAfterFail = getLiquidityPoolCalculatedState(failed.calculated).confirmed.value.values.head
+      } yield
+        expect(
+          pending.size == 1 && pending.head.settlementDeadline.contains(allowSpendDeadline),
+          "settlementDeadline = the AllowSpend's lastValidEpochProgress"
+        ).and(
+          expect(
+            pendingOf(still1).size == 1 && swapState(still1).failed.isEmpty,
+            "still pending at 2871491, where the incident was reversed"
+          )
+        ).and(
+          expect(
+            pendingOf(still3).size == 1 && swapState(still3).failed.isEmpty,
+            "still pending at L + 1 = 2871493, which the global layer can still settle"
+          )
+        ).and(
+          expect(pendingOf(failed).isEmpty && swapState(failed).failed.exists(_.reason == OperationExpired(r.update)), "expired at L + 2")
+        ).and(
+          expect(
+            poolAfterFail.tokenA.amount == poolBefore.tokenA.amount && poolAfterFail.tokenB.amount == poolBefore.tokenB.amount,
+            "and rolled back"
+          )
+        )
   }
 
   test("from the gate an emitted swap is confirmed when its SpendAction appears in evidence, whatever the epoch") { implicit res =>
@@ -180,8 +244,8 @@ object IncidentSettlementReplaySpec extends MutableIOSuite {
       evidence = emitted.sharedArtifacts.collect { case a: SpendAction => a }.toList
       confirmed <- resolve(r, emitted, ep(2871493L), evidence, ACTIVE)
     } yield
-      expect(evidence.size == 1, "one SpendAction was emitted") and
-        expect(pendingOf(confirmed).isEmpty && swapState(confirmed).failed.isEmpty, "no longer pending, not failed") and
-        expect(swapState(confirmed).confirmed.value.get(trader).exists(_.values.nonEmpty), "confirmed")
+      expect(evidence.size == 1, "one SpendAction was emitted")
+        .and(expect(pendingOf(confirmed).isEmpty && swapState(confirmed).failed.isEmpty, "no longer pending, not failed"))
+        .and(expect(swapState(confirmed).confirmed.value.get(trader).exists(_.values.nonEmpty), "confirmed"))
   }
 }
