@@ -10,6 +10,7 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 
 import io.constellationnetwork.currency.dataApplication.L0NodeContext
 import io.constellationnetwork.currency.schema.currency.{CurrencyIncrementalSnapshot, CurrencySnapshot, CurrencySnapshotInfo}
+import io.constellationnetwork.currency.schema.globalSnapshotSync.GlobalSyncView
 import io.constellationnetwork.domain.seedlist.SeedlistEntry
 import io.constellationnetwork.schema._
 import io.constellationnetwork.schema.address.Address
@@ -102,7 +103,8 @@ object DummyL0Context {
     csEpochProgress: EpochProgress = EpochProgress.MinValue,
     csSnapshotOrdinal: SnapshotOrdinal = SnapshotOrdinal.MinValue,
     ammMetagraphAddress: Address,
-    spendActions: Option[SortedMap[Address, List[SpendAction]]] = None
+    spendActions: Option[SortedMap[Address, List[SpendAction]]] = None,
+    csGlobalSyncView: Option[GlobalSyncView] = None
   ): L0NodeContext[F] =
     new L0NodeContext[F] {
       def getLastCurrencySnapshot: F[Option[Hashed[CurrencyIncrementalSnapshot]]] = for {
@@ -112,9 +114,12 @@ object DummyL0Context {
           .replace(csEpochProgress)
           .focus(_.signed.value.ordinal)
           .replace(csSnapshotOrdinal)
+          .focus(_.signed.value.globalSyncView)
+          .replace(csGlobalSyncView)
       } yield Some(updated)
 
-      def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[CurrencyIncrementalSnapshot]]] = ???
+      def getCurrencySnapshot(ordinal: SnapshotOrdinal): F[Option[Hashed[CurrencyIncrementalSnapshot]]] =
+        if (ordinal === csSnapshotOrdinal) getLastCurrencySnapshot else none[Hashed[CurrencyIncrementalSnapshot]].pure[F]
       def getLastCurrencySnapshotCombined: F[Option[(Hashed[CurrencyIncrementalSnapshot], CurrencySnapshotInfo)]] = for {
         currencyIncrementalSnapshot <- buildCurrencyIncrementalSnapshot[F](keyPair)
         updated = currencyIncrementalSnapshot
@@ -122,6 +127,8 @@ object DummyL0Context {
           .replace(csEpochProgress)
           .focus(_.signed.value.ordinal)
           .replace(csSnapshotOrdinal)
+          .focus(_.signed.value.globalSyncView)
+          .replace(csGlobalSyncView)
         currencySnapshotInfo = buildCurrencySnapshotInfo(csAllowSpends)
       } yield Some((updated, currencySnapshotInfo))
 

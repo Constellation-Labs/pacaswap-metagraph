@@ -40,7 +40,7 @@ object GovernanceValidations {
     override def l1Validations(
       rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
     ): F[DataApplicationValidationErrorOr[Unit]] = Async[F].delay {
-      exceedingAllocationPercentage(rewardAllocationVoteUpdate)
+      allocationWeightsValidation(rewardAllocationVoteUpdate)
     }
 
     override def l0Validations(
@@ -71,6 +71,7 @@ object GovernanceValidations {
           rewardAllocationVoteUpdate,
           liquidityPools
         )
+        allocationWeights = allocationWeightsValidation(rewardAllocationVoteUpdate.value)
         expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalSnapshotEpochProgress)
 
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => rewardAllocationVoteUpdate.toHashed(dataUpdateCodec.serialize))
@@ -97,24 +98,35 @@ object GovernanceValidations {
             )
           } else if (isValidId.isInvalid) {
             failWith(GovernanceInvalidVoteId(rewardAllocationVoteUpdate.value), expireEpochProgress, rewardAllocationVoteUpdate, updateHash)
+          } else if (allocationWeights.isInvalid) {
+            failWith(
+              GovernanceAllocationPercentageExceed(rewardAllocationVoteUpdate.value),
+              expireEpochProgress,
+              rewardAllocationVoteUpdate,
+              updateHash
+            )
           } else {
             rewardAllocationVoteUpdate.asRight
           }
       } yield result
     }
 
-    private def exceedingAllocationPercentage(
+    private def allocationWeightsValidation(
       rewardAllocationVoteUpdate: RewardAllocationVoteUpdate
     ): DataApplicationValidationErrorOr[Unit] = {
-      val allocationsSum = rewardAllocationVoteUpdate.allocations.map {
-        case (_, allocationWeight) => allocationWeight.value
-      }.sum
-
-      val allocationsWeightsNormalized = rewardAllocationVoteUpdate.allocations.map {
-        case (_, allocationWeight) => (allocationWeight.value / allocationsSum).toDouble
+      // Allocation values are relative PosLong weights, not percentages. Their exact normalized sum is therefore 1
+      // for every non-empty vote (and 0 for the historically accepted empty vote). Compare each numerator to the
+      // exact BigInt denominator instead of redundantly dividing Longs: the old check could wrap a crafted total to
+      // zero and raise at public L1 ingress.
+      val allocationsSum = rewardAllocationVoteUpdate.allocations.foldLeft(BigInt(0)) {
+        case (sum, (_, allocationWeight)) => sum + BigInt(allocationWeight.value)
       }
 
-      AllocationPercentageExceed.whenA(allocationsWeightsNormalized.sum > 1.0)
+      AllocationPercentageExceed.whenA(
+        allocationsSum > 0 && rewardAllocationVoteUpdate.allocations.exists {
+          case (_, allocationWeight) => BigInt(allocationWeight.value) > allocationsSum
+        }
+      )
     }
 
     private def lastTransactionRefValidation(

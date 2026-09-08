@@ -200,7 +200,8 @@ case class PriceRunner[F[_]: Async](
           swapUpdate,
           Hash.empty,
           poolId,
-          EpochProgress.MaxValue
+          EpochProgress.MaxValue,
+          None
         )
       )
 
@@ -256,7 +257,8 @@ case class PriceRunner[F[_]: Async](
           Hash.empty,
           poolId,
           EpochProgress.MaxValue,
-          SnapshotOrdinal.MinValue
+          SnapshotOrdinal.MinValue,
+          None
         )
       )
 

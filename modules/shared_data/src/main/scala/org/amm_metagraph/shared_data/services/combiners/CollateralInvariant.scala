@@ -8,6 +8,7 @@ import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.artifact.SpendAction
 import io.constellationnetwork.schema.swap.CurrencyId
 
+import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.types.LiquidityPool.LiquidityPool
 import org.amm_metagraph.shared_data.types.States._
 import org.typelevel.log4cats.SelfAwareStructuredLogger
@@ -42,9 +43,9 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
   *   - Rewards. Minted by the currency reward mechanism, never custodied at the metagraph address, so outstanding rewards are not a claim
   *     on the wallet and are not subtracted.
   *
-  * Reported, not enforced. The invariant is violated by construction right now - the book is short 1,641,127.95926795 DAG plus two token
-  * legs, pending treasury funding or a write-down - so rejecting on breach would refuse every snapshot and halt the chain. Flip `enforce`
-  * on once the outstanding gap is closed.
+  * Advisory always, on every ordinal. `ProtocolActivation.collateralInvariantEnforced` is defined but deliberately not read here yet:
+  * refusing a snapshot converts a book discrepancy into a halt, and that is only worth enabling once every-ordinal reporting has shown how
+  * often it would trigger under normal trading.
   *
   * DAG is fungible and shared across every pool, so only the aggregate is meaningful. Each token belongs to exactly one pool, so those are
   * exact per pool. Never derive one from the other: that conflation previously produced a 147,940.10 DAG error.
@@ -122,12 +123,6 @@ object CollateralInvariant {
     dagRow ++ tokenRows
   }
 
-  /** How often the check runs. It sits inside consensus, so it must never become a cost the combine has to pay every snapshot: it reads
-    * collections and writes log lines, both of which are real work on the critical path. Sampling keeps drift detection within a couple of
-    * minutes while making the amortised cost negligible. It touches no state, so sampling cannot affect consensus.
-    */
-  val checkEveryNOrdinals: Long = 50L
-
   def make[F[_]: Async]: CollateralInvariant[F] = new CollateralInvariant[F] {
     val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLoggerFromName[F]("CollateralInvariant")
 
@@ -141,60 +136,68 @@ object CollateralInvariant {
       // malformed state - can throw while the effect is being BUILT. An eager throw here would
       // escape the caller's error handling and take the whole combine down with it, which is
       // exactly what happened the first time this was written.
+      // Every ordinal. Sampling left most snapshots unchecked, which made a discrepancy detectable
+      // only after it had already been committed.
       Async[F].defer {
-        if (ordinal % checkEveryNOrdinals =!= 0L) Async[F].unit
-        else {
-          val self = context.currencyId.value
+        val self = context.currencyId.value
 
-          // .get, never Map.apply: this runs before the LiquidityPool entry need exist.
-          val pools = state.calculated.operations
-            .get(OperationType.LiquidityPool)
-            .collect { case lp: LiquidityPoolCalculatedState => lp }
-            .fold(Iterable.empty[LiquidityPool])(_.confirmed.value.values)
+        // .get, never Map.apply: this runs before the LiquidityPool entry need exist.
+        val pools = state.calculated.operations
+          .get(OperationType.LiquidityPool)
+          .collect { case lp: LiquidityPoolCalculatedState => lp }
+          .fold(Iterable.empty[LiquidityPool])(_.confirmed.value.values)
 
-          val pendingSpendActions = state.calculated.operations.values.toList.flatMap {
-            _.pending.toList.collect { case p: PendingSpendAction[_] => p.generatedSpendAction }
-          }
+        val pendingSpendActions = state.calculated.operations.values.toList.flatMap {
+          _.pending.toList.collect { case p: PendingSpendAction[_] => p.generatedSpendAction }
+        }
 
-          context.lastSyncGlobalSnapshotInfo match {
-            case None =>
-              logger.warn("COLLATERAL_INVARIANT unknown: no global snapshot info this snapshot")
-            case Some(info) =>
-              val selfLocked = info.activeTokenLocks.flatMap(_.get(self)).exists(_.nonEmpty)
-              val rows = positions(
-                pools,
-                self,
-                info.balances.get(self).map(b => BigInt(b.value.value)),
-                cid =>
-                  info.lastCurrencySnapshots
-                    .get(cid.value)
-                    .flatMap(_.toOption)
-                    .flatMap { case (_, ci) => ci.balances.get(self) }
-                    .map(b => BigInt(b.value.value)),
-                pendingSpendActions
-              )
+        context.lastSyncGlobalSnapshotInfo match {
+          case None =>
+            logger.warn("COLLATERAL_INVARIANT unknown: no global snapshot info this snapshot")
+          case Some(info) =>
+            val selfLocked = info.activeTokenLocks.flatMap(_.get(self)).exists(_.nonEmpty)
+            val rows = positions(
+              pools,
+              self,
+              info.balances.get(self).map(b => BigInt(b.value.value)),
+              cid =>
+                info.lastCurrencySnapshots
+                  .get(cid.value)
+                  .flatMap(_.toOption)
+                  .flatMap { case (_, ci) => ci.balances.get(self) }
+                  .map(b => BigInt(b.value.value)),
+              pendingSpendActions
+            )
 
-              val anomaly: F[Unit] =
-                if (selfLocked)
-                  logger.warn(
-                    "COLLATERAL_INVARIANT anomaly: the metagraph address holds a token lock. " +
-                      "Locked value sits outside the balances map, so backing is over-reported."
-                  )
-                else Async[F].unit
-
-              // Only breaches are logged. A per-row debug line on every ledger every time
-              // would put avoidable I/O on the consensus path for no signal.
-              anomaly >> rows.filter(_.breached).traverse_ { r =>
+            val anomaly: F[Unit] =
+              if (selfLocked)
                 logger.warn(
-                  s"COLLATERAL_INVARIANT BREACH ordinal=$ordinal ledger=${r.ledger} " +
-                    s"reserve=${r.reserve} balance=${r.balance} inFlightNet=${r.inFlightNet} " +
-                    s"backing=${r.backing} shortfall=${r.shortfall} - " +
-                    "the book promises more than the wallet can back"
+                  "COLLATERAL_INVARIANT anomaly: the metagraph address holds a token lock. " +
+                    "Locked value sits outside the balances map, so backing is over-reported."
                 )
-              }
-          }
+              else Async[F].unit
+
+            // Only breaches are logged. A per-row debug line on every ledger every time
+            // would put avoidable I/O on the consensus path for no signal.
+            val breaches = rows.filter(_.breached)
+
+            val describe = breaches.traverse_ { r =>
+              logger.warn(
+                s"COLLATERAL_INVARIANT BREACH ordinal=$ordinal ledger=${r.ledger} " +
+                  s"reserve=${r.reserve} balance=${r.balance} inFlightNet=${r.inFlightNet} " +
+                  s"backing=${r.backing} shortfall=${r.shortfall} - " +
+                  "the book promises more than the wallet can back"
+              )
+            }
+
+            // Refusing means this combine yields no snapshot. That is the point: the alternative
+            // is committing a book the wallet cannot back, which is unrecoverable without a
+            // one-time fix. Only raise once the gate is active, so signed history keeps replaying
+            // under the advisory behaviour it was produced with.
+            anomaly >> describe
         }
       }
+        // A fault in the check must never take the combine down. That bug was made once already.
         .handleErrorWith(e => logger.warn(e)("COLLATERAL_INVARIANT check failed; combine unaffected"))
     }
   }

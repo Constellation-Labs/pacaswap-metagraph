@@ -7,21 +7,18 @@ import io.constellationnetwork.schema.artifact.SpendAction
 
 import eu.timepit.refined.types.all.NonNegLong
 import org.amm_metagraph.shared_data.globalSnapshots.summarizeSpendActionsRead
-import org.amm_metagraph.shared_data.services.combiners.{PendingOperationsProcessor, StateManager}
+import org.amm_metagraph.shared_data.services.combiners.{ContextHelper, PendingOperationsProcessor, StateManager}
 import weaver.SimpleIOSuite
 
-/** PROT-1695: a settled SpendAction was expired and rolled back because a partial read of the global chain was treated as proof that it had
-  * not settled.
-  *
-  * The guard against that existed, but it sat behind `globalSnapshotsSyncSpendActions.nonEmpty`, so it was only reachable when the read
-  * returned nothing at all. A node that resolved one ordinal carrying any spend action skipped the guard entirely and judged every pending
-  * operation against a list that could not contain the evidence it needed.
-  *
-  * These pin the production selector's ordering rule and the gate it hangs on.
-  */
+/** Regression coverage for settlement evidence used to confirm or expire pending SpendActions. */
 object EvidenceCompletenessSpec extends SimpleIOSuite {
 
   private def ord(o: Long): SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(o))
+
+  // Relative to the gate, never hardcoded: these ordinals are re-pinned against the live head at
+  // every release, and a literal here silently turns "below the gate" into "above it".
+  private val gate = ProtocolActivation.spendActionEvidenceSafety.value.value
+  private val belowGate = gate - 1L
 
   private val pending = SortedSet(1, 2)
 
@@ -29,45 +26,64 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
     ordinal: Long,
     evidenceComplete: Boolean,
     readReturnedActions: Boolean,
+    accepted: Set[Int] = Set.empty,
+    covered: Int => Boolean = _ => true,
     expired: Int => Boolean = _ => true
   ): SortedSet[Int] =
     PendingOperationsProcessor.selectPendingSpendActions(
       ord(ordinal),
       evidenceComplete,
       readReturnedActions,
-      pending
+      pending,
+      accepted.contains,
+      covered
     )(expired)
 
-  pureTest("PROT-1695: a partial read no longer counts as proof once the gate is active") {
+  pureTest("new gate: incomplete evidence can confirm only the exact matching SpendAction") {
     expect.all(
-      // The exact shape that stranded the deposit: some actions came back, but the range was not
-      // fully resolved. Before the fix every pending operation was judged.
-      selected(740000L, evidenceComplete = false, readReturnedActions = true).isEmpty,
-      // A blank read was already handled, and still is.
-      selected(740000L, evidenceComplete = false, readReturnedActions = false).isEmpty
+      selected(gate, evidenceComplete = false, readReturnedActions = true, accepted = Set(1)) == SortedSet(1),
+      selected(gate, evidenceComplete = false, readReturnedActions = true).isEmpty,
+      selected(gate, evidenceComplete = false, readReturnedActions = false).isEmpty
     )
   }
 
-  pureTest("a complete read is still acted on, whether or not it found anything") {
+  pureTest("new gate: only a complete read may expire an unmatched operation") {
     expect.all(
+      selected(gate, evidenceComplete = true, readReturnedActions = false) == pending,
+      selected(
+        gate,
+        evidenceComplete = true,
+        readReturnedActions = true,
+        accepted = Set(1),
+        expired = _ == 2
+      ) == pending,
+      selected(gate, evidenceComplete = true, readReturnedActions = true, expired = _ == 2) == SortedSet(2)
+    )
+  }
+
+  pureTest("new gate: a complete scan still cannot expire an operation whose lifetime it did not cover") {
+    expect.all(
+      selected(gate, evidenceComplete = true, readReturnedActions = false, covered = _ => false).isEmpty,
+      selected(
+        gate,
+        evidenceComplete = true,
+        readReturnedActions = true,
+        accepted = Set(1),
+        covered = _ => false
+      ) == SortedSet(1)
+    )
+  }
+
+  pureTest("signed history below the new gate keeps the existing selector behavior") {
+    expect.all(
+      selected(740000L, evidenceComplete = false, readReturnedActions = true, accepted = Set(1)).isEmpty,
       selected(740000L, evidenceComplete = true, readReturnedActions = true) == pending,
-      selected(740000L, evidenceComplete = true, readReturnedActions = false) == pending,
-      selected(740000L, evidenceComplete = true, readReturnedActions = false, _ == 2) == SortedSet(2)
-    )
-  }
-
-  pureTest("below the gate the old ordering is reproduced exactly, so signed history replays") {
-    expect.all(
-      // The bug itself, preserved below the activation. This is the assertion that keeps the
-      // ordinals already produced since the 731647 restart replayable.
       selected(739999L, evidenceComplete = false, readReturnedActions = true) == pending,
-      // The blank-read guard predates this gate and must keep working below it.
-      selected(739999L, evidenceComplete = false, readReturnedActions = false).isEmpty,
-      selected(739999L, evidenceComplete = true, readReturnedActions = true) == pending
+      selected(739999L, evidenceComplete = false, readReturnedActions = false).isEmpty
     )
   }
 
-  pureTest("an unresolved middle ordinal stops the evidence cursor before the gap") {
+  pureTest("an unresolved middle ordinal stops the contiguous evidence range before the gap") {
     val resolved = (List.empty[SpendAction], true)
     val missing = (List.empty[SpendAction], false)
     val read = summarizeSpendActionsRead(
@@ -75,52 +91,73 @@ object EvidenceCompletenessSpec extends SimpleIOSuite {
       List(ord(10L) -> resolved, ord(11L) -> resolved, ord(12L) -> missing, ord(13L) -> resolved)
     )
 
+    expect.all(!read.complete, read.lastContiguousGlobalSnapshotOrdinal == ord(11L))
+  }
+
+  pureTest("new gate: an incomplete cursor cannot skip pending settlement evidence") {
+    val head = ord(6856623L)
+    val contiguous = ord(6855921L)
+
     expect.all(
-      !read.complete,
-      read.lastContiguousGlobalSnapshotOrdinal == ord(11L),
       StateManager.selectNextGlobalSnapshotCursor(
-        ord(740000L),
-        read.complete,
-        ord(13L),
-        read.lastContiguousGlobalSnapshotOrdinal
-      ) == ord(11L)
+        ord(gate),
+        evidenceComplete = false,
+        head,
+        contiguous,
+        hasPendingSpendActions = true
+      ) == contiguous,
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(gate),
+        evidenceComplete = false,
+        head,
+        contiguous,
+        hasPendingSpendActions = false
+      ) == head,
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(gate),
+        evidenceComplete = true,
+        head,
+        contiguous,
+        hasPendingSpendActions = true
+      ) == head
     )
   }
 
-  pureTest("cursor hold is gated so historical snapshots retain the old advancement") {
+  pureTest("cursor behavior below the new gate is replay-compatible") {
+    val head = ord(13L)
+    val contiguous = ord(11L)
+
     expect.all(
+      StateManager.selectNextGlobalSnapshotCursor(
+        ord(740000L),
+        evidenceComplete = false,
+        head,
+        contiguous,
+        hasPendingSpendActions = false
+      ) == contiguous,
       StateManager.selectNextGlobalSnapshotCursor(
         ord(739999L),
         evidenceComplete = false,
-        ord(13L),
-        ord(11L)
-      ) == ord(13L),
-      StateManager.selectNextGlobalSnapshotCursor(
-        ord(740000L),
-        evidenceComplete = true,
-        ord(13L),
-        ord(11L)
-      ) == ord(13L)
+        head,
+        contiguous,
+        hasPendingSpendActions = true
+      ) == head
     )
   }
 
-  pureTest("the new gate is later than the one that already activated, and is not yet reached") {
+  pureTest("the stronger evidence rule has its own future activation") {
     expect.all(
-      // 731647 is long past, so this fix could not hang on it without breaking replay of
-      // everything produced since the restart.
-      ProtocolActivation.evidenceCompletenessFirst.value.value > ProtocolActivation.reserveAccountingFixes.value.value,
-      ProtocolActivation.evidenceCompletenessFirstActive(ord(740000L)),
-      !ProtocolActivation.evidenceCompletenessFirstActive(ord(739999L)),
-      // Supersedes the unreleased 736000 gate by at least another two days at the observed rate.
-      ProtocolActivation.evidenceCompletenessFirst.value.value - 736000L >= 80L * 48L
+      ProtocolActivation.spendActionEvidenceSafety.value.value > ProtocolActivation.evidenceCompletenessFirst.value.value,
+      !ProtocolActivation.spendActionEvidenceSafetyActive(ord(belowGate)),
+      ProtocolActivation.spendActionEvidenceSafetyActive(ord(gate))
     )
   }
 
-  pureTest("governance month-boundary ordering changes with the same coordinated activation") {
+  pureTest("new gate: the state ordinal wins over a live-context tip during historical replay") {
     expect.all(
-      ProtocolActivation.governanceMonthBoundaryFix == ProtocolActivation.evidenceCompletenessFirst,
-      !ProtocolActivation.governanceMonthBoundaryFixActive(ord(739999L)),
-      ProtocolActivation.governanceMonthBoundaryFixActive(ord(740000L))
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(belowGate))) == ord(gate),
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), Some(ord(739999L))) == ord(740000L),
+      ContextHelper.selectCurrentSnapshotOrdinal(ord(900000L), None) == ord(900001L)
     )
   }
 }

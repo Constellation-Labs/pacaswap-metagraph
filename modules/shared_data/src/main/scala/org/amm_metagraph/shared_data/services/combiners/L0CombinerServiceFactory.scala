@@ -9,9 +9,10 @@ import io.constellationnetwork.schema.epoch.EpochProgress
 import fs2.concurrent.SignallingRef
 import org.amm_metagraph.shared_data.services.combiners.operations._
 import org.amm_metagraph.shared_data.storages.GlobalSnapshotsStorage
+import org.amm_metagraph.shared_data.types.codecs.HasherSelector
 
 object L0CombinerServiceFactory {
-  def make[F[_]: Async](
+  def make[F[_]: Async: HasherSelector](
     globalSnapshotsStorage: GlobalSnapshotsStorage[F],
     governanceCombinerService: GovernanceCombinerService[F],
     liquidityPoolCombinerService: LiquidityPoolCombinerService[F],

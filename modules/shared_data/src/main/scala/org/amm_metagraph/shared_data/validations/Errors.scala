@@ -212,6 +212,7 @@ object Errors {
   case class GovernanceDailyLimitAllocation(update: AmmUpdate) extends FailureReason
   case class GovernanceWalletWithNoVotingPower(update: AmmUpdate) extends FailureReason
   case class GovernanceInvalidVoteId(update: AmmUpdate) extends FailureReason
+  case class GovernanceAllocationPercentageExceed(update: AmmUpdate) extends FailureReason
   case class InvalidWithdrawalAmount(update: AmmUpdate) extends FailureReason
   case class DuplicatedUpdate(update: AmmUpdate) extends FailureReason
 }

@@ -84,10 +84,10 @@ jobs:
       - name: Start governance tests
         shell: bash
         env:
-          GL0_URL: ${{ secrets.GL0_URL }}
-          AMM_ML0_URL: ${{ secrets.AMM_ML0_URL }}
-          AMM_CL1_URL: ${{ secrets.AMM_CL1_URL }}
-          AMM_DL1_URL: ${{ secrets.AMM_DL1_URL }}
+          GL0_URL: ${{ secrets.GL0_URL || 'http://localhost:9000' }}
+          AMM_ML0_URL: ${{ secrets.AMM_ML0_URL || 'http://localhost:8000' }}
+          AMM_CL1_URL: ${{ secrets.AMM_CL1_URL || 'http://localhost:8100' }}
+          AMM_DL1_URL: ${{ secrets.AMM_DL1_URL || 'http://localhost:8200' }}
           TOKEN_LOCKS: ${{ secrets.TOKEN_LOCKS }}
         run: |
           METAGRAPH_ID=$(cat .github/code/metagraphs/amm-metagraph/metagraph-l0/genesis-node/genesis.address)

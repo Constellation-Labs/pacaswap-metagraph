@@ -153,6 +153,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -299,6 +300,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       spendActions = stakeResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -435,6 +437,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
@@ -552,6 +555,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
@@ -681,6 +685,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -689,6 +694,7 @@ object StakingCombinerTest extends MutableIOSuite {
         stakeResponsePendingSpendActionResponse,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -808,6 +814,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         currentEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       stakingCalculatedState = stakeResponse.calculated.operations(Staking).asInstanceOf[StakingCalculatedState]
@@ -924,6 +931,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -1071,6 +1079,7 @@ object StakingCombinerTest extends MutableIOSuite {
         state,
         tokenEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 

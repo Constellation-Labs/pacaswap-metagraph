@@ -5,6 +5,8 @@ import java.nio.file.Paths
 import cats.effect.Async
 import cats.syntax.all._
 
+import scala.collection.immutable.SortedMap
+
 import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.balance.Amount
@@ -47,7 +49,8 @@ trait PricingService[F[_]] {
     signedUpdate: Signed[SwapUpdate],
     updateHash: Hash,
     poolId: PoolId,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    liquidityPoolsOverride: Option[SortedMap[String, LiquidityPool]]
   ): F[Either[FailedCalculatedState, SwapTokenInfo]]
 
   def getStakingTokenInfo(
@@ -55,7 +58,8 @@ trait PricingService[F[_]] {
     updateHash: Hash,
     poolId: PoolId,
     lastSyncGlobalEpochProgress: EpochProgress,
-    currencyOrdinal: SnapshotOrdinal
+    currencyOrdinal: SnapshotOrdinal,
+    liquidityPoolsOverride: Option[SortedMap[String, LiquidityPool]]
   ): F[Either[FailedCalculatedState, StakingTokenInfo]]
 
   def getUpdatedLiquidityPoolDueStaking(
@@ -208,15 +212,16 @@ object PricingService {
           signedUpdate: Signed[SwapUpdate],
           updateHash: Hash,
           poolId: PoolId,
-          lastSyncGlobalEpochProgress: EpochProgress
+          lastSyncGlobalEpochProgress: EpochProgress,
+          liquidityPoolsOverride: Option[SortedMap[String, LiquidityPool]]
         ): F[Either[FailedCalculatedState, SwapTokenInfo]] = for {
-          liquidityPools <- getConfirmedLiquidityPools
+          liquidityPools <- liquidityPoolsOverride.fold(getConfirmedLiquidityPools.map(_.confirmed.value))(_.pure[F])
           swapUpdate = signedUpdate.value
           expireEpochProgress = org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress(
             applicationConfig,
             lastSyncGlobalEpochProgress
           )
-          result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
+          result <- getLiquidityPoolByPoolId(liquidityPools, poolId).attempt.map {
             case Left(_) =>
               Left(
                 FailedCalculatedState(
@@ -280,14 +285,15 @@ object PricingService {
           updateHash: Hash,
           poolId: PoolId,
           lastSyncGlobalEpochProgress: EpochProgress,
-          currencyOrdinal: SnapshotOrdinal
+          currencyOrdinal: SnapshotOrdinal,
+          liquidityPoolsOverride: Option[SortedMap[String, LiquidityPool]]
         ): F[Either[FailedCalculatedState, StakingTokenInfo]] = for {
-          liquidityPools <- getConfirmedLiquidityPools
+          liquidityPools <- liquidityPoolsOverride.fold(getConfirmedLiquidityPools.map(_.confirmed.value))(_.pure[F])
           expireEpochProgress = org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress(
             applicationConfig,
             lastSyncGlobalEpochProgress
           )
-          result <- getLiquidityPoolByPoolId(liquidityPools.confirmed.value, poolId).attempt.map {
+          result <- getLiquidityPoolByPoolId(liquidityPools, poolId).attempt.map {
             case Left(_) =>
               Left(
                 FailedCalculatedState(

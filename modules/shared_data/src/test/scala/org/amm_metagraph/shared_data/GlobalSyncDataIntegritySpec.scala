@@ -44,4 +44,14 @@ object GlobalSyncDataIntegritySpec extends SimpleIOSuite {
       expect(actions.actions.isEmpty)
     }
   }
+
+  test("a reversed range is incomplete rather than vacuously complete and rewinds to the upper bound") {
+    getSpendActionsFromGlobalSnapshots[IO](ord(12), ord(10), emptyStorage, failOnMissing = false).map { read =>
+      expect.all(
+        read.actions.isEmpty,
+        !read.complete,
+        read.lastContiguousGlobalSnapshotOrdinal == ord(10)
+      )
+    }
+  }
 }

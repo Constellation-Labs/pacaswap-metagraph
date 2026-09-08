@@ -35,30 +35,16 @@ class RollbackOperations[F[_]: Async](
     metagraphId: CurrencyId,
     currencyOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, LiquidityPool]] = {
-    val tokenAIsFrom = liquidityPool.tokenA.identifier === signedUpdate.swapFromPair
-    val tokenBIsTo = liquidityPool.tokenB.identifier === signedUpdate.swapToPair
     val expireEpochProgress = getFailureExpireEpochProgress(config, lastSyncGlobalEpochProgress)
 
     def error(msg: String): FailedCalculatedState =
       FailedCalculatedState(ArithmeticError(msg), expireEpochProgress, updateHash, signedUpdate)
 
-    val newTokenAAmountEither: Either[FailedCalculatedState, PosLong] =
-      if (tokenAIsFrom)
-        (liquidityPool.tokenA.amount.value - tokenAAmountToReturn.value.value).toPosLong
-          .leftMap(_ => error("Rolling back token A results in negative balance"))
-      else if (tokenBIsTo)
-        (liquidityPool.tokenA.amount.value + tokenBAmountToReturn.value.value).toPosLong
-          .leftMap(_ => error("Rolling back token A results in invalid addition"))
-      else Right(liquidityPool.tokenA.amount)
-
-    val newTokenBAmountEither: Either[FailedCalculatedState, PosLong] =
-      if (tokenBIsTo)
-        (liquidityPool.tokenB.amount.value + tokenBAmountToReturn.value.value).toPosLong
-          .leftMap(_ => error("Rolling back token B results in invalid addition"))
-      else if (tokenAIsFrom)
-        (liquidityPool.tokenB.amount.value - tokenAAmountToReturn.value.value).toPosLong
-          .leftMap(_ => error("Rolling back token B results in negative balance"))
-      else Right(liquidityPool.tokenB.amount)
+    val (newTokenAAmountEither, newTokenBAmountEither) =
+      if (ProtocolActivation.rollbackDirectionFixActive(currencyOrdinal))
+        directedRollbackAmounts(signedUpdate, liquidityPool, tokenAAmountToReturn, tokenBAmountToReturn, error)
+      else
+        legacyRollbackAmounts(signedUpdate, liquidityPool, tokenAAmountToReturn, tokenBAmountToReturn, error)
 
     val result = for {
       newTokenA <- newTokenAAmountEither.map(amount => liquidityPool.tokenA.copy(amount = amount))
@@ -99,6 +85,67 @@ class RollbackOperations[F[_]: Async](
       case Left(error) =>
         Async[F].pure(Left(error))
     }
+  }
+
+  /** The forward swap credits the sold side with `amountIn` and debits the bought side with `netReceived`, whichever pool side each is. The
+    * rollback is that mirror: match each side of the pool against the update's pair and reverse it. A pool that matches neither side cannot
+    * be rolled back and must say so rather than hand back the unchanged pool as a success.
+    */
+  private def directedRollbackAmounts(
+    signedUpdate: Signed[SwapUpdate],
+    liquidityPool: LiquidityPool,
+    amountIn: SwapAmount,
+    netReceived: SwapAmount,
+    error: String => FailedCalculatedState
+  ): (Either[FailedCalculatedState, PosLong], Either[FailedCalculatedState, PosLong]) = {
+    def reverse(side: String, current: PosLong, identifier: Option[CurrencyId]): Either[FailedCalculatedState, PosLong] =
+      if (identifier === signedUpdate.swapFromPair)
+        (current.value - amountIn.value.value).toPosLong
+          .leftMap(_ => error(s"Rolling back token $side results in negative balance"))
+      else if (identifier === signedUpdate.swapToPair)
+        (current.value + netReceived.value.value).toPosLong
+          .leftMap(_ => error(s"Rolling back token $side results in invalid addition"))
+      else
+        Left(error(s"Token $side of the pool is neither side of the swap being rolled back"))
+
+    (
+      reverse("A", liquidityPool.tokenA.amount, liquidityPool.tokenA.identifier),
+      reverse("B", liquidityPool.tokenB.amount, liquidityPool.tokenB.identifier)
+    )
+  }
+
+  /** Pre-activation behaviour, kept exactly so history replays: only a token A -> token B swap is reversed; any other direction leaves both
+    * reserves untouched. See ProtocolActivation.rollbackDirectionFix.
+    */
+  private def legacyRollbackAmounts(
+    signedUpdate: Signed[SwapUpdate],
+    liquidityPool: LiquidityPool,
+    tokenAAmountToReturn: SwapAmount,
+    tokenBAmountToReturn: SwapAmount,
+    error: String => FailedCalculatedState
+  ): (Either[FailedCalculatedState, PosLong], Either[FailedCalculatedState, PosLong]) = {
+    val tokenAIsFrom = liquidityPool.tokenA.identifier === signedUpdate.swapFromPair
+    val tokenBIsTo = liquidityPool.tokenB.identifier === signedUpdate.swapToPair
+
+    val newTokenA: Either[FailedCalculatedState, PosLong] =
+      if (tokenAIsFrom)
+        (liquidityPool.tokenA.amount.value - tokenAAmountToReturn.value.value).toPosLong
+          .leftMap(_ => error("Rolling back token A results in negative balance"))
+      else if (tokenBIsTo)
+        (liquidityPool.tokenA.amount.value + tokenBAmountToReturn.value.value).toPosLong
+          .leftMap(_ => error("Rolling back token A results in invalid addition"))
+      else Right(liquidityPool.tokenA.amount)
+
+    val newTokenB: Either[FailedCalculatedState, PosLong] =
+      if (tokenBIsTo)
+        (liquidityPool.tokenB.amount.value + tokenBAmountToReturn.value.value).toPosLong
+          .leftMap(_ => error("Rolling back token B results in invalid addition"))
+      else if (tokenAIsFrom)
+        (liquidityPool.tokenB.amount.value - tokenAAmountToReturn.value.value).toPosLong
+          .leftMap(_ => error("Rolling back token B results in negative balance"))
+      else Right(liquidityPool.tokenB.amount)
+
+    (newTokenA, newTokenB)
   }
 
   def rollbackWithdrawal(

@@ -21,9 +21,16 @@ case class ProcessingContext(
   // False when the spend-action read could not resolve every ordinal in the range. An empty
   // list then proves nothing, so no pending operation may be expired on the strength of it.
   spendActionsEvidenceComplete: Boolean,
+  // Inclusive lower bound of the scan represented by the actions/completeness fields. Negative
+  // evidence is valid for an operation only if this bound is no later than its generation view.
+  spendActionsEvidenceLowerBound: SnapshotOrdinal,
   // The greatest ordinal in the contiguous resolved prefix above the previous cursor. When
   // evidence is incomplete this prevents cleanup from advancing past the first unresolved gap.
   lastContiguousGlobalSnapshotOrdinal: SnapshotOrdinal,
+  // Epoch of lastContiguousGlobalSnapshotOrdinal: the only clock a pending SpendAction may be
+  // expired against, because "not accepted by epoch E" is only evidence if the read reached E.
+  // None when that snapshot's epoch could not be read; nothing is expired then.
+  settlementEpochProgress: Option[EpochProgress],
   currencyId: CurrencyId,
   lastCurrencySnapshot: Hashed[CurrencyIncrementalSnapshot],
   lastCurrencySnapshotInfo: CurrencySnapshotInfo,

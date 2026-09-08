@@ -18,11 +18,11 @@ import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hasher, SecurityProvider}
 
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.ProtocolActivation
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, StakingUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -32,6 +32,7 @@ import org.amm_metagraph.shared_data.types.States._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.StakingValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -41,6 +42,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -49,6 +51,7 @@ trait StakingCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -146,8 +149,8 @@ object StakingCombinerService {
         signedStakingUpdate: Signed[StakingUpdate]
       ): SortedSet[PendingAction[StakingUpdate]] =
         stakingCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedStakingUpdate => true
-          case _                                                                     => false
+          case PendingSpendAction(update, _, _, _, _, _) if update === signedStakingUpdate => true
+          case _                                                                           => false
         }
 
       def combineNew(
@@ -155,6 +158,7 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
@@ -199,9 +203,12 @@ object StakingCombinerService {
           currentOrdinal <- EitherT.liftF[F, FailedCalculatedState, SnapshotOrdinal](
             context.getLastCurrencySnapshot.map(_.fold(SnapshotOrdinal.MinValue)(_.ordinal.next))
           )
+          poolOverride = Option.when(ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal))(
+            getLiquidityPoolCalculatedState(oldState.calculated).confirmed.value
+          )
           stakingTokenInfo <- EitherT(
             pricingService
-              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal)
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal, poolOverride)
           )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -247,6 +254,7 @@ object StakingCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -269,11 +277,17 @@ object StakingCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
 
         val stakingCalculatedState = getStakingCalculatedState(oldState.calculated)
         val stakingUpdate = pendingAllowSpendUpdate.update.value
+        // Deliberately NOT requoted at execution, unlike the swap path: the pair amount is bounded
+        // by the user's second AllowSpend, so a fresh quote could demand more than the user signed
+        // for, and proportional share issuance is self-consistent under repetition — replaying the
+        // request-time quote cannot drain the pool. Quoting against the in-flight pool at request
+        // time (combineNew) removes the within-batch staleness, which is the exploitable part.
         val maybeStakingTokenInfo = pendingAllowSpendUpdate.pricingTokenInfo.collect {
           case stakingTokenInfo: StakingTokenInfo => stakingTokenInfo
         }
@@ -303,7 +317,8 @@ object StakingCombinerService {
                     currencyId,
                     stakingTokenInfo,
                     allowSpendTokenA,
-                    allowSpendTokenB
+                    allowSpendTokenB,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
                 (amountToSpendA, amountToSpendB) =
@@ -325,6 +340,9 @@ object StakingCombinerService {
                   allowSpendTokenB,
                   amountToSpendB
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(stakingCalculatedState, pendingAllowSpendUpdate.update)
@@ -332,7 +350,14 @@ object StakingCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  pendingAllowSpendUpdate.pricingTokenInfo
+                  pendingAllowSpendUpdate.pricingTokenInfo,
+                  generatedAfterGlobalOrdinal,
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
+                      allowSpendTokenA.lastValidEpochProgress
+                    else allowSpendTokenB.lastValidEpochProgress
+                  )
                 )
 
                 updatedPendingSpendActionCalculatedState =
@@ -430,12 +455,21 @@ object StakingCombinerService {
             stakingValidations.pendingSpendActionsValidation(
               pendingSpendAction.update,
               allSpendActionsAccepted,
-              globalEpochProgress
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
             )
           ).leftWiden[FailedCalculatedState]
           result <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
@@ -483,7 +517,8 @@ object StakingCombinerService {
                         pendingSpendAction.updateHash,
                         poolId,
                         globalEpochProgress,
-                        currentSnapshotOrdinal
+                        currentSnapshotOrdinal,
+                        None
                       )
                     )
 

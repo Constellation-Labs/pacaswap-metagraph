@@ -6,12 +6,14 @@ import cats.syntax.all._
 import scala.collection.immutable.SortedSet
 
 import io.constellationnetwork.currency.dataApplication.dataApplication.DataApplicationValidationErrorOr
+import io.constellationnetwork.schema.SnapshotOrdinal
 import io.constellationnetwork.schema.address.Address
 import io.constellationnetwork.schema.epoch.EpochProgress
 import io.constellationnetwork.schema.swap.{AllowSpend, CurrencyId}
 import io.constellationnetwork.security.signature.Signed
 import io.constellationnetwork.security.{Hashed, SecurityProvider}
 
+import org.amm_metagraph.shared_data.AllowSpendSettlement
 import org.amm_metagraph.shared_data.AllowSpends.getAllAllowSpendsInUseFromState
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
@@ -48,13 +50,16 @@ trait StakingValidations[F[_]] {
     currencyId: CurrencyId,
     tokenInformation: StakingTokenInfo,
     allowSpendTokenA: Hashed[AllowSpend],
-    allowSpendTokenB: Hashed[AllowSpend]
+    allowSpendTokenB: Hashed[AllowSpend],
+    currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 
   def pendingSpendActionsValidation(
     signedUpdate: Signed[StakingUpdate],
     isSpendTransactionAcceptedInGL0: Boolean,
-    lastSyncGlobalEpochProgress: EpochProgress
+    lastSyncGlobalEpochProgress: EpochProgress,
+    settlementDeadline: Option[EpochProgress],
+    currentSnapshotOrdinal: SnapshotOrdinal
   ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]]
 }
 
@@ -167,7 +172,8 @@ object StakingValidations {
       currencyId: CurrencyId,
       tokenInformation: StakingTokenInfo,
       allowSpendTokenA: Hashed[AllowSpend],
-      allowSpendTokenB: Hashed[AllowSpend]
+      allowSpendTokenB: Hashed[AllowSpend],
+      currentSnapshotOrdinal: SnapshotOrdinal
     ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
@@ -194,9 +200,29 @@ object StakingValidations {
             failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
           } else if (tokenB.amount.value > allowSpendTokenB.amount.value.value) {
             failWith(AmountGreaterThanAllowSpendLimit(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
-          } else if (allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+          } else if (
+            AllowSpendSettlement.emissionExpired(signedUpdate.maxValidGsEpochProgress, lastSyncGlobalEpochProgress, currentSnapshotOrdinal)
+          ) {
+            failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
+          } else if (
+            AllowSpendSettlement.expiredForSettlement(
+              allowSpendTokenA.lastValidEpochProgress,
+              lastSyncGlobalEpochProgress,
+              legacyExpired =
+                allowSpendTokenA.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value,
+              currentSnapshotOrdinal
+            )
+          ) {
             failWith(AllowSpendExpired(allowSpendTokenA.signed.value), expireEpochProgress, signedUpdate, updateHash)
-          } else if (allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value) {
+          } else if (
+            AllowSpendSettlement.expiredForSettlement(
+              allowSpendTokenB.lastValidEpochProgress,
+              lastSyncGlobalEpochProgress,
+              legacyExpired =
+                allowSpendTokenB.lastValidEpochProgress.value.value + allowSpendDelay < lastSyncGlobalEpochProgress.value.value,
+              currentSnapshotOrdinal
+            )
+          ) {
             failWith(AllowSpendExpired(allowSpendTokenB.signed.value), expireEpochProgress, signedUpdate, updateHash)
           } else {
             Right(signedUpdate)
@@ -207,7 +233,9 @@ object StakingValidations {
     def pendingSpendActionsValidation(
       signedUpdate: Signed[StakingUpdate],
       isSpendTransactionAcceptedInGL0: Boolean,
-      lastSyncGlobalEpochProgress: EpochProgress
+      lastSyncGlobalEpochProgress: EpochProgress,
+      settlementDeadline: Option[EpochProgress],
+      currentSnapshotOrdinal: SnapshotOrdinal
     ): F[Either[FailedCalculatedState, Signed[StakingUpdate]]] = {
       val expireEpochProgress = getFailureExpireEpochProgress(applicationConfig, lastSyncGlobalEpochProgress)
 
@@ -215,7 +243,14 @@ object StakingValidations {
         hashedUpdate <- HasherSelector[F].withCurrent(implicit hs => signedUpdate.toHashed(dataUpdateCodec.serialize))
         updateHash = hashedUpdate.hash
         result =
-          if (signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress && !isSpendTransactionAcceptedInGL0) {
+          if (
+            AllowSpendSettlement.pendingExpired(
+              settlementDeadline,
+              lastSyncGlobalEpochProgress,
+              legacyExpired = signedUpdate.maxValidGsEpochProgress < lastSyncGlobalEpochProgress,
+              currentSnapshotOrdinal
+            ) && !isSpendTransactionAcceptedInGL0
+          ) {
             failWith(OperationExpired(signedUpdate), expireEpochProgress, signedUpdate, updateHash)
           } else {
             signedUpdate.asRight

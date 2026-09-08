@@ -138,6 +138,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -261,6 +262,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         EpochProgress.MinValue,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       spendActions = liquidityPoolPendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
@@ -390,6 +392,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
@@ -500,6 +503,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
@@ -614,6 +618,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolResponse.calculated.operations(LiquidityPool).asInstanceOf[LiquidityPoolCalculatedState]
@@ -720,6 +725,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
       liquidityPoolCalculatedState = liquidityPoolPendingSpendActionResponse.calculated
@@ -827,6 +833,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         currentEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -935,6 +942,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -1057,6 +1065,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         state,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 
@@ -1065,6 +1074,7 @@ object LiquidityPoolCombinerTest extends MutableIOSuite {
         liquidityPoolPendingSpendActionResponse,
         futureEpoch,
         allowSpends,
+        SnapshotOrdinal.MinValue,
         CurrencyId(destinationAddress)
       )
 

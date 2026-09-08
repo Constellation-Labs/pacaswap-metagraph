@@ -20,6 +20,7 @@ import monocle.syntax.all._
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendActionWithoutAllowSpends}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.{getConfirmedExpireEpochProgress, getFailureExpireEpochProgress}
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.services.pricing.PricingService
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, WithdrawalUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
@@ -29,6 +30,7 @@ import org.amm_metagraph.shared_data.types.Withdrawal._
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors._
 import org.amm_metagraph.shared_data.validations.WithdrawalValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -111,7 +113,7 @@ object WithdrawalCombinerService {
         pendingActions: SortedSet[PendingAction[WithdrawalUpdate]],
         signedWithdrawalUpdate: Signed[WithdrawalUpdate]
       ): SortedSet[PendingAction[WithdrawalUpdate]] = pendingActions.collect {
-        case spendAction @ PendingSpendAction(update, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
+        case spendAction @ PendingSpendAction(update, _, _, _, _, _) if update =!= signedWithdrawalUpdate => spendAction
       }
 
       private def rollbackAmountInLPs(
@@ -246,12 +248,29 @@ object WithdrawalCombinerService {
                   signedUpdate.source,
                   currencyId
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 newLiquidityPoolState = liquidityPoolsCalculatedState
                   .focus(_.confirmed.value)
                   .modify(_.updated(poolId.value, updatedPool))
 
-                pendingAllowSpend = PendingSpendAction(signedUpdate, updateHashed.hash, spendAction, Some(withdrawalAmounts))
+                pendingAllowSpend = PendingSpendAction(
+                  signedUpdate,
+                  updateHashed.hash,
+                  spendAction,
+                  Some(withdrawalAmounts),
+                  generatedAfterGlobalOrdinal,
+                  // A withdrawal's SpendAction spends no AllowSpend, so the global layer applies it under no
+                  // deadline whenever it ingests the carrying currency snapshot; there is no epoch after which
+                  // non-acceptance proves anything, and the retirement test can never be met either. It is never
+                  // expired: a withdrawal the global layer refuses (custody short) stays pending, visibly, which is
+                  // the collateral breach the monitor exists to raise. Gated at population like the others.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    AllowSpendSettlement.noDeadline
+                  )
+                )
 
                 updatedPendingWithdrawalCalculatedState = withdrawalCalculatedState
                   .focus(_.pending)
@@ -328,7 +347,14 @@ object WithdrawalCombinerService {
 
           combinedState <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 logger.warn(s"Withdrawal spend action expired for ${signedWithdrawalUpdate.source}") >> {
                   val failedState = FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),
@@ -365,7 +391,9 @@ object WithdrawalCombinerService {
                   withdrawalValidations.pendingSpendActionsValidation(
                     signedWithdrawalUpdate,
                     allSpendActionsAccepted,
-                    globalEpochProgress
+                    globalEpochProgress,
+                    pendingSpendAction.settlementDeadline,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
 

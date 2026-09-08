@@ -20,12 +20,12 @@ import io.constellationnetwork.security.signature.Signed
 import eu.timepit.refined.auto._
 import eu.timepit.refined.types.all.PosLong
 import monocle.syntax.all._
-import org.amm_metagraph.shared_data.FeeDistributor
 import org.amm_metagraph.shared_data.SpendTransactions.{checkIfSpendActionAcceptedInGl0, generateSpendAction}
 import org.amm_metagraph.shared_data.app.ApplicationConfig
 import org.amm_metagraph.shared_data.epochProgress.getFailureExpireEpochProgress
 import org.amm_metagraph.shared_data.globalSnapshots.getAllowSpendsGlobalSnapshotsState
 import org.amm_metagraph.shared_data.refined._
+import org.amm_metagraph.shared_data.services.combiners.SpendActionEvidence
 import org.amm_metagraph.shared_data.types.DataUpdates.{AmmUpdate, LiquidityPoolUpdate}
 import org.amm_metagraph.shared_data.types.LiquidityPool._
 import org.amm_metagraph.shared_data.types.States.StateTransitionType._
@@ -33,6 +33,7 @@ import org.amm_metagraph.shared_data.types.States.{OperationType, _}
 import org.amm_metagraph.shared_data.types.codecs.{HasherSelector, JsonWithBase64BinaryCodec}
 import org.amm_metagraph.shared_data.validations.Errors.{DuplicatedUpdate, OperationExpired}
 import org.amm_metagraph.shared_data.validations.LiquidityPoolValidations
+import org.amm_metagraph.shared_data.{AllowSpendSettlement, FeeDistributor, ProtocolActivation}
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -42,6 +43,7 @@ trait LiquidityPoolCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -50,6 +52,7 @@ trait LiquidityPoolCombinerService[F[_]] {
     oldState: DataState[AmmOnChainState, AmmCalculatedState],
     globalEpochProgress: EpochProgress,
     lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+    currentSnapshotOrdinal: SnapshotOrdinal,
     currencyId: CurrencyId
   )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]]
 
@@ -146,8 +149,8 @@ object LiquidityPoolCombinerService {
         signedLiquidityPoolUpdate: Signed[LiquidityPoolUpdate]
       ): SortedSet[PendingAction[LiquidityPoolUpdate]] =
         liquidityPoolsCalculatedState.pending.filterNot {
-          case PendingSpendAction(update, _, _, _) if update === signedLiquidityPoolUpdate => true
-          case _                                                                           => false
+          case PendingSpendAction(update, _, _, _, _, _) if update === signedLiquidityPoolUpdate => true
+          case _                                                                                 => false
         }
 
       def combineNew(
@@ -155,6 +158,7 @@ object LiquidityPoolCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolUpdate = signedUpdate.value
@@ -247,6 +251,7 @@ object LiquidityPoolCombinerService {
                     oldState,
                     globalEpochProgress,
                     lastGlobalSnapshotsAllowSpends,
+                    currentSnapshotOrdinal,
                     currencyId
                   )
               )
@@ -269,6 +274,7 @@ object LiquidityPoolCombinerService {
         oldState: DataState[AmmOnChainState, AmmCalculatedState],
         globalEpochProgress: EpochProgress,
         lastGlobalSnapshotsAllowSpends: SortedMap[Option[Address], SortedMap[Address, SortedSet[Signed[AllowSpend]]]],
+        currentSnapshotOrdinal: SnapshotOrdinal,
         currencyId: CurrencyId
       )(implicit context: L0NodeContext[F]): F[DataState[AmmOnChainState, AmmCalculatedState]] = {
         val liquidityPoolsCalculatedState = getLiquidityPoolCalculatedState(oldState.calculated)
@@ -290,7 +296,8 @@ object LiquidityPoolCombinerService {
                     globalEpochProgress,
                     currencyId,
                     allowSpendTokenA,
-                    allowSpendTokenB
+                    allowSpendTokenB,
+                    currentSnapshotOrdinal
                   )
                 ).leftWiden[FailedCalculatedState]
                 amountToSpendA = SwapAmount(liquidityPoolUpdate.tokenAAmount)
@@ -302,6 +309,9 @@ object LiquidityPoolCombinerService {
                   allowSpendTokenB,
                   amountToSpendB
                 )
+                generatedAfterGlobalOrdinal <- EitherT.liftF[F, FailedCalculatedState, Option[SnapshotOrdinal]](
+                  SpendActionEvidence.generatedAfterGlobalOrdinal(oldState)
+                )
 
                 updatedPendingAllowSpendCalculatedState =
                   removePendingAllowSpend(liquidityPoolsCalculatedState, pendingAllowSpendUpdate.update)
@@ -309,7 +319,14 @@ object LiquidityPoolCombinerService {
                   pendingAllowSpendUpdate.update,
                   pendingAllowSpendUpdate.updateHash,
                   spendAction,
-                  None
+                  None,
+                  generatedAfterGlobalOrdinal,
+                  // Gated at population: embedded in on-chain state, so no value below the activation ordinal.
+                  Option.when(ProtocolActivation.settlementDeadlineExpiryActive(currentSnapshotOrdinal))(
+                    if (allowSpendTokenA.lastValidEpochProgress < allowSpendTokenB.lastValidEpochProgress)
+                      allowSpendTokenA.lastValidEpochProgress
+                    else allowSpendTokenB.lastValidEpochProgress
+                  )
                 )
 
                 updatedPendingSpendActionCalculatedState = updatedPendingAllowSpendCalculatedState + pendingSpendAction
@@ -415,14 +432,23 @@ object LiquidityPoolCombinerService {
             liquidityPoolValidations.pendingSpendActionsValidation(
               signedLiquidityPoolUpdate,
               allSpendActionsAccepted,
-              globalEpochProgress
+              globalEpochProgress,
+              pendingSpendAction.settlementDeadline,
+              currentSnapshotOrdinal
             )
           ).leftWiden[FailedCalculatedState]
 
           fees = liquidityPoolUpdate.poolFees.getOrElse(FeeDistributor.standard)
           result <-
             if (!allSpendActionsAccepted) {
-              if (pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress) {
+              if (
+                AllowSpendSettlement.pendingExpired(
+                  pendingSpendAction.settlementDeadline,
+                  globalEpochProgress,
+                  legacyExpired = pendingSpendAction.update.value.maxValidGsEpochProgress <= globalEpochProgress,
+                  currentSnapshotOrdinal
+                )
+              ) {
                 EitherT.leftT[F, DataState[AmmOnChainState, AmmCalculatedState]](
                   FailedCalculatedState(
                     OperationExpired(pendingSpendAction.update),

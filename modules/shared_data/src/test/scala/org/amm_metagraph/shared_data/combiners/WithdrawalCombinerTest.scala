@@ -156,6 +156,11 @@ object WithdrawalCombinerTest extends MutableIOSuite {
       spendActions = withdrawalResponsePendingSpendActionResponse.sharedArtifacts.map(_.asInstanceOf[SpendAction]).toList
       pending = withdrawalResponsePendingSpendActionResponse.calculated.operations(OperationType.Withdrawal).pending.head
       pendingActions = getPendingSpendActionWithdrawalUpdates(withdrawalResponsePendingSpendActionResponse.calculated)
+      // A withdrawal spends no AllowSpend, so the global layer settles it under no deadline and the
+      // metagraph must never expire it on non-acceptance: the pending action carries no deadline.
+      _ <- IO
+        .raiseError(new AssertionError("withdrawal pending action must carry no settlement deadline"))
+        .whenA(pendingActions.head.settlementDeadline.nonEmpty)
 
       withdrawalResponseConfirmedResponse <- withdrawalCombinerService.combinePendingSpendAction(
         PendingSpendAction(withdrawalUpdate, pendingActions.head.updateHash, spendActions.head, pending.pricingTokenInfo),
