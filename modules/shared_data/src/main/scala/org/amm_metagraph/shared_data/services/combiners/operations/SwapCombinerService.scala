@@ -320,7 +320,9 @@ object SwapCombinerService {
 
           finalState <- updateAllowSpends match {
             case None =>
-              // Allow spend not confirmed - store as pending
+              // Allow spend not confirmed - store as pending. Past inFlightPoolPricing this stored
+              // quote is informational only: combinePendingAllowSpend recomputes it at execution, so
+              // the MissingSwapTokenInfo branch there is unreachable.
               val pendingAllowSpend = PendingAllowSpend(signedUpdate, updateHash, Some(tokenInfo))
               val updatedSwapState = swapCalculatedState.focus(_.pending).modify(_ + pendingAllowSpend)
               val dataUpdate = createPendingAllowSpendUpdate(signedUpdate, updateHash, Some(tokenInfo))

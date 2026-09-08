@@ -201,16 +201,22 @@ object ProtocolActivation {
     * All three defects change what lands in confirmed state, so the corrected behaviour is gated here and ships in one coordinated upgrade:
     * below this ordinal the original behaviour is preserved exactly and history replays byte for byte. From it onwards:
     *   - quotes are computed against the same in-flight pool the debit is applied to,
-    *   - a pending swap's quote is recomputed at execution time and the stored quote is treated only as the user's slippage bound,
+    *   - a pending swap's quote is recomputed at execution time and the stored quote is treated only as the user's slippage bound (staking
+    *     is deliberately not requoted at execution; see StakingCombinerService.combinePendingAllowSpend),
     *   - `lastReference` is advanced on every confirmed swap.
     *
-    * Chosen after `spendActionHeadroom` so it ships in a later coordinated upgrade without reordering the earlier corrections. Re-check
-    * against the live head immediately before deployment; if it can no longer be reached by every node on the new binary, move it forward
-    * before publishing the release.
+    * Client contract change: from this ordinal a swap's parent reference must chain to the address's latest confirmed swap, which advances
+    * on every confirmation. Clients that cache `/v1/addresses/{a}/swaps/last-reference` must re-read it before each submit; a swap signed
+    * against a reference a confirmation has since advanced is rejected with InvalidSwapParent.
+    *
+    * Chosen at head ~756520 (2026-09-08); at ~80 ordinals an hour, 758500 lands around 19:30 UTC on 2026-09-09. The cluster rolls out as
+    * one unit, so a 12-24 hour lead is enough. Sits after `usdcSettlementCorrection` (758001), so the settlement-deadline correction
+    * activates first, and before `collateralInvariantEnforced` (760000). Re-check against the live head immediately before deployment; if
+    * it can no longer be reached by every node on the new binary, move it forward before publishing the release.
     *
     * Activate only once every metagraph L0 node runs a build containing it.
     */
-  val inFlightPoolPricing: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(764000L))
+  val inFlightPoolPricing: SnapshotOrdinal = SnapshotOrdinal(NonNegLong.unsafeFrom(758500L))
 
   def inFlightPoolPricingActive(ordinal: SnapshotOrdinal): Boolean =
     ordinal.value.value >= inFlightPoolPricing.value.value
