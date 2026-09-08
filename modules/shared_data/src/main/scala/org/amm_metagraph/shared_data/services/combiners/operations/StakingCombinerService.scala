@@ -203,9 +203,12 @@ object StakingCombinerService {
           currentOrdinal <- EitherT.liftF[F, FailedCalculatedState, SnapshotOrdinal](
             context.getLastCurrencySnapshot.map(_.fold(SnapshotOrdinal.MinValue)(_.ordinal.next))
           )
+          poolOverride = Option.when(ProtocolActivation.inFlightPoolPricingActive(currentSnapshotOrdinal))(
+            getLiquidityPoolCalculatedState(oldState.calculated).confirmed.value
+          )
           stakingTokenInfo <- EitherT(
             pricingService
-              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal)
+              .getStakingTokenInfo(signedUpdate, updateHashed.hash, poolId, globalEpochProgress, currentOrdinal, poolOverride)
           )
           response <- updateAllowSpends match {
             case (None, _) | (_, None) =>
@@ -509,7 +512,8 @@ object StakingCombinerService {
                         pendingSpendAction.updateHash,
                         poolId,
                         globalEpochProgress,
-                        currentSnapshotOrdinal
+                        currentSnapshotOrdinal,
+                        None
                       )
                     )
 
